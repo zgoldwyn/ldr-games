@@ -1,0 +1,14 @@
+{
+  "name": "@ldr/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "React Native / Expo mobile shell for the LDR Companion App",
+  "main": "src/main.ts",
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean"
+  },
+  "dependencies": {
+    "@ldr/core": "*"
+  }
+}

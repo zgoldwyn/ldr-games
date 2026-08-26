@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "LDR Companion",
+    "slug": "ldr-companion",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "ldr",
+    "platforms": ["ios", "android"],
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#FFF6F8",
+    "splash": {
+      "backgroundColor": "#FFF6F8",
+      "resizeMode": "contain"
+    }
+  }
+}

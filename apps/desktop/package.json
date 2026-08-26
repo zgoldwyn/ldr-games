@@ -1,0 +1,15 @@
+{
+  "name": "@ldr/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Electron / web desktop shell for the LDR Companion App",
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean"
+  },
+  "dependencies": {
+    "@ldr/core": "*"
+  }
+}

@@ -1,0 +1,15 @@
+node_modules
+dist
+build
+coverage
+*.tsbuildinfo
+apps/mobile/.expo
+apps/desktop/out
+package-lock.json
+
+# Spec, steering, and IDE metadata are managed outside the app toolchain
+.kiro
+
+# Edge Functions are Deno code, formatted by Deno's own tooling (deno.json)
+supabase/functions
+supabase/.temp
