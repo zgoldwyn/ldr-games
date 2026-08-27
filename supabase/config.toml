@@ -281,9 +281,13 @@ max_frequency = "5s"
 # uri = "pg-functions://postgres/auth/before-user-created-hook"
 
 # This hook runs before a token is issued and allows you to add additional claims based on the authentication method used.
-# [auth.hook.custom_access_token]
-# enabled = true
-# uri = "pg-functions://<database>/<schema>/<hook_name>"
+# Single-session enforcement (Req 2.7-2.9): embeds the account's current session
+# epoch as a claim on every minted/refreshed access token so the epoch guard
+# (app.session_epoch_ok) can reject stale tokens. Backed by app.custom_access_token
+# (migration 20260826062551).
+[auth.hook.custom_access_token]
+enabled = true
+uri = "pg-functions://postgres/app/custom_access_token"
 
 # Configure one of the supported SMS providers: `twilio`, `twilio_verify`, `messagebird`, `textlocal`, `vonage`.
 [auth.sms.twilio]
@@ -425,3 +429,51 @@ entrypoint = "./functions/health/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/health/*.html" ]
+
+[functions.create-invitation]
+enabled = true
+# Server-authoritative: requires a verified JWT to identify the inviter (Req 3.1).
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/create-invitation/index.ts"
+
+[functions.accept-invitation]
+enabled = true
+# Server-authoritative: requires a verified JWT to identify the invitee (Req 3.2).
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/accept-invitation/index.ts"
+
+[functions.auth-signout]
+enabled = true
+# Sign-out must identify the caller from their token, so JWT verification stays
+# on (default). It terminates the caller's session (Req 2.4).
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/auth-signout/index.ts"
+
+[functions.auth-activity]
+enabled = true
+# Records activity and enforces the 30-day inactivity expiry for the caller's
+# session (Req 2.6); requires a verified JWT to identify the account.
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/auth-activity/index.ts"
+
+[functions.auth-login]
+enabled = true
+# The login function IS the authentication entry point: callers present raw
+# credentials (not a JWT), so it must be reachable without a verified JWT. It
+# verifies credentials itself via GoTrue signInWithPassword.
+verify_jwt = false
+import_map = "./functions/deno.json"
+entrypoint = "./functions/auth-login/index.ts"
+
+[functions.register]
+enabled = true
+# Registration is a public endpoint (a brand-new user has no session yet), so it
+# must not require a JWT. It uses the service role internally via the injected
+# SUPABASE_SERVICE_ROLE_KEY to call the Auth admin API.
+verify_jwt = false
+import_map = "./functions/deno.json"
+entrypoint = "./functions/register/index.ts"

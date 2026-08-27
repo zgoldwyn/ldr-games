@@ -12,9 +12,22 @@ the pg_cron-invoked scheduler jobs). See `design.md` for the full mapping.
 ```
 supabase/functions/
   deno.json        # shared Deno project config + import map for all functions
-  _shared/         # shared infrastructure helpers (CORS, etc.) — not domain logic
+  _shared/         # shared infrastructure helpers (CORS, clients, HTTP, Realtime) — not domain logic
   health/          # health-check skeleton used to verify the edge runtime works
+  auth-login/      # single-session login: verify creds, bump epoch, revoke prior client
 ```
+
+### Single-session enforcement (auth-login)
+
+`auth-login` is the server-authoritative sign-in path (Req 2.7-2.9). On a valid
+credential check it increments the account's `account_session.epoch` (via the
+`public.bump_session_epoch` RPC), broadcasts a `revoke` on the per-account
+Realtime channel `account:{id}` to displace any prior client, and returns a
+freshly minted token whose `epoch` claim is embedded by the `custom_access_token`
+auth hook (`app.custom_access_token`, migration `20260826062551`). The epoch
+guard `app.session_epoch_ok` (migration `20260826062549`) then rejects any
+request bearing a stale epoch. All credential failures return a uniform,
+non-revealing error (Req 2.2).
 
 - Each function lives in its own folder with an `index.ts` entry point.
 - `_shared/` holds cross-function infrastructure utilities. Pure domain logic is

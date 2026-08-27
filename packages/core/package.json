@@ -21,6 +21,7 @@
     "fast-check": "^3.23.2"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.4",
     "bcryptjs": "^3.0.3"
   }
 }
