@@ -15,7 +15,28 @@ supabase/functions/
   _shared/         # shared infrastructure helpers (CORS, clients, HTTP, Realtime) — not domain logic
   health/          # health-check skeleton used to verify the edge runtime works
   auth-login/      # single-session login: verify creds, bump epoch, revoke prior client
+  rt-presence/     # real-time games: Presence-driven 30s disconnect -> pause + notify
+  rt-rejoin/       # real-time games: resume from preserved state within 5 min
 ```
+
+### Real-time pause / rejoin (rt-presence, rt-rejoin)
+
+`rt-presence` receives the Presence snapshot from a game channel and is the
+authority on the 30-second disconnect rule (Req 6.6): it pauses the
+`rt_sessions` row (`active -> paused`, stamping `paused_since`) without touching
+`game_state`, so the state is preserved, records a notification for the
+remaining partner, and broadcasts `paused` on `rt_session:{id}`.
+
+`rt-rejoin` resumes a paused session (`paused -> active`) when the disconnected
+partner returns within 5 minutes, again leaving `game_state` untouched so both
+partners resume from identical preserved state (Req 6.7); a later rejoin is
+rejected with `REJOIN_WINDOW_EXPIRED`. Both functions present the recorded
+outcome instead of an error once the session is terminal (Req 6.8).
+
+The decisions come from pure code: the 30s evaluation in
+`_shared/rt-presence.ts` and the `pauseSession` / `resumeSession` transitions in
+`@ldr/core/rt-session`. Terminating a pause that is never rejoined belongs to the
+5-minute cron job (task 20.1).
 
 ### Single-session enforcement (auth-login)
 
