@@ -14,7 +14,7 @@
 import { describe, expect, it } from 'vitest';
 import * as fc from 'fast-check';
 
-import { accountId, gameId, pairingId, sessionId } from './common.js';
+import { gameId, pairingId, sessionId } from './common.js';
 import type { GameState, RTSession } from './game.js';
 import { isErr, isOk } from '../result.js';
 import { REJOIN_WINDOW_MS, pauseSession, resumeSession } from './rt-session.js';

@@ -11,7 +11,7 @@ import {
   type AccountId,
   type QuestionId,
 } from './common.js';
-import type { Answer, QuizQuestion, QuizSelfAnswer, QuizSession } from './quiz.js';
+import type { Answer, QuizSelfAnswer, QuizSession } from './quiz.js';
 import { buildQuizSessionView, type QuizSessionState } from './quiz-session.js';
 
 /**

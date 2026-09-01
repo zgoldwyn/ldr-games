@@ -30,7 +30,6 @@ import {
 const BASE: Timestamp = 1_700_000_000_000;
 
 const INVITER = accountId('inviter');
-const INVITEE = accountId('invitee');
 const PAIRING = pairingId('pair-1');
 const CODE = invitationCode('ABC123');
 
