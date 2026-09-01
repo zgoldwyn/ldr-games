@@ -1,9 +1,21 @@
 {
+  "unstable": ["sloppy-imports"],
   "imports": {
     "@supabase/supabase-js": "jsr:@supabase/supabase-js@^2",
     "@supabase/functions-js": "jsr:@supabase/functions-js@^2",
     "std/": "https://deno.land/std@0.224.0/",
-    "@ldr/core/pairing-logic": "../../packages/core/dist/domain/pairing-logic.js"
+    "@ldr/core/common": "../../packages/core/dist/domain/common.js",
+    "@ldr/core/pairing-logic": "../../packages/core/dist/domain/pairing-logic.js",
+    "@ldr/core/async-engine": "../../packages/core/dist/domain/async-engine.js",
+    "@ldr/core/async-lifecycle": "../../packages/core/dist/domain/async-lifecycle.js",
+    "@ldr/core/async-battleship": "../../packages/core/dist/domain/async-battleship.js",
+    "@ldr/core/async-drawing": "../../packages/core/dist/domain/async-drawing.js",
+    "@ldr/core/hlc": "../../packages/core/dist/domain/hlc.js",
+    "@ldr/core/sync": "../../packages/core/dist/domain/sync.js",
+    "@ldr/core/game": "../../packages/core/dist/domain/game.js",
+    "@ldr/core/rt-engine": "../../packages/core/dist/domain/rt-engine.js",
+    "@ldr/core/rt-session": "../../packages/core/dist/domain/rt-session.js",
+    "@ldr/core/rt-tic-tac-toe": "../../packages/core/dist/domain/rt-tic-tac-toe.js"
   },
   "lint": {
     "rules": {

@@ -23,6 +23,12 @@
     "test:unit": "vitest run --project unit",
     "test:property": "vitest run --project property",
     "test:integration": "vitest run --project integration",
+    "test:integration:local": "./scripts/with-supabase-env.sh npx vitest run --project integration",
+    "edge:check": "npm run build && deno check --config supabase/functions/deno.json supabase/functions/*/index.ts supabase/functions/_shared/*.ts",
+    "edge:test": "npm run build && deno test --config supabase/functions/deno.json supabase/functions/_shared/",
+    "edge:lint": "deno lint --config supabase/functions/deno.json supabase/functions",
+    "edge:fmt:check": "deno fmt --check --config supabase/functions/deno.json supabase/functions",
+    "verify": "npm run build && npm run lint && npm run test && npm run edge:check && npm run edge:test",
     "supabase": "supabase",
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",
@@ -32,6 +38,7 @@
   "devDependencies": {
     "@eslint/js": "^9.14.0",
     "@types/node": "^20.14.0",
+    "deno": "2.1.4",
     "@typescript-eslint/eslint-plugin": "^8.13.0",
     "@typescript-eslint/parser": "^8.13.0",
     "eslint": "^9.14.0",
@@ -43,6 +50,7 @@
     "vitest": "^2.1.4"
   },
   "allowScripts": {
-    "esbuild@0.21.5": true
+    "esbuild@0.21.5": true,
+    "deno@2.1.4": true
   }
 }

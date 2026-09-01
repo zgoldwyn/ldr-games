@@ -16,6 +16,9 @@ export default tseslint.config(
       // Edge Functions run on Deno and are linted/formatted by Deno's own
       // tooling (supabase/functions/deno.json), not the Node ESLint config.
       'supabase/functions/**',
+      // Scratch output written by `supabase start` (bundled edge-runtime entry
+      // point, generated secrets). Gitignored, and not ours to lint.
+      'supabase/.temp/**',
     ],
   },
   eslint.configs.recommended,
