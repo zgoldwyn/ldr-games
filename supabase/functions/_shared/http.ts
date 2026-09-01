@@ -42,13 +42,42 @@ export function statusForErrorCode(code: string): number {
     case "SESSION_SUPERSEDED":
       return 401;
     case "INVITATION_NOT_FOUND":
+    case "SESSION_NOT_FOUND":
+    case "GAME_NOT_FOUND":
+    // A sync change addressed to a shared row that does not exist (and whose
+    // item type is created by its own flow, not the write path).
+    case "ITEM_NOT_FOUND":
       return 404;
+    // Sync write path (Req 5.2, 5.5, 5.6): the change is stamped by another
+    // account, or targets a row outside the caller's pairing.
+    case "ORIGIN_MISMATCH":
+    case "PAIRING_SCOPE_VIOLATION":
+      return 403;
+    // A drained offline queue exceeded the per-request change limit (Req 5.5).
+    case "BATCH_TOO_LARGE":
+      return 413;
     case "INVITATION_EXPIRED":
+    // The 60s join window (Req 6.9) and the 5-minute rejoin window (Req 6.10)
+    // are gone-for-good deadlines, like an expired invitation.
+    case "JOIN_WINDOW_EXPIRED":
+    case "REJOIN_WINDOW_EXPIRED":
       return 410;
     case "ALREADY_PAIRED":
     case "INVITATION_ALREADY_CONSUMED":
     case "NOT_PAIRED":
+    // A session start / move requires a pairing (Req 6.5, 7.9, 8.10) and an
+    // action must match the session's current lifecycle state.
+    case "PAIRING_REQUIRED":
+    case "INVALID_SESSION_STATE":
+    // Only the Active_Turn_Holder may take the next turn; another partner's
+    // attempt conflicts with the session's current ownership (Req 7.7).
+    case "NOT_YOUR_TURN":
       return 409;
+    // A rejected move or turn is a client error; the authoritative state is
+    // unchanged (Req 6.11, 7.8).
+    case "INVALID_MOVE":
+    case "INVALID_TURN":
+      return 400;
     case "MISSING_REQUIRED_FIELD":
       return 400;
     default:

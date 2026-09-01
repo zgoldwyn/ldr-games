@@ -444,6 +444,23 @@ verify_jwt = true
 import_map = "./functions/deno.json"
 entrypoint = "./functions/accept-invitation/index.ts"
 
+[functions.unlink]
+enabled = true
+# Server-authoritative: requires a verified JWT to identify the partner who
+# confirmed the unlink (Req 4.1).
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/unlink/index.ts"
+
+[functions.rt-move]
+enabled = true
+# Server-authoritative real-time play: the caller's identity decides pairing
+# membership, move ownership, and invitation routing (Req 6.2, 6.4, 6.5), so a
+# verified JWT is required.
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/rt-move/index.ts"
+
 [functions.auth-signout]
 enabled = true
 # Sign-out must identify the caller from their token, so JWT verification stays
@@ -477,3 +494,44 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/deno.json"
 entrypoint = "./functions/register/index.ts"
+
+[functions.rt-presence]
+enabled = true
+# Presence-driven pause: requires a verified JWT so the reporter can be checked
+# against the session's pairing before any pause is committed (Req 6.6).
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/rt-presence/index.ts"
+
+[functions.rt-rejoin]
+enabled = true
+# Resume-on-rejoin within the 5-minute window; requires a verified JWT to
+# identify the rejoining partner (Req 6.7, 6.8).
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/rt-rejoin/index.ts"
+
+[functions.async-start]
+enabled = true
+# Server-authoritative: requires a verified JWT to identify the partner starting
+# the asynchronous game and to enforce requirePairing (Req 7.2, 7.9).
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/async-start/index.ts"
+
+[functions.async-take-turn]
+enabled = true
+# Server-authoritative turn application: the caller's identity is checked against
+# the session's Active_Turn_Holder before any state is written (Req 7.4-7.8).
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/async-take-turn/index.ts"
+
+[functions.sync-write]
+enabled = true
+# The server-authoritative shared-data write path (Req 5.2, 5.5, 5.6): it applies
+# last-write-wins HLC conflict resolution before persisting a change, so it must
+# identify the calling account from a verified JWT.
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/sync-write/index.ts"

@@ -8,6 +8,25 @@
 // locally.
 import { supabaseUrl } from "./clients.ts";
 
+/**
+ * Per-account Realtime topic. Carries account-directed signals that are not
+ * tied to one feature: the `revoke` that displaces a prior client (Req 2.9),
+ * `pairing_ended` (Req 4.2), and `game_invite` (Req 6.2).
+ */
+export function accountTopic(accountId: string): string {
+  return `account:${accountId}`;
+}
+
+/**
+ * Per-session Realtime topic for a real-time game. Presence, authoritative move
+ * fan-out (Req 6.4), and the `paused` / `resumed` / `outcome` signals
+ * (Req 6.6, 6.7, 6.8) all share this ONE channel, so a client that subscribes
+ * to a session receives the whole stream without a second subscription.
+ */
+export function gameChannelTopic(sessionId: string): string {
+  return `rt_session:${sessionId}`;
+}
+
 /** A single Broadcast message addressed to a Realtime topic. */
 export interface BroadcastMessage {
   /** Realtime topic (channel) name, e.g. `account:{accountId}`. */
