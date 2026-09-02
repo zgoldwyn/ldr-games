@@ -293,8 +293,9 @@ The sequencing is deliberately test-driven where practical: scaffolding and sche
     - Apply `resolveConflict` server-side on shared-data writes using HLC, persist committed changes, and reject stale offline writes from clobbering newer values
     - _Requirements: 5.2, 5.5, 5.6_
 
-  - [ ] 14.2 Implement Postgres Changes subscription, connectivity indicator, and queue drain
+  - [x] 14.2 Implement Postgres Changes subscription, connectivity indicator, and queue drain
     - Wire the Connection Manager to subscribe to pairing-scoped Postgres Changes (partner update <5s), show the connectivity-lost indicator offline, and drain the sync queue within 10s of reconnection
+    - Implemented in `packages/core/src/sync/` as `connectivity.ts` (pure online/offline state machine + indicator), `sync-module.ts` (subscription, queue-vs-send, reconnect drain) and `supabase-ports.ts` (thin `supabase-js` adapter). 26 unit tests. The module takes injected ports rather than a `SupabaseClient` so the orchestration edges are testable without a stack, and so **task 21.3 composes these pieces rather than rewriting them** — 21.3 still owns Broadcast, Presence, and displacement sign-out. Remote changes are handed to an `onRemoteChange` listener rather than cached, leaving the Local Store to task 21.2. The <5s and 10s timings are integration assertions, owned by task 14.3.
     - _Requirements: 5.3, 5.4, 5.5_
 
   - [ ] 14.3 Write sync integration tests
