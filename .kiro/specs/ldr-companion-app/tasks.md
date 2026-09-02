@@ -283,8 +283,9 @@ The sequencing is deliberately test-driven where practical: scaffolding and sche
     - Dissolve the pairing, clear both accounts' `pairingId`, terminate active game/quiz sessions, and insert pairing-ended notifications for both partners within 5s
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6_
 
-  - [ ] 13.3 Write pairing Edge Function integration tests
+  - [x] 13.3 Write pairing Edge Function integration tests
     - Assert concurrent double-accept cannot both succeed (**Property 10**), a consumed invitation cannot be reused (**Property 13**), and unlink terminates an active session with notifications (**Property 15**)
+    - Passing against a live stack (6 tests). Writing these found that `accept_invitation` raised on every call, so pairing had never worked — fixed in migration `20260901000001`. Mutation-checked by dropping the partial UNIQUE membership indexes and stripping the RPC's guards: that revealed the Edge-Function-level concurrency test passes even with no database guard, because the pure pre-check masks the race. A second test drives the RPC directly so the row locks and UNIQUE indexes are the only thing preventing a double pairing.
     - _Requirements: 3.6, 3.8, 4.6_
 
 - [ ] 14. Sync wiring (write path + Realtime + reconnect)
