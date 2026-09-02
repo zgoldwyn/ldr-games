@@ -175,7 +175,20 @@ describe.skipIf(cfg === null)('Sync path (integration)', () => {
     while (received.length === 0 && Date.now() < warmDeadline) {
       await new Promise((r) => setTimeout(r, 25));
     }
-    expect(received.length, 'the subscription never delivered a warm-up event').toBeGreaterThan(0);
+    // Observed once, not reproduced in three subsequent full runs: this warm-up
+    // exhausted its 20s allowance shortly after a `supabase db reset`, with the
+    // channel reporting SUBSCRIBED (asserted above) and Broadcast working, but no
+    // Postgres Changes arriving. The suspicion is that Realtime needs longer to
+    // re-establish replication against a freshly recreated slot than the container
+    // takes to report healthy. If this fails, check
+    // `docker logs supabase_realtime_ldr-games` and retry after a pause before
+    // assuming the sync path is broken — a SUBSCRIBED channel with no events is a
+    // replication-side symptom, not a client one.
+    expect(
+      received.length,
+      'the subscription reported SUBSCRIBED but delivered no warm-up event in 20s ' +
+        '(suspect Realtime replication after a db reset, not the client)',
+    ).toBeGreaterThan(0);
     received.length = 0;
 
     // Now measure a real partner change on a proven-live subscription.

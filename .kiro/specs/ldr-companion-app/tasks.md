@@ -412,7 +412,8 @@ The game-related cron jobs (20.1) were initially deferred and then pulled back I
     - The design's Edge-Function guidance still stands for any scheduled job with real logic; these three have none.
   - **Threshold drift is the one real cost** of implementing in SQL: the windows already exist as TypeScript constants (`JOIN_WINDOW_MS`, `REJOIN_WINDOW_MS` in `domain/rt-session.ts`; `TURN_NUDGE_THRESHOLD_MS` in `domain/async-lifecycle.ts`). Mitigated by 20.3 importing those constants and asserting the SQL boundary against them, so a divergence fails a test rather than going unnoticed.
 
-  - [ ] 20.1 Implement game-related cron jobs — **[MVP]**
+  - [x] 20.1 Implement game-related cron jobs — **[MVP]**
+    - Implemented in migration `20260901000003` as three plpgsql functions plus pg_cron schedules. Verified end to end: the schedules fire on their own (`ldr-rt-join-expiry` ran twice in 70s, `ldr-rt-pause-termination` once, both `succeeded` in `cron.job_run_details`). Also added `public.ldr_scheduled_jobs()` because the `cron` schema is not exposed by the Data API, so schedules were otherwise unverifiable without a database shell.
     - Three plpgsql functions, each taking `p_now` and returning what it changed, plus pg_cron schedules invoking them with `now()`:
       - 60s real-time invitation-join expiry: `pending` sessions past the join window are cancelled and the inviter notified (Req 6.9)
       - 5-min pause termination: `paused` sessions past the rejoin window become terminal with an ended-without-outcome result, both partners notified (Req 6.10)
@@ -425,7 +426,8 @@ The game-related cron jobs (20.1) were initially deferred and then pulled back I
     - Create pg_cron jobs for reminder delivery within 60s of trigger (defer offline), 30-day session inactivity revocation, and 30-day notification retention/discard
     - _Requirements: 2.6, 10.3, 11.4, 11.5_
 
-  - [ ] 20.3 Write scheduler integration tests — **[MVP for the 20.1 jobs]**
+  - [x] 20.3 Write scheduler integration tests — **[MVP for the 20.1 jobs]**
+    - 7 tests passing. Mutation-checked three ways: changing `48 hours` to `48 minutes` and `60 seconds` to `60 minutes` fails the bracketed tests (so unit mix-ups are caught), and adding a `state = 'terminal'` update to the nudge fails the Req 7.12 test (so a forfeit regression is caught). The 20.2 windows wait for 20.2.
     - Call each function directly with a synthetic `p_now`, BRACKETING the window: at `threshold - 1s` nothing transitions, at `threshold + 1s` it does. Bracketing is what makes the test about the specific window rather than "any elapsed time triggers it".
     - Import the TS threshold constants and assert the SQL agrees with them, so drift between the two fails here.
     - Separately assert the pg_cron schedules exist and are enabled (`cron.job`), since a correct function that is never scheduled is still a broken feature.
