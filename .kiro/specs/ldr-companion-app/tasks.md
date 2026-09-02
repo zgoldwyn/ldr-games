@@ -36,9 +36,9 @@ The sequencing is deliberately test-driven where practical: scaffolding and sche
     - Enable RLS on all account-scoped and pairing-scoped tables; add pairing-scope predicate (`pairing_id = current_pairing(auth.uid())`), recipient-scope predicate for notifications, the quiz self-answer withholding policy keyed on session phase, the epoch guard for the single-session invariant, and private Storage bucket policies for drawing images
     - _Requirements: 2.5, 2.7, 2.8, 2.9, 4.4, 8.4_
 
-  - [-] 2.4 Write RLS integration tests
+  - [x] 2.4 Write RLS integration tests
     - Using two authenticated test users on the local stack, assert cross-pairing rows are unreadable, a former partner loses pairing-data access after dissolution, self-answers are non-selectable by the partner during the self-answer phase but selectable afterward, and Storage blocks cross-pairing image access
-    - **BLOCKED** — the suite is written but does not pass. First execution against a live stack fails in harness setup with `permission denied for table accounts` for the service-role client. Root cause is a defect in task 2.3, not in the tests: `ALTER DEFAULT PRIVILEGES` for owner `postgres` in schema `public` grants only `TRUNCATE, REFERENCES, TRIGGER, MAINTAIN` to `anon`/`authenticated`/`service_role`, and migration `20260826062549` grants DML explicitly to `authenticated` only. `service_role` bypasses RLS but still needs table GRANTs, so every Edge Function that writes through the service-role client is affected at runtime too. Needs a migration granting DML on the app tables to `service_role`.
+    - Passing against a live stack (`npm run test:integration:local`). Required fixing a defect in task 2.3 first: `service_role` had no DML privileges on the app tables, because the `ALTER DEFAULT PRIVILEGES` entry for owner `postgres` in schema `public` grants no DML and `20260826062549` granted DML explicitly to `authenticated` only. Fixed in migration `20260901000000_service_role_table_grants.sql`.
     - _Requirements: 4.4, 8.4_
 
 - [x] 3. Authentication domain logic (pure helpers)
