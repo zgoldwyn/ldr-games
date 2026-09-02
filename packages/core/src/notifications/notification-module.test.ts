@@ -1,0 +1,310 @@
+import { describe, expect, it } from 'vitest';
+
+import { accountId as toAccountId } from '../domain/common.js';
+import { NOTIFICATION_RETENTION_MS } from '../domain/notification-delivery.js';
+import type { Notification, NotificationSettings } from '../domain/notification.js';
+import {
+  createNotificationModule,
+  defaultNotificationSettings,
+  notificationFromRow,
+  type NotificationPorts,
+  type NotificationRow,
+} from './notification-module.js';
+
+// Unit tests for the client notification module (Req 11.1, 11.2, 11.3, 11.4, 11.6).
+//
+// Stub ports rather than a Supabase client: the module exists to decide what is
+// ELIGIBLE to present and to make acknowledgement stick, and those decisions are
+// what is worth pinning down. Realtime delivery latency is an integration concern.
+
+const ALICE = toAccountId('11111111-1111-4111-8111-111111111111');
+const NOW = 1_700_000_000_000;
+
+function row(overrides: Partial<NotificationRow> = {}): NotificationRow {
+  return {
+    id: `n-${Math.random().toString(36).slice(2)}`,
+    recipient_account_id: ALICE,
+    category: 'async_turn',
+    payload: { kind: 'your_turn' },
+    created_at: new Date(NOW - 1_000).toISOString(),
+    dedupe_key: 'k-1',
+    acknowledged_at: null,
+    delivered_at: null,
+    ...overrides,
+  };
+}
+
+function harness(
+  options: {
+    rows?: NotificationRow[];
+    settings?: NotificationSettings | null;
+  } = {},
+) {
+  let clock = NOW;
+  const rows = options.rows ?? [];
+  const acknowledged: { id: string; at: number }[] = [];
+  let insertHandler: ((r: NotificationRow) => void) | null = null;
+  let unsubscribes = 0;
+
+  const ports: NotificationPorts = {
+    subscribeRecipient: (_accountId, handlers) => {
+      insertHandler = handlers.onInsert;
+      return () => {
+        unsubscribes += 1;
+      };
+    },
+    fetchAll: async () => rows,
+    fetchSettings: async () => options.settings ?? null,
+    acknowledge: async (id, at) => {
+      const target = rows.find((r) => r.id === id);
+      // Mirrors the adapter's `is('acknowledged_at', null)` guard: a second
+      // acknowledge matches no row.
+      if (target === undefined || target.acknowledged_at !== null) return null;
+      acknowledged.push({ id, at });
+      const iso = new Date(at).toISOString();
+      const updated = { ...target, acknowledged_at: iso, delivered_at: iso };
+      rows[rows.indexOf(target)] = updated;
+      return updated;
+    },
+    now: () => clock,
+  };
+
+  const eligibleArrivals: Notification[] = [];
+  const allArrivals: Notification[] = [];
+  const module = createNotificationModule(ports, {
+    onNotification: (n) => eligibleArrivals.push(n),
+    onAnyNotification: (n) => allArrivals.push(n),
+  });
+
+  return {
+    module,
+    rows,
+    acknowledged,
+    eligibleArrivals,
+    allArrivals,
+    emit: (r: NotificationRow) => insertHandler?.(r),
+    advance: (ms: number) => {
+      clock += ms;
+    },
+    unsubscribes: () => unsubscribes,
+  };
+}
+
+describe('notificationFromRow', () => {
+  it('converts ISO timestamps to epoch milliseconds', () => {
+    const created = NOW - 5_000;
+    const acked = NOW - 1_000;
+    const mapped = notificationFromRow(
+      row({
+        created_at: new Date(created).toISOString(),
+        acknowledged_at: new Date(acked).toISOString(),
+        delivered_at: new Date(acked).toISOString(),
+      }),
+    );
+    // Every retention and eligibility decision downstream depends on this.
+    expect(mapped.createdAt).toBe(created);
+    expect(mapped.acknowledgedAt).toBe(acked);
+    expect(mapped.deliveredAt).toBe(acked);
+  });
+
+  it('maps a never-acknowledged row to null rather than 0', () => {
+    const mapped = notificationFromRow(row({ acknowledged_at: null, delivered_at: null }));
+    // `shouldDeliver` tests `acknowledgedAt === null`, so a 0 here would read as
+    // "acknowledged at the epoch" and silently withhold the notification.
+    expect(mapped.acknowledgedAt).toBeNull();
+    expect(mapped.deliveredAt).toBeNull();
+  });
+});
+
+describe('defaultNotificationSettings', () => {
+  it('disables nothing', () => {
+    // A user who has never opened settings must still get their notifications.
+    expect(defaultNotificationSettings(ALICE).disabledCategories).toEqual([]);
+  });
+});
+
+describe('Notification module — list eligibility', () => {
+  it('presents an unacknowledged, in-window notification (Req 11.1, 11.2)', async () => {
+    const h = harness({ rows: [row()] });
+    expect(await h.module.list(ALICE)).toHaveLength(1);
+    expect(await h.module.unreadCount(ALICE)).toBe(1);
+  });
+
+  it('withholds an acknowledged notification (Req 11.6)', async () => {
+    const h = harness({
+      rows: [row({ acknowledged_at: new Date(NOW - 500).toISOString() })],
+    });
+    expect(await h.module.list(ALICE)).toHaveLength(0);
+  });
+
+  it('withholds a notification past the 30-day retention window (Req 11.4, 11.5)', async () => {
+    const h = harness({
+      rows: [
+        // One second inside the window.
+        row({ created_at: new Date(NOW - NOTIFICATION_RETENTION_MS + 1_000).toISOString() }),
+        // One second past it.
+        row({ created_at: new Date(NOW - NOTIFICATION_RETENTION_MS - 1_000).toISOString() }),
+      ],
+    });
+    // Brackets the window, so this would fail against a wrong retention constant
+    // rather than merely "old things are hidden".
+    const listed = await h.module.list(ALICE);
+    expect(listed).toHaveLength(1);
+    expect(listed[0]?.createdAt).toBe(NOW - NOTIFICATION_RETENTION_MS + 1_000);
+  });
+
+  it('withholds a disabled category (Req 11.3)', async () => {
+    const h = harness({
+      rows: [row({ category: 'async_turn' }), row({ category: 'game_invite' })],
+      settings: { accountId: ALICE, disabledCategories: ['game_invite'] },
+    });
+    const listed = await h.module.list(ALICE);
+    expect(listed).toHaveLength(1);
+    expect(listed[0]?.category).toBe('async_turn');
+  });
+
+  it('presents everything when the account has no settings row', async () => {
+    const h = harness({
+      rows: [row({ category: 'async_turn' }), row({ category: 'game_invite' })],
+      settings: null,
+    });
+    expect(await h.module.list(ALICE)).toHaveLength(2);
+  });
+
+  it('orders newest first', async () => {
+    const h = harness({
+      rows: [
+        row({ id: 'old', created_at: new Date(NOW - 10_000).toISOString() }),
+        row({ id: 'new', created_at: new Date(NOW - 1_000).toISOString() }),
+        row({ id: 'mid', created_at: new Date(NOW - 5_000).toISOString() }),
+      ],
+    });
+    expect((await h.module.list(ALICE)).map((n) => n.id)).toEqual(['new', 'mid', 'old']);
+  });
+
+  it('re-reads settings on each list so a fresh mute takes effect', async () => {
+    // A cached settings snapshot would keep delivering a category the user just
+    // muted, which is why settings are not cached across calls.
+    let disabled: NotificationSettings['disabledCategories'] = [];
+    const ports: NotificationPorts = {
+      subscribeRecipient: () => () => undefined,
+      fetchAll: async () => [row({ category: 'game_invite' })],
+      fetchSettings: async () => ({ accountId: ALICE, disabledCategories: disabled }),
+      acknowledge: async () => null,
+      now: () => NOW,
+    };
+    const module = createNotificationModule(ports);
+
+    expect(await module.list(ALICE)).toHaveLength(1);
+    disabled = ['game_invite'];
+    expect(await module.list(ALICE)).toHaveLength(0);
+  });
+});
+
+describe('Notification module — acknowledgement (Req 11.6)', () => {
+  it('marks acknowledged and delivered together', async () => {
+    const target = row({ id: 'ack-me' });
+    const h = harness({ rows: [target] });
+
+    const result = await h.module.acknowledge(target.id as never);
+    expect(result).not.toBeNull();
+    // Req 11.6: acknowledging marks it delivered. Splitting the two would leave a
+    // window where a notification is acknowledged but still counted undelivered.
+    expect(result?.acknowledgedAt).toBe(NOW);
+    expect(result?.deliveredAt).toBe(NOW);
+  });
+
+  it('withholds an acknowledged notification from subsequent sessions', async () => {
+    const target = row({ id: 'ack-me' });
+    const h = harness({ rows: [target] });
+
+    expect(await h.module.list(ALICE)).toHaveLength(1);
+    await h.module.acknowledge(target.id as never);
+    // "subsequent Authenticated_Sessions" — the row is durably marked, so a later
+    // read excludes it rather than relying on client memory.
+    expect(await h.module.list(ALICE)).toHaveLength(0);
+  });
+
+  it('is idempotent — a second acknowledge does not move the timestamp', async () => {
+    const target = row({ id: 'ack-me' });
+    const h = harness({ rows: [target] });
+
+    const first = await h.module.acknowledge(target.id as never);
+    h.advance(60_000);
+    const second = await h.module.acknowledge(target.id as never);
+
+    expect(first?.acknowledgedAt).toBe(NOW);
+    // Null rather than a re-stamped row, so a retry cannot rewrite history.
+    expect(second).toBeNull();
+    expect(h.acknowledged).toHaveLength(1);
+  });
+
+  it('returns null for an id that is not the caller’s', async () => {
+    const h = harness({ rows: [] });
+    // RLS is what actually enforces this; the module must surface the refusal as
+    // null rather than throwing.
+    expect(await h.module.acknowledge('someone-elses' as never)).toBeNull();
+  });
+
+  it('acknowledgeAll clears exactly the eligible ones', async () => {
+    const h = harness({
+      rows: [
+        row({ id: 'a' }),
+        row({ id: 'b' }),
+        // Already acknowledged, so not eligible and not re-acknowledged.
+        row({ id: 'c', acknowledged_at: new Date(NOW - 100).toISOString() }),
+        // Disabled category.
+        row({ id: 'd', category: 'quiz' }),
+      ],
+      settings: { accountId: ALICE, disabledCategories: ['quiz'] },
+    });
+
+    expect(await h.module.acknowledgeAll(ALICE)).toBe(2);
+    expect(h.acknowledged.map((a) => a.id).sort()).toEqual(['a', 'b']);
+    expect(await h.module.unreadCount(ALICE)).toBe(0);
+  });
+});
+
+describe('Notification module — live arrivals (Req 11.1, 11.2)', () => {
+  it('forwards an eligible arrival to onNotification', async () => {
+    const h = harness({ rows: [] });
+    h.module.subscribe(ALICE);
+    // Let the settings warm-up settle so filtering is in place.
+    await new Promise((r) => setTimeout(r, 0));
+
+    const incoming = row({ id: 'live' });
+    h.emit(incoming);
+
+    expect(h.eligibleArrivals.map((n) => n.id)).toEqual(['live']);
+    expect(h.allArrivals.map((n) => n.id)).toEqual(['live']);
+  });
+
+  it('reports a disabled-category arrival only on onAnyNotification (Req 11.3)', async () => {
+    const h = harness({
+      rows: [],
+      settings: { accountId: ALICE, disabledCategories: ['game_invite'] },
+    });
+    h.module.subscribe(ALICE);
+    await new Promise((r) => setTimeout(r, 0));
+
+    h.emit(row({ id: 'muted', category: 'game_invite' }));
+
+    // Withheld from presentation, but still observable for diagnostics.
+    expect(h.eligibleArrivals).toHaveLength(0);
+    expect(h.allArrivals.map((n) => n.id)).toEqual(['muted']);
+  });
+
+  it('replaces an existing subscription rather than leaking it', () => {
+    const h = harness({ rows: [] });
+    h.module.subscribe(ALICE);
+    expect(h.unsubscribes()).toBe(0);
+
+    // Re-subscribing (e.g. after signing in as a different account) must tear the
+    // old channel down, or the previous account's rows could keep arriving.
+    h.module.subscribe(ALICE);
+    expect(h.unsubscribes()).toBe(1);
+
+    h.module.unsubscribe();
+    expect(h.unsubscribes()).toBe(2);
+  });
+});

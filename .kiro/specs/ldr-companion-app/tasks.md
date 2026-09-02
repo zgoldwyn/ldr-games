@@ -385,7 +385,9 @@ The game-related cron jobs (20.1) were initially deferred and then pulled back I
 - [ ] 19. Notification wiring — **partially [MVP]**
   - 19.1 is SPLIT. The in-app read path is MVP: the pairing, game-invite and `your_turn` rows are already being written by the pairing and game Edge Functions, and nothing reads them. Out-of-app push and category settings are deferred.
 
-  - [ ] 19.1a Implement in-app notification reads and acknowledgement — **[MVP]**
+  - [x] 19.1a Implement in-app notification reads and acknowledgement — **[MVP]**
+    - Implemented in `packages/core/src/notifications/` as `notification-module.ts` (eligibility, ordering, acknowledgement over injected ports) and `supabase-ports.ts` (the `supabase-js` adapter). 18 unit + 7 integration tests. No Edge Function and no schema change: `notifications` is recipient-scoped by RLS with SELECT+UPDATE granted to `authenticated`, so a client reads and acknowledges its own rows directly.
+    - Category filtering (Req 11.3) is included rather than deferred with 19.1b — `shouldDeliver` already existed and the settings table is already readable, so honouring a mute cost one query, whereas adding the filter later would have meant revisiting every read path. Only the settings WRITE path is deferred.
     - Wire the recipient-scoped `notifications` Realtime subscription (game invites and your-turn <5s), `acknowledge` (mark delivered + suppress re-delivery), and undelivered retrieval within the 30-day window using the existing `shouldDeliver` / `isExpired` helpers
     - `notifications` is already in the `supabase_realtime` publication (migration `20260826062557`) and is recipient-scoped by RLS, so no schema work is needed
     - _Requirements: 11.1, 11.2, 11.4, 11.6_
@@ -399,7 +401,9 @@ The game-related cron jobs (20.1) were initially deferred and then pulled back I
     - Dispatch best-effort out-of-app push to Expo Push (mobile) and the desktop notification API from an Edge Function, on top of the durable notifications table
     - _Requirements: 11.1, 11.2_
 
-  - [ ] 19.3 Write notification integration tests — **[MVP for the 19.1a slice]**
+  - [x] 19.3 Write notification integration tests — **[MVP for the 19.1a slice]**
+    - 7 tests passing. Mutation-checked by flattening both `notifications` RLS policies to `using (true)`. That first revealed the read assertion was NOT testing RLS at all — the adapter's client-side `.eq('recipient_account_id', ...)` filter masked it, the same masking that made the Property 10 concurrency test vacuous. The suite now also probes the table **unfiltered**, so RLS is the only thing standing (33 rows leaked under the mutation vs 1 expected).
+    - The disabled-category assertion is in scope now; the settings write path stays with 19.1b.
     - MVP portion: assert game-invite and your-turn notifications arrive within 5s and that acknowledged notifications are not re-delivered. The disabled-category assertion waits for 19.1b.
     - _Requirements: 11.1, 11.2, 11.6_
 

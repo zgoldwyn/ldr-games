@@ -13,6 +13,7 @@ export * from './errors.js';
 export * from './domain/index.js';
 export * from './sync/index.js';
 export * from './storage/index.js';
+export * from './notifications/index.js';
 
 /** Package metadata, useful for shells to display/version-check the shared core. */
 export const CORE_PACKAGE_NAME = '@ldr/core';
