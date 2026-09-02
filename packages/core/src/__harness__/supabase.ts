@@ -295,3 +295,47 @@ export function newCredentials(): { email: string; password: string } {
     password: `Aa1!${randomUUID()}`,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Realtime warm-up
+// ---------------------------------------------------------------------------
+
+/**
+ * Retries a Realtime warm-up attempt until one actually delivers an event.
+ *
+ * WHY THIS EXISTS. After the replication slot is (re)created — which
+ * `supabase db reset` does, and restarting the realtime container does too — the
+ * FIRST Postgres Changes subscription reports `SUBSCRIBED` but never receives
+ * events. A subsequent, freshly created subscription works immediately.
+ *
+ * Established by experiment rather than assumed:
+ *   - reset, then subscribe: no event in 20s (repeatable)
+ *   - restart realtime, subscribe again: no event in 20s
+ *   - subscribe a third time, no reset: event in 1.7s
+ *
+ * The load-bearing detail is that **waiting longer on the same channel does not
+ * help** — the first channel is simply dead. So the remedy is to tear it down and
+ * re-subscribe, which is what this does. A plain longer timeout would look like a
+ * fix and would still fail.
+ *
+ * `attempt` should create a subscription, trigger a write, wait briefly, and
+ * return a value on success or `null` if nothing arrived. It MUST tear its own
+ * subscription down before returning `null`, or the retry inherits a dead
+ * channel.
+ */
+export async function withRealtimeRetry<T>(
+  attempt: (attemptNumber: number) => Promise<T | null>,
+  options: { readonly attempts?: number } = {},
+): Promise<T> {
+  const attempts = options.attempts ?? 3;
+  for (let i = 1; i <= attempts; i += 1) {
+    const result = await attempt(i);
+    if (result !== null) return result;
+  }
+  throw new Error(
+    `Realtime never delivered an event across ${attempts} fresh subscriptions. ` +
+      'This is not the usual first-subscription-after-reset case (which one retry ' +
+      'clears); check `docker logs supabase_realtime_ldr-games` and that the table ' +
+      'is in the supabase_realtime publication.',
+  );
+}

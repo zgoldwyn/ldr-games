@@ -13,6 +13,7 @@ import {
   functionsRuntimeReachable,
   getIntegrationConfig,
   signIn,
+  withRealtimeRetry,
   type IntegrationConfig,
   type TestAccount,
 } from './supabase.js';
@@ -134,61 +135,69 @@ describe.skipIf(cfg === null)('Sync path (integration)', () => {
     const b = await member();
     const pairing = await pair(a.token, b.token);
 
-    // B subscribes through the real client Sync Module, exactly as a shell would.
-    const received: RemoteChange[] = [];
-    const partner = createSyncModule(createSupabaseSyncPorts(b.client), {
-      onRemoteChange: (change) => received.push(change),
+    // WARM-UP, outside the budget, and RETRIED WITH A FRESH SUBSCRIPTION.
+    //
+    // Two separate reasons this is here:
+    //
+    // 1. `SUBSCRIBED` does not mean the binding is attached, so the first event
+    //    pays a one-off cost. Req 5.3 is about propagating a change to an
+    //    ESTABLISHED session, so folding that into the measurement would measure
+    //    the wrong quantity.
+    //
+    // 2. After the replication slot is recreated (`supabase db reset` does this),
+    //    the FIRST subscription reports SUBSCRIBED and then never receives
+    //    anything, while a freshly created one works immediately. Verified by
+    //    experiment: reset then subscribe gave no event in 20s repeatably, and a
+    //    later fresh subscription delivered in 1.7s. So the retry must create a
+    //    NEW subscription — waiting longer on the dead one does nothing, which is
+    //    exactly why the previous "just raise the timeout" attempt kept failing.
+    const partner = await withRealtimeRetry(async () => {
+      const received: RemoteChange[] = [];
+      const candidate = createSyncModule(createSupabaseSyncPorts(b.client), {
+        onRemoteChange: (change) => received.push(change),
+      });
+
+      const online = new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(
+          () => reject(new Error('subscription never reached SUBSCRIBED')),
+          SUBSCRIBE_TIMEOUT_MS,
+        );
+        const poll = setInterval(() => {
+          if (candidate.connectivity().status === 'online') {
+            clearTimeout(timer);
+            clearInterval(poll);
+            resolve();
+          }
+        }, 25);
+      });
+
+      candidate.subscribe(toPairingId(pairing));
+      await online;
+
+      // The connectivity indicator must be hidden once subscribed (Req 5.4).
+      expect(candidate.connectivity().indicatorVisible).toBe(false);
+
+      await write(a.token, {
+        change: dateChange(randomUUID(), a.account.id, 500, {
+          title: 'Warm-up',
+          date: '2019-01-01',
+        }),
+      });
+
+      const deadline = Date.now() + 6_000;
+      while (received.length === 0 && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 25));
+      }
+
+      if (received.length === 0) {
+        // Dead channel: tear it down so the next attempt starts clean.
+        candidate.unsubscribe();
+        return null;
+      }
+      return { module: candidate, received };
     });
 
-    const online = new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(
-        () => reject(new Error('subscription never reached SUBSCRIBED')),
-        SUBSCRIBE_TIMEOUT_MS,
-      );
-      const poll = setInterval(() => {
-        if (partner.connectivity().status === 'online') {
-          clearTimeout(timer);
-          clearInterval(poll);
-          resolve();
-        }
-      }, 25);
-    });
-
-    partner.subscribe(toPairingId(pairing));
-    await online;
-
-    // The connectivity indicator must be hidden once subscribed (Req 5.4).
-    expect(partner.connectivity().indicatorVisible).toBe(false);
-
-    // WARM-UP, outside the budget. `SUBSCRIBED` means the channel is joined, but
-    // the first event still pays whatever one-off cost Realtime has in attaching
-    // the binding. Req 5.3 is about propagating a change to an ESTABLISHED
-    // session, so folding attachment cost into the measurement would be measuring
-    // the wrong thing. This proves the pipe is live before the clock starts.
-    await write(a.token, {
-      change: dateChange(randomUUID(), a.account.id, 500, {
-        title: 'Warm-up',
-        date: '2019-01-01',
-      }),
-    });
-    const warmDeadline = Date.now() + 20_000;
-    while (received.length === 0 && Date.now() < warmDeadline) {
-      await new Promise((r) => setTimeout(r, 25));
-    }
-    // Observed once, not reproduced in three subsequent full runs: this warm-up
-    // exhausted its 20s allowance shortly after a `supabase db reset`, with the
-    // channel reporting SUBSCRIBED (asserted above) and Broadcast working, but no
-    // Postgres Changes arriving. The suspicion is that Realtime needs longer to
-    // re-establish replication against a freshly recreated slot than the container
-    // takes to report healthy. If this fails, check
-    // `docker logs supabase_realtime_ldr-games` and retry after a pause before
-    // assuming the sync path is broken — a SUBSCRIBED channel with no events is a
-    // replication-side symptom, not a client one.
-    expect(
-      received.length,
-      'the subscription reported SUBSCRIBED but delivered no warm-up event in 20s ' +
-        '(suspect Realtime replication after a db reset, not the client)',
-    ).toBeGreaterThan(0);
+    const received = partner.received;
     received.length = 0;
 
     // Now measure a real partner change on a proven-live subscription.
@@ -211,7 +220,7 @@ describe.skipIf(cfg === null)('Sync path (integration)', () => {
     expect(received[0]?.table).toBe('relationship_dates');
     expect(received[0]?.row.id).toBe(itemId);
 
-    partner.unsubscribe();
+    partner.module.unsubscribe();
   });
 
   // -------------------------------------------------------------------------
@@ -413,26 +422,44 @@ describe.skipIf(cfg === null)('Sync path (integration)', () => {
     const b = await member();
     const pairing = await pair(a.token, b.token);
 
-    const events: RemoteChange[] = [];
-    const partner = createSyncModule(createSupabaseSyncPorts(b.client), {
-      onRemoteChange: (change) => events.push(change),
-    });
+    // Retried with a fresh subscription for the same reason as the Req 5.3 test:
+    // the first subscription after the replication slot is recreated is dead, and
+    // only a NEW one recovers. Here the INSERT doubles as the warm-up.
+    const { partner, events, itemId } = await withRealtimeRetry(async () => {
+      const captured: RemoteChange[] = [];
+      const candidate = createSyncModule(createSupabaseSyncPorts(b.client), {
+        onRemoteChange: (change) => captured.push(change),
+      });
 
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('never subscribed')), SUBSCRIBE_TIMEOUT_MS);
-      const poll = setInterval(() => {
-        if (partner.connectivity().status === 'online') {
-          clearTimeout(timer);
-          clearInterval(poll);
-          resolve();
-        }
-      }, 25);
-      partner.subscribe(toPairingId(pairing));
-    });
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(
+          () => reject(new Error('never subscribed')),
+          SUBSCRIBE_TIMEOUT_MS,
+        );
+        const poll = setInterval(() => {
+          if (candidate.connectivity().status === 'online') {
+            clearTimeout(timer);
+            clearInterval(poll);
+            resolve();
+          }
+        }, 25);
+        candidate.subscribe(toPairingId(pairing));
+      });
 
-    const itemId = randomUUID();
-    await write(a.token, {
-      change: dateChange(itemId, a.account.id, 1_000, { title: 'Doomed', date: '2020-09-09' }),
+      const id = randomUUID();
+      await write(a.token, {
+        change: dateChange(id, a.account.id, 1_000, { title: 'Doomed', date: '2020-09-09' }),
+      });
+
+      const deadline = Date.now() + 6_000;
+      while (!captured.some((e) => e.event === 'INSERT') && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      if (!captured.some((e) => e.event === 'INSERT')) {
+        candidate.unsubscribe();
+        return null;
+      }
+      return { partner: candidate, events: captured, itemId: id };
     });
 
     const waitFor = async (event: RemoteChange['event']) => {
@@ -445,8 +472,6 @@ describe.skipIf(cfg === null)('Sync path (integration)', () => {
       }
       return events.some((e) => e.event === event);
     };
-
-    expect(await waitFor('INSERT')).toBe(true);
 
     // This is the case that silently failed before migration 20260901000002:
     // under the default replica identity the DELETE's old row carries only the
