@@ -4,7 +4,24 @@
 
 This plan implements the LDR Companion App on Supabase (Postgres + RLS, Auth/GoTrue, Realtime, Storage, Edge Functions, pg_cron) with a shared TypeScript client core wrapped by Expo (mobile) and Electron/web (desktop) shells.
 
-The sequencing is deliberately test-driven where practical: scaffolding and schema come first, then the **pure, deterministic domain helpers** (validation, HLC conflict resolution, move/turn engines, quiz scoring, date ordering, reminder scheduling, delivery eligibility) are implemented alongside their **`fast-check` property-based tests** (minimum 100 iterations each, tagged `// Feature: ldr-companion-app, Property {n}: {text}`). Only then are the server-authoritative Edge Functions, Realtime wiring, scheduler jobs, client service modules, and platform shells built on top of the verified logic. Every one of the 11 requirements and all 41 correctness properties is covered by at least one task below.
+The sequencing is deliberately test-driven where practical: scaffolding and schema come first, then the **pure, deterministic domain helpers** (validation, HLC conflict resolution, move/turn engines, quiz scoring, date ordering, reminder scheduling, delivery eligibility) are implemented alongside their **`fast-check` property-based tests** (minimum 100 iterations each, tagged `// Feature: ldr-companion-app, Property {n}: {text}`). Only then are the server-authoritative Edge Functions, Realtime wiring, scheduler jobs, client service modules, and platform shells built on top of the verified logic. Every one of the 12 requirements and all 44 correctness properties is covered by at least one task below.
+
+## MVP Scope
+
+The plan was written backend-first, and that worked: auth, pairing, sync, real-time games, asynchronous games, and Storage are all implemented **and verified against a live stack**. But it left the project with a well-tested API and no app — every user-facing task is still unbuilt.
+
+To correct that, the remaining work is now split into an **MVP path** and **deferred** sections. Tasks on the MVP path are marked `[MVP]`; deferred sections are marked `[DEFERRED]` with a note on what the deferral actually costs.
+
+**MVP definition:** sign in on an iPhone, pair with a partner, and play **one real-time game (tic-tac-toe)** and **one asynchronous game (battleship)**.
+
+The point of that definition is that it needs **no further backend work** — every server-side piece it depends on is already done and tested. What is missing is entirely the client and the shell.
+
+Two things about the MVP are easy to get wrong and are called out where they appear below:
+
+- **A phone cannot reach `127.0.0.1`.** Everything so far is verified against a local stack, which is fine for a simulator or a LAN dev build. Running on a real device away from the dev machine — and anything on TestFlight — needs a hosted Supabase project with the migrations pushed to it (task 21B).
+- **Notification READS are MVP, not deferred.** The game functions already write `your_turn` rows, but nothing reads them. A turn-based game where you cannot tell it is your turn is not usable, so a slice of 19.1 stays in scope while push (19.2) and category settings do not.
+
+Deferring is a real reduction in scope, not a reshuffle. Specifically: **Requirement 5.1 (identical data on mobile AND desktop) is not satisfied by an iOS-only MVP**, and the deferred cron jobs leave abandoned real-time sessions lingering. Both are acceptable for two people testing their own app; neither is acceptable for a public release.
 
 ## Tasks
 
@@ -333,7 +350,9 @@ The sequencing is deliberately test-driven where practical: scaffolding and sche
     - Passing against a live stack (7 tests), also covering Req 7.2/7.3/7.8/7.9/7.11. Writing these found that a battleship session started without ship placements could never reach a terminal state — fixed in the preceding commit. Mutation-checked by dropping and gutting the `async_take_turn` RPC (no holder transfer, no outcome, no notifications): 4 tests fail. Note `async-start` takes its options NESTED under `options`, i.e. `{ gameId, options: { ships, size, firstHolder, maxRounds } }`.
     - _Requirements: 7.5, 7.7, 7.10_
 
-- [ ] 17. Quiz wiring
+- [ ] 17. Quiz wiring — **[DEFERRED, post-MVP]**
+  - Cost of deferring: Requirement 8 is entirely unavailable. The pure quiz logic and its property tests (7.x) are already done, so this is wiring only. Note there is **no seed data** for `quiz_defs` / `quiz_questions` yet — whoever picks this up needs to create some before anything can be exercised end to end.
+
   - [ ] 17.1 Implement quiz submission and scoring Edge Function
     - Handle `startSession` (partial-UNIQUE one-active-per-pairing), `submitSelfAnswer`/`submitGuess` (validation, retain prior on reject), phase transitions, and `scoreSession`; enforce `requirePairing`
     - _Requirements: 8.2, 8.3, 8.5, 8.6, 8.7, 8.8, 8.10, 8.11, 8.12, 8.13_
@@ -346,7 +365,9 @@ The sequencing is deliberately test-driven where practical: scaffolding and sche
     - Assert the RLS policy withholds self-answers during the self-answer phase and reveals them in the guessing/complete phase (**Property 28**), and that scoring/results are correct end to end
     - _Requirements: 8.4, 8.7, 8.8_
 
-- [ ] 18. Calendar and reminder wiring
+- [ ] 18. Calendar and reminder wiring — **[DEFERRED, post-MVP]**
+  - Cost of deferring: Requirements 9 and 10 are entirely unavailable. The pure logic (8.x) is done, as is the Realtime groundwork — migration `20260901000002` already publishes `relationship_dates` and `reminders` and sets `REPLICA IDENTITY FULL` on both so deletes propagate, so this is the cheapest deferred section to pick up.
+
   - [ ] 18.1 Implement date create/edit/delete writes with Postgres Changes
     - Wire pairing-scoped date create/edit/delete through RLS-guarded writes (validation re-run server-side, not-found rejection) propagating to both partners within 5s, and list dates via `orderDates`
     - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7_
@@ -359,20 +380,31 @@ The sequencing is deliberately test-driven where practical: scaffolding and sche
     - Assert create/edit/delete propagate within 5s, invalid title/date/lead-time are rejected with no change, and deleting a date cascades reminder cancellation
     - _Requirements: 9.1, 9.4, 10.2, 10.4_
 
-- [ ] 19. Notification wiring
-  - [ ] 19.1 Implement in-app notifications, acknowledgement, and settings
-    - Wire the recipient-scoped `notifications` Realtime subscription (pairing/game invites <5s), `acknowledge` (mark delivered + suppress re-delivery), undelivered retrieval within the 30-day window using `shouldDeliver`/`isExpired`, and category settings
-    - _Requirements: 11.1, 11.2, 11.3, 11.4, 11.6_
+- [ ] 19. Notification wiring — **partially [MVP]**
+  - 19.1 is SPLIT. The in-app read path is MVP: the pairing, game-invite and `your_turn` rows are already being written by the pairing and game Edge Functions, and nothing reads them. Out-of-app push and category settings are deferred.
 
-  - [ ] 19.2 Implement push dispatch Edge Function
+  - [ ] 19.1a Implement in-app notification reads and acknowledgement — **[MVP]**
+    - Wire the recipient-scoped `notifications` Realtime subscription (game invites and your-turn <5s), `acknowledge` (mark delivered + suppress re-delivery), and undelivered retrieval within the 30-day window using the existing `shouldDeliver` / `isExpired` helpers
+    - `notifications` is already in the `supabase_realtime` publication (migration `20260826062557`) and is recipient-scoped by RLS, so no schema work is needed
+    - _Requirements: 11.1, 11.2, 11.4, 11.6_
+
+  - [ ] 19.1b Implement notification category settings — **[DEFERRED, post-MVP]**
+    - Cost of deferring: Req 11.3 unavailable, so a user cannot mute a category. Acceptable while the only categories are game invites and your-turn.
+    - _Requirements: 11.3_
+
+  - [ ] 19.2 Implement push dispatch Edge Function — **[DEFERRED, post-MVP]**
+    - Cost of deferring: notifications only appear while the app is OPEN. For an asynchronous game that means you learn it is your turn on next launch rather than being told. Tolerable for MVP, and the single highest-value post-MVP addition.
     - Dispatch best-effort out-of-app push to Expo Push (mobile) and the desktop notification API from an Edge Function, on top of the durable notifications table
     - _Requirements: 11.1, 11.2_
 
-  - [ ] 19.3 Write notification integration tests
-    - Assert pairing-invite and game-invite notifications arrive within 5s, disabled categories are withheld, and acknowledged notifications are not re-delivered
-    - _Requirements: 11.1, 11.2, 11.3, 11.6_
+  - [ ] 19.3 Write notification integration tests — **[MVP for the 19.1a slice]**
+    - MVP portion: assert game-invite and your-turn notifications arrive within 5s and that acknowledged notifications are not re-delivered. The disabled-category assertion waits for 19.1b.
+    - _Requirements: 11.1, 11.2, 11.6_
 
-- [ ] 20. Scheduler (pg_cron + scheduled Edge Functions)
+- [ ] 20. Scheduler (pg_cron + scheduled Edge Functions) — **[DEFERRED, post-MVP]**
+  - Cost of deferring, and this one is worth understanding rather than skimming: **abandoned real-time sessions never clean themselves up.** Without 20.1, an invitation nobody joins stays `pending` forever instead of expiring after 60s (Req 6.9), and a session paused by a disconnect stays `paused` forever instead of terminating after 5 minutes (Req 6.10). The 48h async nudge (7.12) never fires either. Nothing breaks or corrupts — the state machine is still correct — but stale rows accumulate and a partner can be left staring at a paused game that will never resolve. Fine for two people who can just start a new game; not acceptable for public release.
+  - Without 20.2, reminders never deliver (Req 10.3), sessions never expire from 30-day inactivity (2.6), and notifications are never discarded at 30 days (11.5). The first two are moot while 18.x is deferred.
+
   - [ ] 20.1 Implement game-related cron jobs
     - Create pg_cron jobs invoking Edge Functions for 60s real-time invitation-join expiry (cancel + notify), 5-min pause termination (end-without-outcome + notify), and 48h async turn nudge (notify without forfeiting)
     - _Requirements: 6.9, 6.10, 7.12_
@@ -385,21 +417,37 @@ The sequencing is deliberately test-driven where practical: scaffolding and sche
     - Assert 60s join expiry, 5-min pause termination, 48h nudge, reminder delivery within 60s, and 30-day inactivity/retention windows fire as expected
     - _Requirements: 6.9, 6.10, 7.12, 10.3, 11.5_
 
-- [ ] 21. Client service modules and Connection Manager
-  - [ ] 21.1 Wire AuthenticationModule and PairingModule
+- [ ] 21. Client service modules and Connection Manager — **[MVP]**
+  - [ ] 21.1 Wire AuthenticationModule and PairingModule — **[MVP]**
     - Implement client `AuthenticationModule` (register/authenticate/signOut/currentSession, no-session routing to sign-in) and `PairingModule` (createInvitation/acceptInvitation/unlink/getPairing) over `supabase-js` and the Edge Functions
+    - Every endpoint these wrap is already integration-tested, so the verified contracts are in `packages/core/src/__harness__/auth.integration.test.ts` and `pairing.integration.test.ts` — read those for the exact request/response shapes rather than inferring them
     - _Requirements: 2.1, 2.4, 2.5, 3.1, 3.2, 4.1_
 
-  - [ ] 21.2 Wire game, quiz, calendar, and notification client modules with Local Store
-    - Implement `RealTimeGameModule`, `AsyncGameModule`, `CalendarModule`, and `NotificationModule` client-side with the Local Store cache for instant/offline reads and list presentation to both partners
-    - _Requirements: 5.1, 6.1, 7.1, 8.1, 9.7_
+  - [ ] 21.2 Wire the game and notification client modules with Local Store — **[MVP, trimmed]**
+    - MVP scope: `RealTimeGameModule` (tic-tac-toe), `AsyncGameModule` (battleship), and the read-side `NotificationModule` from 19.1a, each over the Local Store cache for instant/offline reads
+    - `CalendarModule` and `QuizModule` are deferred with sections 17/18. The drawing game is deferred too, though only its UI: its Edge Function path and Storage wiring are already done and integration-tested (16.1, 16.2), so adding it later is a UI-only increment
+    - The Local Store is introduced here — task 14.2 deliberately left it out, handing remote changes to an `onRemoteChange` listener instead of caching them, so this task owns the cache design
+    - _Requirements: 5.1, 6.1, 7.1_
 
   - [ ] 21.3 Implement Connection Manager channels, reconnect, and displacement sign-out
     - Maintain Realtime subscriptions (Postgres Changes, Broadcast, Presence), handle reconnect and queue drain, and force local sign-out when the per-account revoke signal arrives
+    - **Compose** the task 14.2 modules rather than rewriting them: `createSyncModule` / `createSupabaseSyncPorts` already own the pairing-scoped Postgres Changes subscription, the connectivity state machine, and the reconnect queue drain, with injected ports specifically so this task can wrap them. What is genuinely new here is Broadcast, Presence, and the revoke-driven sign-out
+    - The client-side Presence tracking that produces the snapshot for `rt-presence` belongs here (deferred from 15.2), and it is what makes Req 6.6 work end to end
     - _Requirements: 2.9, 5.3, 5.4, 6.6_
 
-- [ ] 21A. Account deletion (App Store Guideline 5.1.1(v))
+- [ ] 21B. Hosted Supabase project — **[MVP, required for on-device]**
+  - Everything so far is verified against a LOCAL stack. A phone cannot reach `127.0.0.1`: a simulator or a LAN dev build can use the local stack, but running on a real device away from the dev machine, and anything on TestFlight, needs a hosted project.
+  - **This is the first task that touches something not freely resettable.** Local work can be thrown away with `supabase db reset`; a hosted project cannot. Get explicit confirmation before pushing migrations to it.
+
+  - [ ] 21B.1 Create and link the hosted project, push migrations and functions
+    - Create the Supabase project, `supabase link`, push all migrations, deploy the Edge Functions, and configure the auth settings the local `config.toml` sets
+    - Verify by pointing the integration suite at the hosted project (the harness already reads `SUPABASE_URL` / keys from the environment, so this needs no test changes) and confirming the same 40 tests pass
+    - Record the anon key and project URL as build-time config for the shells; the service-role key must NEVER ship in a client bundle
+    - _Requirements: 5.1_
+
+- [ ] 21A. Account deletion (App Store Guideline 5.1.1(v)) — **[required to SUBMIT, not to USE]**
   - Required before iOS submission: an app that supports account creation must offer in-app account deletion. Requirement 4 (unlinking) deliberately RETAINS individual data, so it does not satisfy this. Placed here so the backend exists before the shells add the UI in 22.1/22.2.
+  - Sequencing note: this blocks App Store submission but not a working dev build, so it can follow 22.1 if the priority is getting the app into your hands first. It must not be dropped, only ordered.
 
   - [ ] 21A.1 Implement the deleteAccount pure logic
     - Implement the pure decision for account deletion: require an explicit confirmation, derive the dissolve-first-then-delete ordering, and derive the remaining partner's resulting unpaired state by reusing `dissolvePairing`; an unconfirmed request yields no change
@@ -419,23 +467,42 @@ The sequencing is deliberately test-driven where practical: scaffolding and sche
     - _Requirements: 12.4, 12.5, 12.6, 12.8_
 
 - [ ] 22. Platform shells
-  - [ ] 22.1 Build the Expo mobile shell
-    - Implement mobile navigation/UI over the shared modules, Expo SecureStore for the refresh token, and Expo Push registration writing the token to notification settings
-    - Must also include: `ios.bundleIdentifier` in `app.json` (absent today, and required to build at all), a 1024x1024 app icon and splash image, an `eas.json` with build profiles, the APNs key for Expo Push, and the two-step account-deletion confirmation UI from 21A (Req 12.1, 12.2)
-    - _Requirements: 5.1, 11.1, 12.1, 12.2_
+  - [ ] 22.1a Scaffold the Expo app — **[MVP]**
+    - `apps/mobile` is currently a STUB: it has no `expo`, `react` or `react-native` dependency and its `main` points at a `src/main.ts` that only returns theme tokens. This subtask makes it a real Expo app.
+    - Install Expo + React Native, add an `App.tsx` entry point and navigation, and confirm it runs in the iOS simulator against the local stack
+    - Add `ios.bundleIdentifier` to `app.json` — absent today, and required to build at all
+    - _Requirements: 5.1_
 
-  - [ ] 22.2 Build the Electron/web desktop shell
+  - [ ] 22.1b Build the MVP mobile screens — **[MVP]**
+    - Screens: sign in / register, pairing (create + accept an invitation), a game list, a tic-tac-toe board, and a battleship board, over the shared modules from 21.1/21.2
+    - Expo SecureStore for the refresh token
+    - Render the theme from `@ldr/core` tokens rather than hardcoded values, per the theme steering doc
+    - _Requirements: 5.1, 6.1, 7.1_
+
+  - [ ] 22.1c iOS release prerequisites — **[required to SUBMIT]**
+    - A 1024x1024 app icon and a splash image (`app.json` currently sets only `backgroundColor`)
+    - `eas.json` with build profiles, and an EAS build that installs on a real device
+    - APNs key, once 19.2 (push) lands
+    - The two-step account-deletion confirmation UI from 21A (Req 12.1, 12.2)
+    - A privacy policy URL and the App Privacy disclosures — this app handles email, relationship dates and user-drawn images, so the questionnaire is non-trivial
+    - A demo account **pair** for App Review: reviewers cannot test a two-person pairing feature with a single login, which is a common rejection cause for partner apps
+    - _Requirements: 11.1, 12.1, 12.2_
+
+  - [ ] 22.2 Build the Electron/web desktop shell — **[DEFERRED, post-MVP]**
+    - Cost of deferring, stated plainly: **Requirement 5.1 is not satisfied by an iOS-only MVP.** 5.1 requires the same account and shared data to be presented on mobile AND desktop. Deferring this is a genuine reduction in scope, not a reordering, and it should be restored before any claim that Requirement 5 is met.
     - Implement desktop UI over the shared modules, Electron `safeStorage`/OS keychain for the refresh token, and desktop notification integration, plus the same two-step account-deletion confirmation as mobile (Req 12.1, 12.2)
     - _Requirements: 5.1, 11.1, 12.1, 12.2_
 
-  - [ ] 22.3 Write cross-platform parity tests
+  - [ ] 22.3 Write cross-platform parity tests — **[DEFERRED with 22.2]**
+    - Blocked by 22.2: parity cannot be asserted against one shell.
     - Load identical account/shared state through the mobile and desktop shells and assert presentation equality
     - _Requirements: 5.1_
 
 - [ ] 23. Final integration and end-to-end wiring
-  - [ ] 23.1 Wire all modules into both shells end to end
-    - Connect auth, pairing, sync, games, quizzes, calendar, reminders, and notifications into both shells with no orphaned code; verify game/quiz/date list presentation to both partners
-    - _Requirements: 5.1, 6.1, 7.1, 8.1_
+  - [ ] 23.1 Wire the MVP modules into the mobile shell end to end — **[MVP, trimmed]**
+    - MVP scope: auth, pairing, sync, the real-time game, the asynchronous game, and notification reads wired into the mobile shell with no orphaned code; verify the game list presents to both partners
+    - Quizzes, calendar and reminders join this task when 17/18 are picked up; the desktop half joins with 22.2
+    - _Requirements: 5.1, 6.1, 7.1_
 
   - [ ] 23.2 Write security and privacy tests
     - Assert self-answers never appear in a partner's response during the self-answer phase, a former partner cannot read pairing-owned data after dissolution, and error/RLS responses contain no sensitive data or existence leaks
@@ -446,8 +513,8 @@ The sequencing is deliberately test-driven where practical: scaffolding and sche
 
 ## Notes
 
-- Tasks marked with `*` are optional test tasks and can be skipped for a faster MVP; core implementation tasks are never optional.
-- Each task references specific granular requirements for traceability; every one of the 11 requirements and all 41 correctness properties is covered.
+- Tasks are marked `[MVP]` (on the path to a usable iOS app) or `[DEFERRED, post-MVP]` (with the cost of deferring stated on the section). Deferred does not mean dropped — see the MVP Scope section for what each deferral actually costs.
+- Each task references specific granular requirements for traceability; every one of the 12 requirements and all 44 correctness properties is covered by the FULL plan. The MVP subset deliberately does not cover Requirements 8, 9, 10, parts of 11, and the desktop half of 5.1.
 - Pure domain helpers and their `fast-check` property tests (min 100 iterations, tagged `// Feature: ldr-companion-app, Property {n}: {text}`) are implemented before the Supabase wiring so logic is verified before integration.
 - Properties additionally enforced by RLS/constraints (8, 10, 14, 28) are re-verified at the integration layer; timing/latency criteria (5.3, 6.4, 10.3, 11.1, 11.2) are covered by integration tests, not properties.
 - Checkpoints ensure incremental validation at natural breaks.
@@ -474,3 +541,26 @@ The sequencing is deliberately test-driven where practical: scaffolding and sche
 ```
 
 Account deletion (21A) depends on the pairing dissolution transaction (13.2) and the Storage wiring (16.2), both complete, so `21A.1` could be pulled earlier if iOS submission needs to move up. It is scheduled before the shells because 22.1/22.2 own the confirmation UI.
+
+### MVP Critical Path
+
+The graph above is the full plan. The MVP path through it is a strict sequence, because each step is the input to the next:
+
+```json
+{
+  "mvpPath": [
+    { "step": 1, "task": "19.1a", "why": "notification reads; games already write the rows and nothing reads them" },
+    { "step": 2, "task": "21.1",  "why": "auth + pairing client over already-tested endpoints" },
+    { "step": 3, "task": "21.2",  "why": "real-time + async game modules and the Local Store" },
+    { "step": 4, "task": "21.3",  "why": "Broadcast, Presence and revoke sign-out, composing the 14.2 modules" },
+    { "step": 5, "task": "22.1a", "why": "turn the apps/mobile stub into a real Expo app" },
+    { "step": 6, "task": "22.1b", "why": "the MVP screens" },
+    { "step": 7, "task": "23.1",  "why": "wire it together and play a real game partner-to-partner" },
+    { "step": 8, "task": "21B.1", "why": "hosted project, so it runs on a phone off the dev machine" }
+  ],
+  "thenToSubmit": ["21A.1", "21A.2", "21A.3", "21A.4", "22.1c"],
+  "deferred": ["17.x", "18.x", "19.1b", "19.2", "20.x", "22.2", "22.3"]
+}
+```
+
+`21B.1` is placed last on the MVP path deliberately: everything before it can be built and exercised against the local stack, so the hosted project is only needed at the point you want the app on a phone. It is also the first irreversible step, so it should not be taken earlier than necessary.
