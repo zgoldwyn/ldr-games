@@ -156,16 +156,43 @@ Deno.serve(async (req: Request) => {
 
   const sessionId = crypto.randomUUID();
 
-  // Ship placements are per-partner and optional here; the engine treats a
-  // coordinate list as that partner's own targets (see async-battleship.ts).
+  // Ship placements are per-partner: the engine treats a coordinate list as that
+  // partner's own fleet, and the opponent wins by hitting every one of its cells
+  // (see async-battleship.ts).
   const ships = (options.ships ?? {}) as Record<string, unknown>;
+  const actorShips = normalizeCells(ships[actor]);
+  const partnerShips = normalizeCells(ships[partner]);
+
+  // Both fleets must be non-empty. The ruleset derives "all sunk" from the
+  // opponent's ship cells, so a fleet of ZERO cells can never be fully hit and
+  // the session could never reach a terminal state (Req 7.10) — a permanently
+  // unfinishable game. There is no separate ship-placement endpoint, so the start
+  // request is the only place this can be established.
+  if (
+    gameId === BATTLESHIP_GAME_ID &&
+    (actorShips.length === 0 || partnerShips.length === 0)
+  ) {
+    return errorResponse(
+      "INVALID_TURN",
+      "Battleship requires a non-empty fleet for both partners; a fleet of zero " +
+        "cells can never be sunk, so the session could never end.",
+      statusForErrorCode("INVALID_TURN"),
+      {
+        fields: ["options.ships"],
+        missingFor: [
+          ...(actorShips.length === 0 ? [actor] : []),
+          ...(partnerShips.length === 0 ? [partner] : []),
+        ],
+      },
+    );
+  }
 
   const engine = gameId === BATTLESHIP_GAME_ID
     ? createBattleshipGame({
       players,
       ships: {
-        [actor]: normalizeCells(ships[actor]),
-        [partner]: normalizeCells(ships[partner]),
+        [actor]: actorShips,
+        [partner]: partnerShips,
       },
       firstHolder,
       ...(typeof options.size === "number" ? { size: options.size } : {}),
