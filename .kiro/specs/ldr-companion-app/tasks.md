@@ -21,7 +21,9 @@ Two things about the MVP are easy to get wrong and are called out where they app
 - **A phone cannot reach `127.0.0.1`.** Everything so far is verified against a local stack, which is fine for a simulator or a LAN dev build. Running on a real device away from the dev machine — and anything on TestFlight — needs a hosted Supabase project with the migrations pushed to it (task 21B).
 - **Notification READS are MVP, not deferred.** The game functions already write `your_turn` rows, but nothing reads them. A turn-based game where you cannot tell it is your turn is not usable, so a slice of 19.1 stays in scope while push (19.2) and category settings do not.
 
-Deferring is a real reduction in scope, not a reshuffle. Specifically: **Requirement 5.1 (identical data on mobile AND desktop) is not satisfied by an iOS-only MVP**, and the deferred cron jobs leave abandoned real-time sessions lingering. Both are acceptable for two people testing their own app; neither is acceptable for a public release.
+Deferring is a real reduction in scope, not a reshuffle. Specifically: **Requirement 5.1 (identical data on mobile AND desktop) is not satisfied by an iOS-only MVP.** That is acceptable for two people testing their own app; it is not acceptable for a public release.
+
+The game-related cron jobs (20.1) were initially deferred and then pulled back INTO the MVP, because deferring them meant abandoned real-time sessions never cleaned themselves up — a partner could be left staring at a paused game that would never resolve. Feasibility was confirmed against the local stack first (`pg_cron` is preloaded and fires at 1-second granularity), and implementing them as plain plpgsql rather than cron-invoked Edge Functions made them cheap enough to keep. See section 20 for that reasoning.
 
 ## Tasks
 
@@ -401,21 +403,35 @@ Deferring is a real reduction in scope, not a reshuffle. Specifically: **Require
     - MVP portion: assert game-invite and your-turn notifications arrive within 5s and that acknowledged notifications are not re-delivered. The disabled-category assertion waits for 19.1b.
     - _Requirements: 11.1, 11.2, 11.6_
 
-- [ ] 20. Scheduler (pg_cron + scheduled Edge Functions) — **[DEFERRED, post-MVP]**
-  - Cost of deferring, and this one is worth understanding rather than skimming: **abandoned real-time sessions never clean themselves up.** Without 20.1, an invitation nobody joins stays `pending` forever instead of expiring after 60s (Req 6.9), and a session paused by a disconnect stays `paused` forever instead of terminating after 5 minutes (Req 6.10). The 48h async nudge (7.12) never fires either. Nothing breaks or corrupts — the state machine is still correct — but stale rows accumulate and a partner can be left staring at a paused game that will never resolve. Fine for two people who can just start a new game; not acceptable for public release.
-  - Without 20.2, reminders never deliver (Req 10.3), sessions never expire from 30-day inactivity (2.6), and notifications are never discarded at 30 days (11.5). The first two are moot while 18.x is deferred.
+- [ ] 20. Scheduler (pg_cron) — **20.1 is [MVP]**
+  - Moved into the MVP after confirming feasibility against the local stack: `pg_cron` 1.6.4 is in `shared_preload_libraries` and fires reliably at 1-second granularity (a probe job scheduled at `1 seconds` produced 14 successful runs in 8 seconds). So there is no infrastructure risk here, and 20.1 is what stops abandoned real-time sessions accumulating.
+  - **Deviation from design.md, deliberate.** The design says these are "cron jobs invoking Edge Functions". For 20.1 they are implemented as **plpgsql functions called directly by pg_cron**, with no Edge Function and no `pg_net`. All three jobs are the same shape — compare a timestamp, transition a row, insert notifications — which is exactly what `dissolve_pairing` and `app.insert_derived_notifications` already do. Reasons:
+    - **Transactional:** the transition and its notifications commit together. Across an HTTP hop they cannot, so a failure mid-flight could terminate a session without notifying anyone.
+    - **Deterministically testable:** each function takes `p_now` (the convention every other RPC here follows), so tests invoke it with a synthetic time instead of waiting for a real 60s / 5min / 48h window. Without this, Req 7.12's 48-hour nudge is not practically testable at all.
+    - **No `pg_net` → edge-runtime hop**, which is awkward from inside the DB container locally, and no service-role secret for the cron caller.
+    - The design's Edge-Function guidance still stands for any scheduled job with real logic; these three have none.
+  - **Threshold drift is the one real cost** of implementing in SQL: the windows already exist as TypeScript constants (`JOIN_WINDOW_MS`, `REJOIN_WINDOW_MS` in `domain/rt-session.ts`; `TURN_NUDGE_THRESHOLD_MS` in `domain/async-lifecycle.ts`). Mitigated by 20.3 importing those constants and asserting the SQL boundary against them, so a divergence fails a test rather than going unnoticed.
 
-  - [ ] 20.1 Implement game-related cron jobs
-    - Create pg_cron jobs invoking Edge Functions for 60s real-time invitation-join expiry (cancel + notify), 5-min pause termination (end-without-outcome + notify), and 48h async turn nudge (notify without forfeiting)
+  - [ ] 20.1 Implement game-related cron jobs — **[MVP]**
+    - Three plpgsql functions, each taking `p_now` and returning what it changed, plus pg_cron schedules invoking them with `now()`:
+      - 60s real-time invitation-join expiry: `pending` sessions past the join window are cancelled and the inviter notified (Req 6.9)
+      - 5-min pause termination: `paused` sessions past the rejoin window become terminal with an ended-without-outcome result, both partners notified (Req 6.10)
+      - 48h async turn nudge: notify the Active_Turn_Holder WITHOUT forfeiting or terminating the session, deduped so it fires once per pending turn (Req 7.12)
+    - Reuse `app.insert_derived_notifications` so notification dedupe behaves identically to the turn path (Req 11.6)
     - _Requirements: 6.9, 6.10, 7.12_
 
-  - [ ] 20.2 Implement reminder, inactivity, and retention cron jobs
+  - [ ] 20.2 Implement reminder, inactivity, and retention cron jobs — **[DEFERRED, post-MVP]**
+    - Cost of deferring: reminders never deliver (Req 10.3), sessions never expire from 30-day inactivity (2.6), and notifications are never discarded at 30 days (11.5). The first is moot while 18.x is deferred; the other two only matter over a long-lived deployment.
     - Create pg_cron jobs for reminder delivery within 60s of trigger (defer offline), 30-day session inactivity revocation, and 30-day notification retention/discard
     - _Requirements: 2.6, 10.3, 11.4, 11.5_
 
-  - [ ] 20.3 Write scheduler integration tests
-    - Assert 60s join expiry, 5-min pause termination, 48h nudge, reminder delivery within 60s, and 30-day inactivity/retention windows fire as expected
-    - _Requirements: 6.9, 6.10, 7.12, 10.3, 11.5_
+  - [ ] 20.3 Write scheduler integration tests — **[MVP for the 20.1 jobs]**
+    - Call each function directly with a synthetic `p_now`, BRACKETING the window: at `threshold - 1s` nothing transitions, at `threshold + 1s` it does. Bracketing is what makes the test about the specific window rather than "any elapsed time triggers it".
+    - Import the TS threshold constants and assert the SQL agrees with them, so drift between the two fails here.
+    - Separately assert the pg_cron schedules exist and are enabled (`cron.job`), since a correct function that is never scheduled is still a broken feature.
+    - Assert the 48h nudge does NOT terminate or forfeit the session (Req 7.12) and does not duplicate on repeated runs (Req 11.6).
+    - The 20.2 windows (reminder delivery, 30-day inactivity/retention) wait for 20.2.
+    - _Requirements: 6.9, 6.10, 7.12_
 
 - [ ] 21. Client service modules and Connection Manager — **[MVP]**
   - [ ] 21.1 Wire AuthenticationModule and PairingModule — **[MVP]**
@@ -558,9 +574,15 @@ The graph above is the full plan. The MVP path through it is a strict sequence, 
     { "step": 7, "task": "23.1",  "why": "wire it together and play a real game partner-to-partner" },
     { "step": 8, "task": "21B.1", "why": "hosted project, so it runs on a phone off the dev machine" }
   ],
+  "mvpBackendPrerequisite": [
+    { "task": "20.1", "why": "abandoned real-time sessions must clean themselves up; plain plpgsql, no Edge Function" },
+    { "task": "20.3", "why": "brackets each window and pins the SQL thresholds against the TS constants" }
+  ],
   "thenToSubmit": ["21A.1", "21A.2", "21A.3", "21A.4", "22.1c"],
-  "deferred": ["17.x", "18.x", "19.1b", "19.2", "20.x", "22.2", "22.3"]
+  "deferred": ["17.x", "18.x", "19.1b", "19.2", "20.2", "22.2", "22.3"]
 }
 ```
+
+`20.1` / `20.3` are backend work with no client dependency, so they can be done before step 1 or in parallel with the client tasks — they are listed separately rather than in the sequence for that reason.
 
 `21B.1` is placed last on the MVP path deliberately: everything before it can be built and exercised against the local stack, so the hosted project is only needed at the point you want the app on a phone. It is also the first irreversible step, so it should not be taken earlier than necessary.
