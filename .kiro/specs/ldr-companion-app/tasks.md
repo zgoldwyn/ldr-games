@@ -398,14 +398,35 @@ The sequencing is deliberately test-driven where practical: scaffolding and sche
     - Maintain Realtime subscriptions (Postgres Changes, Broadcast, Presence), handle reconnect and queue drain, and force local sign-out when the per-account revoke signal arrives
     - _Requirements: 2.9, 5.3, 5.4, 6.6_
 
+- [ ] 21A. Account deletion (App Store Guideline 5.1.1(v))
+  - Required before iOS submission: an app that supports account creation must offer in-app account deletion. Requirement 4 (unlinking) deliberately RETAINS individual data, so it does not satisfy this. Placed here so the backend exists before the shells add the UI in 22.1/22.2.
+
+  - [ ] 21A.1 Implement the deleteAccount pure logic
+    - Implement the pure decision for account deletion: require an explicit confirmation, derive the dissolve-first-then-delete ordering, and derive the remaining partner's resulting unpaired state by reusing `dissolvePairing`; an unconfirmed request yields no change
+    - _Requirements: 12.2, 12.3, 12.8_
+
+  - [ ] 21A.2 Write property tests for account deletion
+    - **Property 43: Account deletion leaves the remaining partner consistent**
+    - **Property 44: An unconfirmed deletion changes nothing**
+    - **Validates: Requirements 12.3, 12.8** (exercise both unpaired and paired accounts)
+
+  - [ ] 21A.3 Implement the delete-account Edge Function and Storage cleanup
+    - Dissolve any active pairing first (reusing `dissolve_pairing` so the remaining partner gets the full Req 4 treatment), then delete the `accounts` row and the `auth.users` credential so the email is released; bump and clear `account_session` so already-issued tokens fail the epoch guard; explicitly remove the pairing's prefix from the `drawings` Storage bucket, which does NOT cascade from a Postgres delete; complete within 30s
+    - _Requirements: 12.1, 12.3, 12.4, 12.5, 12.6, 12.7_
+
+  - [ ] 21A.4 Write account-deletion integration tests
+    - Assert no row anywhere references the deleted account and the email can register again (**Property 42**), the remaining partner is left consistent and notified (**Property 43**), tokens for the deleted account are refused (12.5), pairing-owned rows AND Storage objects are gone (12.6), and an unconfirmed request changes nothing (**Property 44**)
+    - _Requirements: 12.4, 12.5, 12.6, 12.8_
+
 - [ ] 22. Platform shells
   - [ ] 22.1 Build the Expo mobile shell
     - Implement mobile navigation/UI over the shared modules, Expo SecureStore for the refresh token, and Expo Push registration writing the token to notification settings
-    - _Requirements: 5.1, 11.1_
+    - Must also include: `ios.bundleIdentifier` in `app.json` (absent today, and required to build at all), a 1024x1024 app icon and splash image, an `eas.json` with build profiles, the APNs key for Expo Push, and the two-step account-deletion confirmation UI from 21A (Req 12.1, 12.2)
+    - _Requirements: 5.1, 11.1, 12.1, 12.2_
 
   - [ ] 22.2 Build the Electron/web desktop shell
-    - Implement desktop UI over the shared modules, Electron `safeStorage`/OS keychain for the refresh token, and desktop notification integration
-    - _Requirements: 5.1, 11.1_
+    - Implement desktop UI over the shared modules, Electron `safeStorage`/OS keychain for the refresh token, and desktop notification integration, plus the same two-step account-deletion confirmation as mobile (Req 12.1, 12.2)
+    - _Requirements: 5.1, 11.1, 12.1, 12.2_
 
   - [ ] 22.3 Write cross-platform parity tests
     - Load identical account/shared state through the mobile and desktop shells and assert presentation equality
@@ -430,6 +451,7 @@ The sequencing is deliberately test-driven where practical: scaffolding and sche
 - Pure domain helpers and their `fast-check` property tests (min 100 iterations, tagged `// Feature: ldr-companion-app, Property {n}: {text}`) are implemented before the Supabase wiring so logic is verified before integration.
 - Properties additionally enforced by RLS/constraints (8, 10, 14, 28) are re-verified at the integration layer; timing/latency criteria (5.3, 6.4, 10.3, 11.1, 11.2) are covered by integration tests, not properties.
 - Checkpoints ensure incremental validation at natural breaks.
+- Section 21A and Requirement 12 (Account Deletion) were added after the original plan. Requirement 12 brings the total to **12 requirements** and Properties 42–44 bring the total to **44 correctness properties**. It is not optional: without in-app account deletion the app cannot pass Apple App Store review (Guideline 5.1.1(v)), and unlinking does not substitute for it because Req 4.4 explicitly retains individual data.
 
 ## Task Dependency Graph
 
@@ -443,9 +465,12 @@ The sequencing is deliberately test-driven where practical: scaffolding and sche
     { "id": 4, "tasks": ["2.3"] },
     { "id": 5, "tasks": ["2.4", "12.1", "12.2", "12.3", "13.1", "13.2", "14.1", "15.1", "15.2", "16.1", "16.2", "17.1", "18.1", "18.2", "19.1", "19.2", "20.1", "20.2"] },
     { "id": 6, "tasks": ["12.4", "13.3", "14.2", "15.3", "16.3", "17.2", "18.3", "19.3", "20.3"] },
-    { "id": 7, "tasks": ["14.3", "17.3", "21.1", "21.2", "21.3"] },
-    { "id": 8, "tasks": ["22.1", "22.2", "23.1"] },
-    { "id": 9, "tasks": ["22.3", "23.2"] }
+    { "id": 7, "tasks": ["14.3", "17.3", "21.1", "21.2", "21.3", "21A.1"] },
+    { "id": 8, "tasks": ["21A.2", "21A.3"] },
+    { "id": 9, "tasks": ["21A.4", "22.1", "22.2", "23.1"] },
+    { "id": 10, "tasks": ["22.3", "23.2"] }
   ]
 }
 ```
+
+Account deletion (21A) depends on the pairing dissolution transaction (13.2) and the Storage wiring (16.2), both complete, so `21A.1` could be pulled earlier if iOS submission needs to move up. It is scheduled before the shells because 22.1/22.2 own the confirmation UI.

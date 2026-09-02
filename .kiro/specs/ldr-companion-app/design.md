@@ -771,6 +771,42 @@ These properties were derived from the acceptance criteria via the prework analy
 
 **Validates: Requirements 7.6**
 
+### Property 42: Account deletion leaves no trace of the account
+
+*For any* account, and for any pairing state it is in (unpaired, or paired with any partner), confirmed deletion removes the account's credential record, its account-owned rows, and its notifications, so that no row anywhere references the deleted account id and its email address no longer resolves to an account.
+
+**Validates: Requirements 12.4, 12.6**
+
+### Property 43: Account deletion leaves the remaining partner consistent
+
+*For any* pairing, deleting one member's account leaves the other member in a valid unpaired state — `pairingId` cleared, able to create or accept a new invitation, holding a pairing-ended notification, and with no active game or quiz session — identical to the state produced by an ordinary unlink.
+
+**Validates: Requirements 12.3**
+
+### Property 44: An unconfirmed deletion changes nothing
+
+*For any* deletion request that is not reconfirmed, the account, its pairing, and all pairing-owned data are byte-identical to their state before the request.
+
+**Validates: Requirements 12.8**
+
+## Account Deletion
+
+Account deletion is a distinct operation from unlinking, and the distinction is the point: **Requirement 4 deliberately RETAINS each former partner's individual data**, so dissolving a pairing can never satisfy the App Store's deletion obligation (Guideline 5.1.1(v)) or a GDPR Article 17 request. This section exists because that gap is easy to miss — "unlink" superficially looks like leaving.
+
+### Supabase mapping
+
+- A `delete-account` **Edge Function** performs the whole operation server-side under `service_role`, because it must touch `auth.users` (which clients cannot) and must not be partially applied.
+- The order is fixed: **dissolve the pairing first, then delete the account.** Reusing the existing `dissolve_pairing` transaction means the remaining partner gets exactly the Requirement 4 treatment — unpaired, notified, active sessions terminated — rather than a second, subtly different code path (Req 12.3).
+- The account row is then removed. Every app table's foreign key to `accounts(id)` is already `ON DELETE CASCADE`, so account-owned rows and notifications go with it; deleting the `auth.users` record releases the email for re-registration (Req 12.4).
+- **Pairing-owned data is removed too** (Req 12.6). This is not a data grab from the surviving partner: after dissolution, `app.current_pairing()` returns NULL for both former members, so Requirement 4.4 has *already* revoked both partners' access to that data. Deleting it therefore takes nothing away that the remaining partner could still reach, while ensuring the departing user's own content — their self-answers, their drawings, their messages — genuinely ceases to exist rather than lingering unreachable but stored.
+- Drawing images live in Storage, which does **not** cascade from a Postgres delete. The function explicitly removes the pairing's object prefix from the `drawings` bucket; otherwise binary content would outlive the account (Req 12.6).
+- Deletion terminates sessions by bumping `account_session.epoch` and removing the registry row, so any token already issued fails the epoch guard even in the window before the client notices (Req 12.5).
+- Reconfirmation (Req 12.2) is a **client** concern — a two-step confirm in each shell. The Edge Function requires an explicit confirmation field so a single accidental call cannot delete an account, but the UI is what makes the consequence legible.
+
+### Ordering hazard
+
+The function must dissolve while the pairing still exists and both accounts are still present, since `dissolve_pairing` reads both members to write their notifications. Deleting the account first would leave the surviving partner paired to a dangling id, or cascade the pairing away before the notification could be produced. The integration test for Property 43 is what pins this ordering.
+
 ## Error Handling
 
 The client service modules and Edge Functions use a uniform `Result<T, E>` return type at their boundaries so callers explicitly handle success and each error variant rather than relying on exceptions for control flow. Errors carry a stable machine-readable code and a user-safe message. Supabase/PostgREST errors (RLS denials, constraint violations) are mapped into this `Result` vocabulary at the module boundary.

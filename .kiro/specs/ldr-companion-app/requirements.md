@@ -35,6 +35,7 @@ This document defines the functional and quality requirements for the feature se
 - **Relationship_Date**: A calendar entry, owned by a Pairing, marking a date of significance (for example an anniversary or birthday).
 - **Reminder**: A scheduled notification associated with a Relationship_Date.
 - **Notification**: A message delivered to a User's Client to inform the User of an event.
+- **Account_Deletion**: The permanent removal of an Account and its data at the request of the Account's own User. Distinct from dissolving a Pairing, which ends the link between two Accounts but retains both Accounts and their individual data.
 - **Authentication_Service**: The System component responsible for verifying Account credentials.
 - **Pairing_Service**: The System component responsible for creating, enforcing, and dissolving Pairings.
 - **Sync_Service**: The System component responsible for keeping shared data consistent across a User's Clients and between Partners.
@@ -206,3 +207,20 @@ This document defines the functional and quality requirements for the feature se
 4. IF Notification delivery to a Client fails, THEN THE System SHALL retain the undelivered Notification for up to 30 days and deliver it when that User next establishes an Authenticated_Session within that period.
 5. IF a retained Notification remains undelivered for 30 days after its creation, THEN THE System SHALL discard the Notification and make no further delivery attempts.
 6. WHEN a User acknowledges a Notification on the User's Authenticated_Session, THE System SHALL mark that Notification as delivered for that User and withhold the same Notification from that User's subsequent Authenticated_Sessions.
+
+### Requirement 12: Account Deletion
+
+**User Story:** As a user, I want to permanently delete my account and my data from inside the app, so that I can leave the service entirely without contacting support.
+
+**Rationale:** Apple App Store Review Guideline 5.1.1(v) requires any app that supports account creation to also offer account deletion initiated from within the app. Requirement 4 (Partner Unlinking) deliberately RETAINS each former Partner's individual data, so it does not satisfy this. Comparable obligations exist under GDPR Article 17 and similar regimes.
+
+#### Acceptance Criteria
+
+1. WHILE a User has an Authenticated_Session, THE System SHALL present a means to request Account_Deletion from within the Client, without requiring the User to contact support or leave the app.
+2. WHEN a User requests Account_Deletion, THE System SHALL require the User to reconfirm the request before any data is removed, and SHALL state that the removal is permanent and irreversible.
+3. WHEN a User confirms Account_Deletion for an Account that is in a Pairing, THE Pairing_Service SHALL dissolve the Pairing before removing the Account, applying every effect of Requirement 4 to the remaining Partner so that the remaining Partner is left in a consistent unpaired state and is notified that the Pairing has ended.
+4. WHEN a User confirms Account_Deletion, THE System SHALL permanently remove that Account's credentials, its Account-owned data, and its Notifications, such that the Account's email address no longer identifies an Account and can be used to register a new Account.
+5. WHEN a User confirms Account_Deletion, THE System SHALL terminate every Authenticated_Session for that Account and deny all subsequent requests presenting credentials or tokens for the deleted Account.
+6. WHEN an Account is deleted, THE System SHALL remove the data owned by any Pairing that Account belonged to, including Game_Sessions, Quiz_Sessions, Self_Answers, Guesses, Relationship_Dates, Reminders, and stored images, so that no Pairing-owned content outlives the deletion.
+7. WHEN a User confirms Account_Deletion, THE System SHALL complete the removal within 30 seconds and confirm completion to the User.
+8. IF a User requests Account_Deletion and does not reconfirm, THEN THE System SHALL make no change to the Account or to any data.
