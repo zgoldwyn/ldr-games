@@ -328,8 +328,9 @@ The sequencing is deliberately test-driven where practical: scaffolding and sche
     - The bucket and its RLS policies already shipped with task 2.3; this task added the wiring: `packages/core/src/storage/drawing-images.ts` (pure object-key rules — the key layout **is** the security boundary, since Storage RLS authorizes on the first path segment) and `drawing-store.ts` (upload + signed-URL reads). `async-take-turn` now validates a drawing turn's `imageRef` against the caller's pairing/session so a foreign reference cannot be persisted into the gallery. 13 unit + 4 integration tests, mutation-checked by flattening the Storage RLS policies and by disabling the ref check.
     - _Requirements: 7.3_
 
-  - [ ] 16.3 Write asynchronous game integration tests
+  - [x] 16.3 Write asynchronous game integration tests
     - Assert a non-holder turn is rejected with state unchanged, a valid turn transfers ownership and notifies the other partner, and the terminal outcome is delivered/deferred to an offline partner
+    - Passing against a live stack (7 tests), also covering Req 7.2/7.3/7.8/7.9/7.11. Writing these found that a battleship session started without ship placements could never reach a terminal state — fixed in the preceding commit. Mutation-checked by dropping and gutting the `async_take_turn` RPC (no holder transfer, no outcome, no notifications): 4 tests fail. Note `async-start` takes its options NESTED under `options`, i.e. `{ gameId, options: { ships, size, firstHolder, maxRounds } }`.
     - _Requirements: 7.5, 7.7, 7.10_
 
 - [ ] 17. Quiz wiring
