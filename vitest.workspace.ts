@@ -44,14 +44,16 @@ export default defineWorkspace([
       // asserted inside the tests; this is only the outer safety net.
       testTimeout: 60_000,
       hookTimeout: 60_000,
-      // Every integration suite shares ONE local Supabase stack. Run them
-      // serially: in parallel they contend for the same Postgres, Realtime and
-      // edge runtime, which turns the latency assertions into a measure of
-      // contention rather than of the system. Observed concretely — the Req 5.3
-      // propagation test measures ~0.9s alone and blew past its 5s budget at
-      // ~6.2s with seven suites running at once. The requirement is about a user
-      // on a normally-loaded system, not about a saturated laptop.
-      fileParallelism: false,
+      // NOTE: these suites must run SERIALLY — they share one local Supabase
+      // stack, and in parallel they contend for the same Postgres, Realtime and
+      // edge runtime, which turns a latency assertion into a measure of
+      // contention (the Req 5.3 propagation test measures ~0.9s alone but blew
+      // its 5s budget at ~6.2s alongside seven other suites).
+      //
+      // `fileParallelism` CANNOT be set per-project — vitest only honours it at
+      // the root or from the CLI — so it is passed as `--no-file-parallelism` by
+      // the `test:integration` / `test:integration:local` scripts instead.
+      // Setting it here silently does nothing.
     },
   },
 ]);

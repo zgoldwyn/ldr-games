@@ -160,7 +160,25 @@ describe.skipIf(cfg === null)('Sync path (integration)', () => {
     // The connectivity indicator must be hidden once subscribed (Req 5.4).
     expect(partner.connectivity().indicatorVisible).toBe(false);
 
-    // A commits a change.
+    // WARM-UP, outside the budget. `SUBSCRIBED` means the channel is joined, but
+    // the first event still pays whatever one-off cost Realtime has in attaching
+    // the binding. Req 5.3 is about propagating a change to an ESTABLISHED
+    // session, so folding attachment cost into the measurement would be measuring
+    // the wrong thing. This proves the pipe is live before the clock starts.
+    await write(a.token, {
+      change: dateChange(randomUUID(), a.account.id, 500, {
+        title: 'Warm-up',
+        date: '2019-01-01',
+      }),
+    });
+    const warmDeadline = Date.now() + 20_000;
+    while (received.length === 0 && Date.now() < warmDeadline) {
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    expect(received.length, 'the subscription never delivered a warm-up event').toBeGreaterThan(0);
+    received.length = 0;
+
+    // Now measure a real partner change on a proven-live subscription.
     const itemId = randomUUID();
     const started = Date.now();
     await write(a.token, {
