@@ -37,6 +37,13 @@ export default defineWorkspace([
       name: 'integration',
       include: ['packages/**/*.integration.test.ts', 'apps/**/*.integration.test.ts'],
       exclude: commonExclude,
+      // Integration tests talk to a live stack: a Realtime channel handshake plus
+      // a latency budget (5s for Req 5.3, 10s for the Req 5.5 queue drain) does
+      // not fit vitest's 5s default, and a test that asserts a 5s budget must not
+      // be killed by the runner at exactly 5s. The per-requirement budgets are
+      // asserted inside the tests; this is only the outer safety net.
+      testTimeout: 60_000,
+      hookTimeout: 60_000,
     },
   },
 ]);

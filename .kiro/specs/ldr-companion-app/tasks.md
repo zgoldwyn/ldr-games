@@ -298,8 +298,9 @@ The sequencing is deliberately test-driven where practical: scaffolding and sche
     - Implemented in `packages/core/src/sync/` as `connectivity.ts` (pure online/offline state machine + indicator), `sync-module.ts` (subscription, queue-vs-send, reconnect drain) and `supabase-ports.ts` (thin `supabase-js` adapter). 26 unit tests. The module takes injected ports rather than a `SupabaseClient` so the orchestration edges are testable without a stack, and so **task 21.3 composes these pieces rather than rewriting them** — 21.3 still owns Broadcast, Presence, and displacement sign-out. Remote changes are handed to an `onRemoteChange` listener rather than cached, leaving the Local Store to task 21.2. The <5s and 10s timings are integration assertions, owned by task 14.3.
     - _Requirements: 5.3, 5.4, 5.5_
 
-  - [ ] 14.3 Write sync integration tests
+  - [x] 14.3 Write sync integration tests
     - Assert partner receives a committed change via Postgres Changes within 5s, the queue drains within 10s applying `resolveConflict`, and committed changes survive across sessions (**Property 16**)
+    - Passing against a live stack (7 tests); propagation measured at ~1s against the 5s budget. Writing these found that only `async_sessions` and `notifications` were in the `supabase_realtime` publication, so dates/reminders/sessions emitted no events at all — fixed in migration `20260901000002`, which also sets `REPLICA IDENTITY FULL` on the calendar tables because a DELETE's old row otherwise carries only the primary key and cannot match the pairing filter. Mutation-checked by dropping `relationship_dates` from the publication: both Realtime tests fail. Integration project now has a 60s outer timeout, since a test asserting a 5s budget cannot be killed by the runner at exactly 5s.
     - _Requirements: 5.2, 5.3, 5.5_
 
 - [ ] 15. Real-time game wiring
