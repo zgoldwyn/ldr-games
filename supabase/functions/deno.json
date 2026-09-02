@@ -13,6 +13,7 @@
     "@ldr/core/hlc": "../../packages/core/dist/domain/hlc.js",
     "@ldr/core/sync": "../../packages/core/dist/domain/sync.js",
     "@ldr/core/game": "../../packages/core/dist/domain/game.js",
+    "@ldr/core/drawing-images": "../../packages/core/dist/storage/drawing-images.js",
     "@ldr/core/rt-engine": "../../packages/core/dist/domain/rt-engine.js",
     "@ldr/core/rt-session": "../../packages/core/dist/domain/rt-session.js",
     "@ldr/core/rt-tic-tac-toe": "../../packages/core/dist/domain/rt-tic-tac-toe.js"

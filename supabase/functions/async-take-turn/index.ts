@@ -36,8 +36,10 @@ import {
   accountId as asAccountId,
   gameId as asGameId,
   notificationId as asNotificationId,
+  pairingId as asPairingId,
   sessionId as asSessionId,
 } from "@ldr/core/common";
+import { validateDrawingImageRef } from "@ldr/core/drawing-images";
 import type { AsyncGameState, TurnAction } from "@ldr/core/game";
 import { requirePairing } from "@ldr/core/pairing-logic";
 import { handleCors } from "../_shared/cors.ts";
@@ -182,6 +184,28 @@ Deno.serve(async (req: Request) => {
       "The stored session state is not a valid asynchronous game state.",
       500,
     );
+  }
+
+  // A drawing turn carries an `imageRef` pointing into the private `drawings`
+  // bucket. Storage RLS already prevents READING another pairing's object, so a
+  // foreign reference could never leak bytes; this check stops one from being
+  // PERSISTED into the gallery, where it would become a permanently broken image
+  // that no partner can load (Req 7.3).
+  const imageRef = (action as Record<string, unknown>).imageRef;
+  if (typeof imageRef === "string" && imageRef.length > 0) {
+    const refCheck = validateDrawingImageRef({
+      imageRef,
+      pairingId: asPairingId(row.pairing_id),
+      sessionId: asSessionId(row.id),
+    });
+    if (!refCheck.ok) {
+      return errorResponse(
+        refCheck.error.code,
+        refCheck.error.message,
+        statusForErrorCode(refCheck.error.code),
+        refCheck.error.details,
+      );
+    }
   }
 
   // --- 2. Pure decision -----------------------------------------------------

@@ -323,8 +323,9 @@ The sequencing is deliberately test-driven where practical: scaffolding and sche
     - Validate the actor is the Active_Turn_Holder and the turn is valid via `applyTurn`, commit new state and transfer ownership in one transaction, and surface the change plus your-turn notification via Postgres Changes; enforce `requirePairing`
     - _Requirements: 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8, 7.9, 7.10_
 
-  - [ ] 16.2 Implement Storage bucket for drawing images
+  - [x] 16.2 Implement Storage bucket for drawing images
     - Create a pairing-scoped private Storage bucket and wire upload/read of drawing-game images referenced by async game state
+    - The bucket and its RLS policies already shipped with task 2.3; this task added the wiring: `packages/core/src/storage/drawing-images.ts` (pure object-key rules — the key layout **is** the security boundary, since Storage RLS authorizes on the first path segment) and `drawing-store.ts` (upload + signed-URL reads). `async-take-turn` now validates a drawing turn's `imageRef` against the caller's pairing/session so a foreign reference cannot be persisted into the gallery. 13 unit + 4 integration tests, mutation-checked by flattening the Storage RLS policies and by disabling the ref check.
     - _Requirements: 7.3_
 
   - [ ] 16.3 Write asynchronous game integration tests
