@@ -269,8 +269,9 @@ The sequencing is deliberately test-driven where practical: scaffolding and sche
     - Record failures in `auth_attempts`, set `locked_until`, and wire sign-out session termination and `last_activity_at` updates that back the 30-day inactivity expiry
     - _Requirements: 2.3, 2.4, 2.5, 2.6_
 
-  - [ ] 12.4 Write auth integration tests
+  - [x] 12.4 Write auth integration tests
     - Assert duplicate-email rejection (**Property 3**), correct/incorrect credential outcomes (**Property 5**), indistinguishable failure error (**Property 6**), and that a second login displaces the first and a stale-epoch token is denied within 5s (**Property 8**)
+    - Passing against a live stack. Property 8 was mutation-checked (stubbing `app.session_epoch_ok` to `true` makes it fail), so it is not vacuous. Note the epoch guard withholds **shared** features only, per Req 2.9 — a displaced client can still read its own `account_session` row, which is what lets it observe the new epoch and route itself to sign-in.
     - _Requirements: 1.2, 2.1, 2.2, 2.8, 2.9_
 
 - [ ] 13. Pairing Edge Functions

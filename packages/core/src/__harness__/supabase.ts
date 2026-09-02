@@ -190,3 +190,108 @@ export async function dissolvePairing(
 export async function deleteTestAccount(admin: SupabaseClient, id: string): Promise<void> {
   await admin.auth.admin.deleteUser(id);
 }
+
+// ---------------------------------------------------------------------------
+// Edge Function invocation
+// ---------------------------------------------------------------------------
+//
+// Suites that exercise the server-authoritative Edge Functions call them over
+// HTTP rather than through `supabase.functions.invoke`, because the tests need
+// the raw status code and error envelope (the client wrapper collapses non-2xx
+// responses into a generic FunctionsHttpError). A running functions runtime is
+// required: `npm run supabase:functions`.
+
+/** A decoded Edge Function response: HTTP status plus parsed JSON body. */
+export interface FunctionResponse<T = unknown> {
+  readonly status: number;
+  readonly body: T;
+}
+
+/** The `{ error: { code, message, details } }` envelope the functions emit. */
+export interface FunctionErrorBody {
+  readonly error?: {
+    readonly code?: string;
+    readonly message?: string;
+    readonly details?: Record<string, unknown>;
+  };
+  readonly ok?: boolean;
+}
+
+/**
+ * POSTs a JSON body to an Edge Function and returns its status + parsed body.
+ *
+ * `accessToken` sets the Authorization header. Functions declared with
+ * `verify_jwt = true` in config.toml reject a request without a valid one, so
+ * omitting it is how a suite asserts that gating. The `apikey` header always
+ * carries the anon key, which the gateway requires to route the request at all.
+ */
+export async function callFunction<T = unknown>(
+  cfg: IntegrationConfig,
+  name: string,
+  body: unknown,
+  accessToken?: string,
+): Promise<FunctionResponse<T>> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    apikey: cfg.anonKey,
+  };
+  if (accessToken !== undefined) {
+    headers.Authorization = `Bearer ${accessToken}`;
+  }
+
+  const res = await fetch(`${cfg.url}/functions/v1/${name}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+
+  // A function may return an empty body (or non-JSON on a gateway error); treat
+  // that as an empty object so callers can assert on status alone.
+  const text = await res.text();
+  let parsed: unknown = {};
+  if (text.length > 0) {
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = { raw: text };
+    }
+  }
+  return { status: res.status, body: parsed as T };
+}
+
+/**
+ * Whether the Edge Functions runtime is reachable. Suites that need it call this
+ * in `beforeAll` and fail with an actionable message instead of a confusing
+ * connection error, since the runtime is a SEPARATE process from the database
+ * (`supabase functions serve`, not `supabase start`).
+ */
+export async function functionsRuntimeReachable(cfg: IntegrationConfig): Promise<boolean> {
+  try {
+    const res = await fetch(`${cfg.url}/functions/v1/health`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: cfg.anonKey },
+      body: '{}',
+    });
+    // Any HTTP answer proves the runtime is serving; the status itself is
+    // irrelevant (health may 404 if not deployed, which still means "reachable").
+    return res.status > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Generates credentials for an account that does NOT exist yet, for suites that
+ * must register through the Edge Function rather than seed the tables directly
+ * (Requirement 1.2's duplicate-email rejection, for instance, can only be
+ * observed through the registration path).
+ *
+ * The password deliberately satisfies the policy from Requirement 1.1: >= 12
+ * characters with an upper, a lower, a digit and a non-alphanumeric character.
+ */
+export function newCredentials(): { email: string; password: string } {
+  return {
+    email: `auth-${randomUUID()}@example.test`,
+    password: `Aa1!${randomUUID()}`,
+  };
+}
