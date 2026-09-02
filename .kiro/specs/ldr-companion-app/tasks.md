@@ -313,8 +313,9 @@ The sequencing is deliberately test-driven where practical: scaffolding and sche
     - Server side is implemented (`rt-presence`, `rt-rejoin`). Remaining: the CLIENT half that tracks Presence and produces the snapshot, which belongs to the Connection Manager in task 21.3 — until then the function trusts a client-supplied snapshot and re-validates it server-side. Terminating a pause that is never rejoined is task 20.1.
     - _Requirements: 6.6, 6.7, 6.8_
 
-  - [ ] 15.3 Write real-time game integration tests
+  - [x] 15.3 Write real-time game integration tests
     - Assert a Broadcast move reflects within 2s, invitation notification within 5s, and Presence disconnect pauses the game after 30s
+    - Passing against a live stack (7 tests). Measured: move fan-out ~35ms against the 2s budget, invite ~35ms against 5s. Also covers Req 6.1/6.3/6.5/6.7/6.11 and an outsider's presence report being refused as `SESSION_NOT_FOUND` (not-found rather than forbidden, so other pairings are not probeable). Mutation-checked twice: setting `DISCONNECT_THRESHOLD_MS` to 0 fails the pause test, and short-circuiting `rt-move`'s rejection branch fails the invalid-move test.
     - _Requirements: 6.2, 6.4, 6.6_
 
 - [ ] 16. Asynchronous game wiring
