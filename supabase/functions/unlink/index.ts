@@ -34,7 +34,7 @@ import {
   jsonResponse,
   statusForErrorCode,
 } from "../_shared/http.ts";
-import { broadcast } from "../_shared/realtime.ts";
+import { accountTopic, broadcast } from "../_shared/realtime.ts";
 import { authenticatedAccountId, serviceClient } from "../_shared/supabase.ts";
 
 /** A session that must be terminated when the pairing dissolves (Req 4.6). */
@@ -277,7 +277,7 @@ Deno.serve(async (req: Request) => {
     await broadcast(
       serviceRoleKey,
       [pairing.member_a, pairing.member_b].map((recipient) => ({
-        topic: `account:${recipient}`,
+        topic: accountTopic(recipient),
         event: "pairing_ended",
         payload: {
           pairingId: pairing.id,
