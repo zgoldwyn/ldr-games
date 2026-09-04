@@ -231,6 +231,32 @@ describe.skipIf(cfg === null)('Asynchronous game wiring (integration)', () => {
     expect(data ?? []).toHaveLength(0);
   });
 
+  it('refuses a fourth open asynchronous session of the same game type', async () => {
+    const a = await member();
+    const b = await member();
+    await pair(a.token, b.token);
+
+    for (let i = 0; i < 3; i += 1) {
+      await startBattleship(a, b);
+    }
+
+    const fourth = await callFunction<FunctionErrorBody>(
+      config,
+      'async-start',
+      {
+        gameId: 'battleship',
+        options: {
+          size: 3,
+          ships: { [a.id]: [{ row: 0, col: 0 }], [b.id]: [{ row: 1, col: 1 }] },
+        },
+      },
+      a.token,
+    );
+
+    expect(fourth.status).toBe(409);
+    expect(fourth.body.error?.code).toBe('INVALID_SESSION_STATE');
+  });
+
   // -------------------------------------------------------------------------
   // Req 7.7 / 7.8 — rejections leave state untouched
   // -------------------------------------------------------------------------

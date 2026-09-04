@@ -26,6 +26,18 @@ import {
   serviceClient,
 } from "../_shared/supabase.ts";
 
+const INVITATION_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const INVITATION_CODE_LENGTH = 8;
+
+function makeInvitationCode(): string {
+  const bytes = new Uint8Array(INVITATION_CODE_LENGTH);
+  crypto.getRandomValues(bytes);
+  return Array.from(
+    bytes,
+    (byte) => INVITATION_CODE_ALPHABET[byte % INVITATION_CODE_ALPHABET.length],
+  ).join("");
+}
+
 Deno.serve(async (req: Request) => {
   const preflight = handleCors(req);
   if (preflight) return preflight;
@@ -75,7 +87,7 @@ Deno.serve(async (req: Request) => {
 
   const now = Date.now();
   const input = {
-    code: crypto.randomUUID(),
+    code: makeInvitationCode(),
     inviter: {
       id: account.id,
       email: "",

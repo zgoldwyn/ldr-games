@@ -32,6 +32,10 @@ export function TicTacToeScreen({ route }: Props) {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => runtime.rt.subscribe(() => setTick((n) => n + 1)), [runtime.rt]);
+  useEffect(() => {
+    runtime.connection.joinGame(id);
+    return () => runtime.connection.leaveGame();
+  }, [id, runtime.connection]);
 
   const cached = runtime.rt.cached(id);
   const board = asBoard(cached?.gameState);

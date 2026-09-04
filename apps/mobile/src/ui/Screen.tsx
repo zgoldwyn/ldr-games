@@ -5,7 +5,7 @@ import type { ThemeTokens } from '@ldr/core';
 
 import { themeTokens } from '../theme';
 
-/** Padded canvas that respects the home indicator. */
+/** Padded canvas that respects device safe areas. */
 export function Screen({
   children,
   tokens,
@@ -15,7 +15,7 @@ export function Screen({
 }) {
   const theme = tokens ?? themeTokens();
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]} edges={['bottom']}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
       <View style={styles.inner}>{children}</View>
     </SafeAreaView>
   );

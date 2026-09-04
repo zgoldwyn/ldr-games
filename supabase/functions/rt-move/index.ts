@@ -56,6 +56,7 @@ import { type SupabaseClient } from "@supabase/supabase-js";
 
 /** Service-role key used to publish Broadcast messages from server code. */
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const MAX_OPEN_SESSIONS_PER_GAME = 3;
 
 /**
  * Columns of a session row this function reads.
@@ -231,6 +232,29 @@ async function handleInvite(
       "GAME_NOT_FOUND",
       `No real-time game is available for id "${requested}".`,
       statusForErrorCode("GAME_NOT_FOUND"),
+    );
+  }
+
+  const { count: openCount, error: countErr } = await db
+    .from("rt_sessions")
+    .select("id", { count: "exact", head: true })
+    .eq("pairing_id", ctx.pairing)
+    .eq("game_id", requested)
+    .in("state", ["pending", "active", "paused"]);
+
+  if (countErr) {
+    return errorResponse(
+      "INTERNAL_ERROR",
+      "Failed to count open game sessions.",
+      500,
+    );
+  }
+  if ((openCount ?? 0) >= MAX_OPEN_SESSIONS_PER_GAME) {
+    return errorResponse(
+      "INVALID_SESSION_STATE",
+      "No more than three open sessions of the same game may exist at once.",
+      statusForErrorCode("INVALID_SESSION_STATE"),
+      { gameId: requested, limit: MAX_OPEN_SESSIONS_PER_GAME },
     );
   }
 

@@ -9,6 +9,7 @@ import {
   isOk,
   sessionId,
   type AccountId,
+  type Notification,
   type Pairing,
 } from '@ldr/core';
 
@@ -18,12 +19,37 @@ import { classicFleet } from '../games/battleship-fleet';
 import type { RootStackParamList } from '../navigation';
 import { themeTokens } from '../theme';
 import { AppButton } from '../ui/AppButton';
-import { AppField } from '../ui/AppField';
 import { AppText } from '../ui/AppText';
 import { Screen } from '../ui/Screen';
 
+const MAX_OPEN_SESSIONS_PER_GAME = 3;
+
 function partnerId(pairing: Pairing, self: AccountId): AccountId {
   return pairing.memberA === self ? pairing.memberB : pairing.memberA;
+}
+
+type IncomingInvite =
+  | { readonly kind: 'rt'; readonly sessionId: string }
+  | { readonly kind: 'async'; readonly sessionId: string };
+
+function incomingInvite(notification: Notification): IncomingInvite | null {
+  if (notification.category !== 'game_invite') return null;
+  if (notification.payload === null || typeof notification.payload !== 'object') return null;
+  const payload = notification.payload as {
+    readonly type?: unknown;
+    readonly kind?: unknown;
+    readonly sessionId?: unknown;
+  };
+  if (typeof payload.sessionId !== 'string' || payload.sessionId.length === 0) {
+    return null;
+  }
+  if (payload.type === 'rt_game_invite') {
+    return { kind: 'rt', sessionId: payload.sessionId };
+  }
+  if (payload.kind === 'async_game_invite') {
+    return { kind: 'async', sessionId: payload.sessionId };
+  }
+  return null;
 }
 
 export function GameListScreen() {
@@ -32,9 +58,10 @@ export function GameListScreen() {
   const { runtime, identity, reload } = useApp();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [joinId, setJoinId] = useState('');
   const [rtNames, setRtNames] = useState<string>('Tic-Tac-Toe');
   const [, setTick] = useState(0);
+  const pairing = identity.pairing;
+  const session = identity.session;
 
   useEffect(() => {
     return runtime.rt.subscribe(() => setTick((n) => n + 1));
@@ -45,16 +72,19 @@ export function GameListScreen() {
   }, [runtime.asyncGames]);
 
   useEffect(() => {
+    return runtime.notifications.subscribeCache(() => setTick((n) => n + 1));
+  }, [runtime.notifications]);
+
+  useEffect(() => {
     void runtime.rt.listGames().then((result) => {
       if (isOk(result)) {
         setRtNames(result.value.map((game) => game.name).join(', '));
       }
     });
+    if (session !== null) void runtime.notifications.list(session.accountId);
     void runtime.asyncGames.refresh();
-  }, [runtime]);
+  }, [runtime, session]);
 
-  const pairing = identity.pairing;
-  const session = identity.session;
   if (pairing === null || session === null) return null;
 
   const self = session.accountId;
@@ -62,6 +92,21 @@ export function GameListScreen() {
   const asyncCatalog = runtime.asyncGames
     .listGames()
     .filter((game) => game.id === BATTLESHIP_GAME_ID);
+  const openTicTacToeCount = runtime.rt
+    .list()
+    .filter((item) => item.gameId === TIC_TAC_TOE && item.state !== 'terminal').length;
+  const openBattleshipCount = runtime.asyncGames
+    .list()
+    .filter((item) => item.gameId === BATTLESHIP_GAME_ID && item.state === 'active').length;
+  const incomingInvites = runtime.notifications
+    .cached(self)
+    .map((notification) => ({ notification, invite: incomingInvite(notification) }))
+    .filter(
+      (item): item is {
+        readonly notification: Notification;
+        readonly invite: IncomingInvite;
+      } => item.invite !== null,
+    );
 
   async function inviteTicTacToe() {
     setBusy(true);
@@ -96,16 +141,28 @@ export function GameListScreen() {
     }
   }
 
-  async function joinPending() {
+  async function openInvite(notification: Notification, invite: IncomingInvite) {
     setBusy(true);
     setError(null);
     try {
-      const result = await runtime.rt.join(sessionId(joinId.trim()));
-      if (isErr(result)) {
-        setError(messageForError(result.error));
-        return;
+      const id = sessionId(invite.sessionId);
+      if (invite.kind === 'rt') {
+        const result = await runtime.rt.join(id);
+        if (isErr(result)) {
+          setError(messageForError(result.error));
+          return;
+        }
+        await runtime.notifications.acknowledge(notification.id);
+        navigation.navigate('TicTacToe', { sessionId: result.value.id });
+      } else {
+        await runtime.asyncGames.refresh();
+        if (runtime.asyncGames.cached(id) === undefined) {
+          setError('That game could not be found.');
+          return;
+        }
+        await runtime.notifications.acknowledge(notification.id);
+        navigation.navigate('Battleship', { sessionId: id });
       }
-      navigation.navigate('TicTacToe', { sessionId: result.value.id });
     } finally {
       setBusy(false);
     }
@@ -124,7 +181,7 @@ export function GameListScreen() {
         <AppButton
           label="Invite to tic-tac-toe"
           tokens={tokens}
-          disabled={busy}
+          disabled={busy || openTicTacToeCount >= MAX_OPEN_SESSIONS_PER_GAME}
           onPress={() => {
             void inviteTicTacToe();
           }}
@@ -133,32 +190,41 @@ export function GameListScreen() {
         <AppButton
           label="Start battleship"
           tokens={tokens}
-          disabled={busy}
+          disabled={busy || openBattleshipCount >= MAX_OPEN_SESSIONS_PER_GAME}
           onPress={() => {
             void startBattleship();
           }}
         />
 
-        <AppText kind="label" tokens={tokens} style={styles.section}>
-          Join a tic-tac-toe invite
-        </AppText>
-        <AppField
-          label="Session id"
-          tokens={tokens}
-          autoCapitalize="none"
-          autoCorrect={false}
-          value={joinId}
-          onChangeText={setJoinId}
-        />
-        <AppButton
-          variant="quiet"
-          label="Join"
-          tokens={tokens}
-          disabled={busy || joinId.trim().length === 0}
-          onPress={() => {
-            void joinPending();
-          }}
-        />
+        {incomingInvites.length > 0 ? (
+          <>
+            <AppText kind="label" tokens={tokens} style={styles.section}>
+              Incoming invites
+            </AppText>
+            {incomingInvites.map(({ notification, invite }) => (
+              <View
+                key={notification.id}
+                style={[
+                  styles.row,
+                  { backgroundColor: tokens.surface, borderColor: tokens.border },
+                ]}
+              >
+                <AppText kind="body" tokens={tokens} style={styles.rowTitle}>
+                  {invite.kind === 'rt' ? 'Tic-tac-toe invite' : 'Battleship invite'}
+                </AppText>
+                <AppButton
+                  variant="quiet"
+                  label={invite.kind === 'rt' ? 'Join game' : 'Open game'}
+                  tokens={tokens}
+                  disabled={busy}
+                  onPress={() => {
+                    void openInvite(notification, invite);
+                  }}
+                />
+              </View>
+            ))}
+          </>
+        ) : null}
 
         <AppText kind="label" tokens={tokens} style={styles.section}>
           Your games
@@ -224,6 +290,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
   },
+  rowTitle: { marginBottom: 12 },
   banner: { marginTop: 16 },
   signOut: { marginTop: 24 },
 });

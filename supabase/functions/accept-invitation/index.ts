@@ -55,14 +55,23 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  let code: unknown;
+  let rawCode: unknown;
   try {
     const body = await req.json();
-    code = body?.code;
+    rawCode = body?.code;
   } catch {
-    code = undefined;
+    rawCode = undefined;
   }
-  if (typeof code !== "string" || code.length === 0) {
+  if (typeof rawCode !== "string" || rawCode.length === 0) {
+    return errorResponse(
+      "MISSING_REQUIRED_FIELD",
+      "An invitation `code` is required.",
+      400,
+      { fields: ["code"] },
+    );
+  }
+  const code = rawCode.trim().toUpperCase();
+  if (code.length === 0) {
     return errorResponse(
       "MISSING_REQUIRED_FIELD",
       "An invitation `code` is required.",

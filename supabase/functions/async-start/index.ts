@@ -41,6 +41,8 @@ interface Cell {
   col: number;
 }
 
+const MAX_OPEN_SESSIONS_PER_GAME = 3;
+
 /** Keeps only well-formed, non-negative integer grid coordinates. */
 function normalizeCells(value: unknown): Cell[] {
   if (!Array.isArray(value)) return [];
@@ -139,6 +141,29 @@ Deno.serve(async (req: Request) => {
       "PAIRING_REQUIRED",
       "A partner pairing is required to start a session.",
       statusForErrorCode("PAIRING_REQUIRED"),
+    );
+  }
+
+  const { count: openCount, error: countErr } = await db
+    .from("async_sessions")
+    .select("id", { count: "exact", head: true })
+    .eq("pairing_id", pairing.id)
+    .eq("game_id", gameId)
+    .eq("state", "active");
+
+  if (countErr) {
+    return errorResponse(
+      "INTERNAL_ERROR",
+      "Failed to count open game sessions.",
+      500,
+    );
+  }
+  if ((openCount ?? 0) >= MAX_OPEN_SESSIONS_PER_GAME) {
+    return errorResponse(
+      "INVALID_SESSION_STATE",
+      "No more than three open sessions of the same game may exist at once.",
+      statusForErrorCode("INVALID_SESSION_STATE"),
+      { gameId, limit: MAX_OPEN_SESSIONS_PER_GAME },
     );
   }
 

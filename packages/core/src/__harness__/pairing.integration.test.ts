@@ -327,10 +327,29 @@ describe.skipIf(cfg === null)('Pairing Edge Functions (integration)', () => {
     const res = await callFunction<InvitationOk>(config, 'create-invitation', {}, inviter.token);
     expect(res.status).toBe(201);
 
+    expect(res.body.invitation.code).toMatch(/^[A-Z2-9]{8}$/);
+
     const createdAt = Date.parse(res.body.invitation.createdAt);
     const expiresAt = Date.parse(res.body.invitation.expiresAt);
     expect(expiresAt - createdAt).toBe(INVITATION_WINDOW_MS);
     expect(res.body.invitation.status).toBe('pending');
+  });
+
+  it('accepts a lower-case entry of the short invitation code', async () => {
+    const inviter = await account();
+    const invitee = await account();
+    const code = await invite(inviter.token);
+
+    const accepted = await callFunction<PairingOk>(
+      config,
+      'accept-invitation',
+      { code: code.toLowerCase() },
+      invitee.token,
+    );
+
+    expect(accepted.status).toBe(201);
+    expect(accepted.body.pairing.memberA).toBe(inviter.id);
+    expect(accepted.body.pairing.memberB).toBe(invitee.id);
   });
 
   // -------------------------------------------------------------------------

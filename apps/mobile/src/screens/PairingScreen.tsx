@@ -37,7 +37,9 @@ export function PairingScreen() {
     setBusy(true);
     setError(null);
     try {
-      const result = await runtime.pairing.acceptInvitation(invitationCode(code.trim()));
+      const result = await runtime.pairing.acceptInvitation(
+        invitationCode(code.trim().toUpperCase()),
+      );
       if (isErr(result)) {
         setError(messageForError(result.error));
         return;
@@ -65,7 +67,7 @@ export function PairingScreen() {
             Your invitation
           </AppText>
           <AppText kind="title" tokens={tokens} selectable style={styles.code}>
-            {issued ?? '········'}
+            {issued ?? '--------'}
           </AppText>
           <AppButton
             label="Create invitation"
@@ -83,7 +85,7 @@ export function PairingScreen() {
           autoCapitalize="none"
           autoCorrect={false}
           value={code}
-          onChangeText={setCode}
+          onChangeText={(value) => setCode(value.toUpperCase())}
         />
         <AppButton
           label="Accept invitation"

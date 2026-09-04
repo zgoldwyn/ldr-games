@@ -17,6 +17,8 @@ import { themeTokens } from '../theme';
 import { AppText } from '../ui/AppText';
 import { Screen } from '../ui/Screen';
 
+const CELL_SIZE = 44;
+
 function asBattleship(state: unknown): BattleshipState | null {
   if (state === null || typeof state !== 'object') return null;
   const value = state as { kind?: string; ruleset?: unknown };
@@ -83,7 +85,7 @@ export function BattleshipScreen({ route }: Props) {
 
   return (
     <Screen tokens={tokens}>
-      <ScrollView>
+      <ScrollView contentContainerStyle={styles.scroll}>
         <AppText kind="muted" tokens={tokens} style={styles.status}>
           {cached?.state ?? 'unknown'}
           {myTurn ? ' · Your shot' : " · Partner's shot"}
@@ -97,66 +99,76 @@ export function BattleshipScreen({ route }: Props) {
         <AppText kind="label" tokens={tokens} style={styles.section}>
           Their waters
         </AppText>
-        <View style={styles.grid}>
-          {Array.from({ length: size * size }, (_, index) => {
-            const row = Math.floor(index / size);
-            const col = index % size;
-            const shot = shotAt(shotsFired, row, col);
-            return (
-              <Pressable
-                key={`r-${index}`}
-                disabled={!myTurn || shot !== undefined}
-                onPress={() => {
-                  void fire(row, col);
-                }}
-                style={[
-                  styles.cell,
-                  {
-                    width: `${100 / size}%`,
-                    backgroundColor:
-                      shot === undefined
-                        ? tokens.surface
-                        : shot.hit
-                          ? tokens.error
-                          : tokens.surfaceMuted,
-                    borderColor: tokens.border,
-                  },
-                ]}
-              />
-            );
-          })}
-        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator>
+          <View style={[styles.grid, { width: size * CELL_SIZE }]}>
+            {Array.from({ length: size * size }, (_, index) => {
+              const row = Math.floor(index / size);
+              const col = index % size;
+              const shot = shotAt(shotsFired, row, col);
+              return (
+                <Pressable
+                  key={`r-${index}`}
+                  disabled={!myTurn || shot !== undefined}
+                  onPress={() => {
+                    void fire(row, col);
+                  }}
+                  style={[
+                    styles.cell,
+                    {
+                      backgroundColor:
+                        shot === undefined
+                          ? tokens.surface
+                          : shot.hit
+                            ? tokens.error
+                            : tokens.surfaceMuted,
+                      borderColor: tokens.border,
+                    },
+                  ]}
+                >
+                  <AppText kind="label" tokens={tokens} style={styles.marker}>
+                    {shot === undefined ? '' : shot.hit ? 'H' : 'M'}
+                  </AppText>
+                </Pressable>
+              );
+            })}
+          </View>
+        </ScrollView>
 
         <AppText kind="label" tokens={tokens} style={styles.section}>
           Your waters
         </AppText>
-        <View style={styles.grid}>
-          {Array.from({ length: size * size }, (_, index) => {
-            const row = Math.floor(index / size);
-            const col = index % size;
-            const ship = hasShip(ownShips, row, col);
-            const hit = shotAt(incoming, row, col);
-            return (
-              <View
-                key={`h-${index}`}
-                style={[
-                  styles.cell,
-                  {
-                    width: `${100 / size}%`,
-                    backgroundColor: hit?.hit
-                      ? tokens.error
-                      : ship
-                        ? tokens.primary
-                        : hit !== undefined
-                          ? tokens.surfaceMuted
-                          : tokens.surface,
-                    borderColor: tokens.border,
-                  },
-                ]}
-              />
-            );
-          })}
-        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator>
+          <View style={[styles.grid, { width: size * CELL_SIZE }]}>
+            {Array.from({ length: size * size }, (_, index) => {
+              const row = Math.floor(index / size);
+              const col = index % size;
+              const ship = hasShip(ownShips, row, col);
+              const hit = shotAt(incoming, row, col);
+              return (
+                <View
+                  key={`h-${index}`}
+                  style={[
+                    styles.cell,
+                    {
+                      backgroundColor: hit?.hit
+                        ? tokens.error
+                        : ship
+                          ? tokens.primary
+                          : hit !== undefined
+                            ? tokens.surfaceMuted
+                            : tokens.surface,
+                      borderColor: tokens.border,
+                    },
+                  ]}
+                >
+                  <AppText kind="label" tokens={tokens} style={styles.marker}>
+                    {hit?.hit ? 'H' : hit !== undefined ? 'M' : ship ? 'S' : ''}
+                  </AppText>
+                </View>
+              );
+            })}
+          </View>
+        </ScrollView>
 
         {error !== null ? (
           <AppText kind="error" tokens={tokens} style={styles.banner}>
@@ -169,12 +181,17 @@ export function BattleshipScreen({ route }: Props) {
 }
 
 const styles = StyleSheet.create({
+  scroll: { paddingBottom: 32 },
   status: { marginBottom: 8 },
   section: { marginTop: 20, marginBottom: 8 },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
   cell: {
-    aspectRatio: 1,
+    width: CELL_SIZE,
+    height: CELL_SIZE,
     borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  marker: { fontWeight: '700' },
   banner: { marginTop: 16 },
 });

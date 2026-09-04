@@ -2,17 +2,25 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import {
   createAsyncGameModule,
   createAuthenticationModule,
+  createConnectionManager,
   createLocalStore,
+  createNotificationModule,
   createPairingModule,
   createRealTimeGameModule,
   createSupabaseAsyncGamePorts,
   createSupabaseAuthPorts,
+  createSupabaseConnectionPorts,
+  createSupabaseNotificationPorts,
   createSupabasePairingPorts,
   createSupabaseRTGamePorts,
+  createSupabaseSyncPorts,
   isOk,
   type AsyncGameModule,
+  type ConnectionListeners,
+  type ConnectionManager,
   type AuthenticationModule,
   type LocalStore,
+  type NotificationModule,
   type Pairing,
   type PairingModule,
   type RealTimeGameModule,
@@ -34,6 +42,8 @@ export interface AppRuntime {
   readonly pairing: PairingModule;
   readonly rt: RealTimeGameModule;
   readonly asyncGames: AsyncGameModule;
+  readonly notifications: NotificationModule;
+  readonly connection: ConnectionManager;
 }
 
 export interface Identity {
@@ -47,7 +57,9 @@ export type RuntimeResult =
   | { readonly ok: false; readonly message: string };
 
 /** Restore tokens, hydrate the cache, and decide which stack to show. */
-export async function bootRuntime(): Promise<RuntimeResult> {
+export async function bootRuntime(
+  listeners: ConnectionListeners = {},
+): Promise<RuntimeResult> {
   const config = readSupabaseConfig();
   if (config === null) {
     return {
@@ -80,11 +92,33 @@ export async function bootRuntime(): Promise<RuntimeResult> {
   const pairing = createPairingModule(createSupabasePairingPorts(client));
   const rt = createRealTimeGameModule(createSupabaseRTGamePorts(client), store);
   const asyncGames = createAsyncGameModule(createSupabaseAsyncGamePorts(client), store);
+  const notifications = createNotificationModule(
+    createSupabaseNotificationPorts(client),
+    {},
+    store,
+  );
+  const connection = createConnectionManager({
+    ports: createSupabaseConnectionPorts(client),
+    syncPorts: createSupabaseSyncPorts(client),
+    store,
+    realTime: rt,
+    async: asyncGames,
+    listeners,
+  });
 
   // Restores the access token so currentSession's registry read is authorized.
   await client.auth.getSession();
 
-  const runtime: AppRuntime = { client, store, auth, pairing, rt, asyncGames };
+  const runtime: AppRuntime = {
+    client,
+    store,
+    auth,
+    pairing,
+    rt,
+    asyncGames,
+    notifications,
+    connection,
+  };
   return { ok: true, runtime, identity: await loadIdentity(runtime) };
 }
 

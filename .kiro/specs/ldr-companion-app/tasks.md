@@ -550,9 +550,12 @@ The game-related cron jobs (20.1) were initially deferred and then pulled back I
     - _Requirements: 5.1_
 
 - [ ] 23. Final integration and end-to-end wiring
-  - [ ] 23.1 Wire the MVP modules into the mobile shell end to end — **[MVP, trimmed]**
+  - [x] 23.1 Wire the MVP modules into the mobile shell end to end — **[MVP, trimmed]**
     - MVP scope: auth, pairing, sync, the real-time game, the asynchronous game, and notification reads wired into the mobile shell with no orphaned code; verify the game list presents to both partners
     - Quizzes, calendar and reminders join this task when 17/18 are picked up; the desktop half joins with 22.2
+    - Implemented in the mobile runtime and paired stack: the Connection Manager now opens account/pairing channels after pairing, subscribes to notification reads, refreshes async sessions, routes async Postgres Changes into the Local Store, and joins real-time game channels when a tic-tac-toe board is opened. The game list no longer needs manual session ids; it surfaces game-invite notifications and lets the invited partner join/open from the linked account.
+    - Also fixed MVP launch blockers found during the end-to-end pass: invitation codes are now short 8-character uppercase codes with case-insensitive acceptance; both real-time and async starts reject a fourth open session of the same game type; Battleship boards use fixed 44pt cells with horizontal scrolling and visible hit/miss/ship markers; the shared screen wrapper respects the top safe area on Dynamic Island simulators.
+    - Verified: `npm run typecheck`, `npm run lint`, `npm run test:unit` (349 tests), `npm run test:property` (73 tests), `npm run edge:check`, `npm run edge:test` (22 tests), `npm --workspace @ldr/mobile run bundle:check`, `npm run test:integration:local` (57 tests), plus Xcode simulator build/install/launch on iPhone 17 Pro and iPhone 17 Pro Max.
     - _Requirements: 5.1, 6.1, 7.1_
 
   - [ ] 23.2 Write security and privacy tests
@@ -570,6 +573,18 @@ The game-related cron jobs (20.1) were initially deferred and then pulled back I
 - Properties additionally enforced by RLS/constraints (8, 10, 14, 28) are re-verified at the integration layer; timing/latency criteria (5.3, 6.4, 10.3, 11.1, 11.2) are covered by integration tests, not properties.
 - Checkpoints ensure incremental validation at natural breaks.
 - Section 21A and Requirement 12 (Account Deletion) were added after the original plan. Requirement 12 brings the total to **12 requirements** and Properties 42–44 bring the total to **44 correctness properties**. It is not optional: without in-app account deletion the app cannot pass Apple App Store review (Guideline 5.1.1(v)), and unlinking does not substitute for it because Req 4.4 explicitly retains individual data.
+
+## Observed Post-MVP Backlog
+
+These are accepted as out of scope for the current MVP, but should be preserved for the next pass instead of rediscovered:
+
+- Games need explicit removal/cancel controls. Users currently cannot cancel pending games or remove stale/finished games from the visible list.
+- Terminal game sessions are recorded correctly but remain visible indefinitely. Decide whether completed sessions should be hidden by default, archived, or moved into history before changing the session lifecycle.
+- Battleship is playable and syncs, but the rules need a product pass; the current MVP auto-placement and turn loop are intentionally minimal.
+- Game icons are placeholder-quality and should be replaced with theme-consistent, recognizable icons.
+- The theme architecture already supports multiple named color options, but the mobile shell has no theme changer/settings UI yet.
+- Add a wins screen showing each partner's win count across games.
+- Longer-term navigation may split the app into category screens, for example Games, leaderboards/history, relationship tools, settings, and future quiz/calendar areas.
 
 ## Task Dependency Graph
 

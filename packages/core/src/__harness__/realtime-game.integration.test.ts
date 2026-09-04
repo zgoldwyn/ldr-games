@@ -284,6 +284,32 @@ describe.skipIf(cfg === null)('Real-time game wiring (integration)', () => {
     expect(invite?.delivered_at).toBeNull();
   });
 
+  it('refuses a fourth open real-time session of the same game type', async () => {
+    const a = await member();
+    const b = await member();
+    await pair(a.token, b.token);
+
+    for (let i = 0; i < 3; i += 1) {
+      const invited = await callFunction<{ session: RTSessionView }>(
+        config,
+        'rt-move',
+        { action: 'invite', gameId: 'tic-tac-toe' },
+        a.token,
+      );
+      expect(invited.status).toBe(201);
+    }
+
+    const fourth = await callFunction<FunctionErrorBody>(
+      config,
+      'rt-move',
+      { action: 'invite', gameId: 'tic-tac-toe' },
+      a.token,
+    );
+
+    expect(fourth.status).toBe(409);
+    expect(fourth.body.error?.code).toBe('INVALID_SESSION_STATE');
+  });
+
   // -------------------------------------------------------------------------
   // Req 6.3 — both joining yields identical active state
   // -------------------------------------------------------------------------

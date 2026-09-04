@@ -245,7 +245,7 @@ export function createSupabasePairingPorts(client: SupabaseClient): PairingPorts
     async acceptInvitation(code: string) {
       const { data, error } = await client.functions.invoke<{
         pairing?: PairingPayload;
-      }>('accept-invitation', { body: { code } });
+      }>('accept-invitation', { body: { code: code.trim().toUpperCase() } });
 
       if (error) {
         return await refusal(

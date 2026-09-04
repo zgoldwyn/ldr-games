@@ -2,10 +2,10 @@
  * Root component: identity gate and the MVP stacks (task 22.1b).
  *
  * Boot restores the SecureStore session and the Local Store snapshot, then
- * picks SignIn / Pairing / the game stack. Connection Manager live updates are
- * 23.1 — these screens already call the 21.1/21.2 modules.
+ * picks SignIn / Pairing / the game stack. The paired stack opens the 23.1 live
+ * channels so partner game invites and turns arrive without manual ids.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -33,6 +33,7 @@ export function App() {
   const [runtime, setRuntime] = useState<AppRuntime | null>(null);
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
+  const runtimeRef = useRef<AppRuntime | null>(null);
 
   const reload = useCallback(async () => {
     if (runtime === null) return;
@@ -40,15 +41,59 @@ export function App() {
   }, [runtime]);
 
   useEffect(() => {
-    void bootRuntime().then((result) => {
+    void bootRuntime({
+      onRevoked: () => {
+        const current = runtimeRef.current;
+        if (current === null) {
+          setIdentity({ gate: 'signedOut', session: null, pairing: null });
+          return;
+        }
+        void current.auth.signOut().then(() => {
+          setIdentity({ gate: 'signedOut', session: null, pairing: null });
+        });
+      },
+      onPairingEnded: () => {
+        const current = runtimeRef.current;
+        if (current !== null) void loadIdentity(current).then(setIdentity);
+      },
+    }).then((result) => {
       if (!result.ok) {
         setConfigError(result.message);
         return;
       }
+      runtimeRef.current = result.runtime;
       setRuntime(result.runtime);
       setIdentity(result.identity);
     });
   }, []);
+
+  useEffect(() => {
+    if (
+      runtime === null ||
+      identity === null ||
+      identity.gate !== 'ready' ||
+      identity.session === null ||
+      identity.pairing === null
+    ) {
+      runtime?.connection.disconnect();
+      runtime?.notifications.unsubscribe();
+      return;
+    }
+
+    runtime.connection.connect({
+      accountId: identity.session.accountId,
+      pairingId: identity.pairing.id,
+      epoch: identity.session.epoch,
+    });
+    runtime.notifications.subscribe(identity.session.accountId);
+    void runtime.notifications.list(identity.session.accountId);
+    void runtime.asyncGames.refresh();
+
+    return () => {
+      runtime.connection.disconnect();
+      runtime.notifications.unsubscribe();
+    };
+  }, [identity, runtime]);
 
   if (configError !== null) {
     return (
