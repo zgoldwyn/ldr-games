@@ -440,8 +440,12 @@ The game-related cron jobs (20.1) were initially deferred and then pulled back I
     - _Requirements: 6.9, 6.10, 7.12_
 
 - [ ] 21. Client service modules and Connection Manager — **[MVP]**
-  - [ ] 21.1 Wire AuthenticationModule and PairingModule — **[MVP]**
-    - Implement client `AuthenticationModule` (register/authenticate/signOut/currentSession, no-session routing to sign-in) and `PairingModule` (createInvitation/acceptInvitation/unlink/getPairing) over `supabase-js` and the Edge Functions
+  - [x] 21.1 Wire AuthenticationModule and PairingModule — **[MVP]**
+    - Implemented in `packages/core/src/auth/` as `auth-module.ts`, `pairing-module.ts` and `supabase-ports.ts` (the `supabase-js` adapter). 26 unit tests. Ports are injected as in `sync/` and `notifications/`, so 21.3 can compose these rather than reaching through a client it does not own.
+    - Neither module re-derives a server rule. `authenticate` runs NO local credential validation — Req 2.2 demands a uniform failure, and rejecting a malformed email client-side would reveal what the server refuses to. `PairingModule` performs no exclusivity check, deliberately: a client-side pre-check is what MASKED the database guard in the Property 10 concurrency test (see 13.3), so exclusivity is left entirely to the partial UNIQUE indexes.
+    - `currentSession` evaluates the local session against `account_session` with the shared `evaluateSession`, yielding `SESSION_SUPERSEDED` (Req 2.9) or `SESSION_EXPIRED` (Req 2.6). This depends on `account_session_select_self` being `account_id = auth.uid()` with NO epoch guard — verified against the live database — which is what lets a displaced client read the newer epoch and route itself to sign-in.
+    - Two deviations. `acceptInvitation(code)` drops design.md's `now` parameter: the 72h window is evaluated inside the acceptance transaction against the database clock, so a client-supplied time would either be ignored or be a way to accept an expired invitation. And the adapter unwraps the error body by hand from `FunctionsHttpError.context`, because `functions.invoke` discards the parsed body and would otherwise make `ALREADY_PAIRED` indistinguishable from a network failure.
+    - Session persistence is an injected `SessionStore` port, not implemented here — Expo SecureStore is task 22.1b's to provide.
     - Every endpoint these wrap is already integration-tested, so the verified contracts are in `packages/core/src/__harness__/auth.integration.test.ts` and `pairing.integration.test.ts` — read those for the exact request/response shapes rather than inferring them
     - _Requirements: 2.1, 2.4, 2.5, 3.1, 3.2, 4.1_
 

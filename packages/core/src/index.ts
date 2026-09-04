@@ -11,6 +11,7 @@ export * from './theme/index.js';
 export * from './result.js';
 export * from './errors.js';
 export * from './domain/index.js';
+export * from './auth/index.js';
 export * from './sync/index.js';
 export * from './storage/index.js';
 export * from './notifications/index.js';
