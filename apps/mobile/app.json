@@ -27,8 +27,8 @@
       "expo-secure-store"
     ],
     "extra": {
-      "supabaseUrl": "http://127.0.0.1:54321",
-      "supabaseAnonKey": ""
+      "supabaseUrl": "https://xbtnbrzwnarbqrqsxdch.supabase.co",
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhidG5icnp3bmFyYnFycXN4ZGNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc3NzUxNTEsImV4cCI6MjEwMzM1MTE1MX0.Y1WPMUBk4pMh2UueiJ512E5bJD_5-XTnnCyapwlu7ro"
     }
   }
 }

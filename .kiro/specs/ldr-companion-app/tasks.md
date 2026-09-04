@@ -481,10 +481,11 @@ The game-related cron jobs (20.1) were initially deferred and then pulled back I
   - Everything so far is verified against a LOCAL stack. A phone cannot reach `127.0.0.1`: a simulator or a LAN dev build can use the local stack, but running on a real device away from the dev machine, and anything on TestFlight, needs a hosted project.
   - **This is the first task that touches something not freely resettable.** Local work can be thrown away with `supabase db reset`; a hosted project cannot. Get explicit confirmation before pushing migrations to it.
 
-  - [ ] 21B.1 Create and link the hosted project, push migrations and functions
+  - [x] 21B.1 Create and link the hosted project, push migrations and functions
     - Create the Supabase project, `supabase link`, push all migrations, deploy the Edge Functions, and configure the auth settings the local `config.toml` sets
     - Verify by pointing the integration suite at the hosted project (the harness already reads `SUPABASE_URL` / keys from the environment, so this needs no test changes) and confirming the same 40 tests pass
     - Record the anon key and project URL as build-time config for the shells; the service-role key must NEVER ship in a client bundle
+    - Hosted project `xbtnbrzwnarbqrqsxdch` is configured with `app.custom_access_token`; hosted smoke verification confirmed epoch claims in JWTs, and the hosted integration suite passed 57/57 tests. The integration harness now leaves a larger pre-threshold margin for the presence-pause test so hosted Edge Function latency cannot cross the 30s server-side threshold before evaluation.
     - _Requirements: 5.1_
 
 - [ ] 21A. Account deletion (App Store Guideline 5.1.1(v)) — **[required to SUBMIT, not to USE]**

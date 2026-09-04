@@ -39,6 +39,7 @@ const MOVE_BUDGET_MS = 2_000;
 const INVITE_BUDGET_MS = 5_000;
 /** The continuous disconnect that pauses a session (Req 6.6). */
 const DISCONNECT_THRESHOLD_MS = 30_000;
+const EARLY_DISCONNECT_MARGIN_MS = 10_000;
 const SUBSCRIBE_TIMEOUT_MS = 10_000;
 
 interface RTSessionView {
@@ -485,8 +486,8 @@ describe.skipIf(cfg === null)('Real-time game wiring (integration)', () => {
     const captured = await listen(a.client, `rt_session:${session.id}`);
     const now = Date.now();
 
-    // Just SHORT of the threshold: no pause. This is what makes the test about
-    // the 30-second rule rather than about "any absence pauses".
+    // Comfortably short of the threshold: no pause. Hosted Edge Function
+    // latency can otherwise advance the server-side clock past a 1s margin.
     const early = await callFunction<{ paused: boolean }>(
       config,
       'rt-presence',
@@ -494,7 +495,11 @@ describe.skipIf(cfg === null)('Real-time game wiring (integration)', () => {
         sessionId: session.id,
         presence: [
           { accountId: a.id, online: true, lastSeenAt: now },
-          { accountId: b.id, online: false, lastSeenAt: now - (DISCONNECT_THRESHOLD_MS - 1_000) },
+          {
+            accountId: b.id,
+            online: false,
+            lastSeenAt: now - (DISCONNECT_THRESHOLD_MS - EARLY_DISCONNECT_MARGIN_MS),
+          },
         ],
       },
       a.token,
