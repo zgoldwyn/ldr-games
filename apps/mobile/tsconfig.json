@@ -3,7 +3,18 @@
   "compilerOptions": {
     "rootDir": "./src",
     "outDir": "./dist",
-    "jsx": "react-native"
+    // `react-jsx` rather than the legacy `react-native` preset: React 19 uses
+    // the automatic runtime, so no component file needs to import React itself.
+    "jsx": "react-jsx",
+    // React Native ships no DOM, but `@types/react` and the RN types reference
+    // DOM lib types (timers, console, fetch). `skipLibCheck` hides most of it;
+    // this covers the rest without pulling in real DOM globals at runtime.
+    "lib": ["ES2022", "DOM"],
+    // The shells are bundled by Metro, which compiles from source. Emitting JS
+    // here would be dead output, but `composite` still needs declarations for
+    // the project reference to `@ldr/core` to resolve.
+    "emitDeclarationOnly": true,
+    "types": ["react", "node"]
   },
   "include": ["src/**/*"],
   "exclude": ["dist", "node_modules", "**/*.test.ts", "**/*.spec.ts"],

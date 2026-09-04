@@ -52,5 +52,9 @@
   "allowScripts": {
     "esbuild@0.21.5": true,
     "deno@2.1.4": true
+  },
+  "overrides": {
+    "react": "19.2.3",
+    "react-native": "0.86.3"
   }
 }

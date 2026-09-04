@@ -5,12 +5,25 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "scheme": "ldr",
-    "platforms": ["ios", "android"],
+    "platforms": [
+      "ios",
+      "android"
+    ],
     "userInterfaceStyle": "light",
     "backgroundColor": "#FFF6F8",
     "splash": {
       "backgroundColor": "#FFF6F8",
       "resizeMode": "contain"
-    }
+    },
+    "ios": {
+      "bundleIdentifier": "com.ldrcompanion.app",
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "com.ldrcompanion.app"
+    },
+    "plugins": [
+      "expo-status-bar"
+    ]
   }
 }

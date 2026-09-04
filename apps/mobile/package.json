@@ -3,12 +3,26 @@
   "version": "0.1.0",
   "private": true,
   "description": "React Native / Expo mobile shell for the LDR Companion App",
-  "main": "src/main.ts",
+  "main": "src/index.ts",
   "scripts": {
     "build": "tsc --build",
-    "clean": "tsc --build --clean"
+    "clean": "tsc --build --clean",
+    "start": "expo start",
+    "ios": "expo run:ios",
+    "ios:simulator": "expo start --ios",
+    "bundle:check": "expo export --platform ios --output-dir .expo/bundle-check"
   },
   "dependencies": {
-    "@ldr/core": "*"
+    "@ldr/core": "*",
+    "@react-navigation/native": "^7.3.18",
+    "@react-navigation/native-stack": "^7.18.10",
+    "@types/react": "~19.2.4",
+    "expo": "^57.0.19",
+    "expo-status-bar": "~57.0.1",
+    "expo-system-ui": "~57.0.3",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.0"
   }
 }

@@ -28,6 +28,12 @@ npm-debug.log*
 apps/mobile/.expo/
 web-build/
 
+# Expo prebuild output. The native projects are generated from app.json, so they
+# are build artifacts, not source. Committing them would fork the config: an
+# app.json edit would silently stop matching the checked-in Xcode project.
+apps/mobile/ios/
+apps/mobile/android/
+
 # Electron
 apps/desktop/out/
 apps/desktop/release/
