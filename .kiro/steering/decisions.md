@@ -1,0 +1,61 @@
+---
+inclusion: always
+---
+
+# Decision Record
+
+Choices made while implementing the spec that the spec itself does not settle. Each one looked arbitrary from the outside, has a non-obvious reason, and would plausibly get "cleaned up" by a later session that did not know why.
+
+`requirements.md` says what must be true and `design.md` says how it is built. This file says **why the implementation reads the way it does where more than one reading was defensible**. The full reasoning lives in the module doc comments; this is the index so nobody has to rediscover it.
+
+**If you are about to change something listed here, read the linked file first.** Several of these are one-character edits that silently break a requirement.
+
+## Client cache (21.2)
+
+- **Versioning is opt-in per write, not per entity kind.** `put` takes an optional `version`; omitting it always applies. A caller reading from a single ordered channel has nothing to race with, and inventing a version for it would mean deriving one from game-specific board contents, which the store must not know about. — `store/local-store.ts`
+- **Equal versions are applied, only strictly lower is dropped.** Realtime redelivers, and re-applying the version already held is not a rewind. Tightening this to `<=` would drop legitimate redeliveries. — `store/local-store.ts`
+- **The version source differs by entity, deliberately.** Async sessions use the recorded turn count (Req 7.5 appends exactly one per valid turn, so it never decreases). Notifications use `acknowledgedAt ?? 0`, which stops a read that was issued before an acknowledgement but answered after it from resurrecting a notification the user already dismissed (Req 11.6). Real-time sessions are unversioned. There is no single global clock here, and inventing one would be worse than the three local rules.
+- **`clear()` drops the version ledger too.** Keeping it would let a stale version suppress the first write of a genuinely new entity that reused an id.
+- **Real-time sessions merge over the cache; they never replace it.** `rt-rejoin` and `rt-presence` serialize with a narrower `sessionView` that omits `pairingId`, so a replace would blank a field still needed to scope subscriptions. — `games/rt-game-module.ts`
+- **For lifecycle Broadcasts the event name *is* the state.** `paused` / `resumed` / `outcome` carry no `state` field, so the transition is inferred from the event. They also omit `gameId` and `pairingId`, which is why a lifecycle event for an unknown session is skipped rather than half-built — the next full state carries the missing fields.
+- **`outcome` is three-valued on purpose.** Absent means "this message did not mention it" and keeps the recorded outcome; explicit `null` means "not finished" and must be able to clear a stale one; a value sets it. Collapsing absent and null would either strand a finished game or lose its result (Req 6.8, 7.10).
+- **The async game keeps two mappers, not one.** Sessions arrive either as the Edge Function's camelCase response or as a raw replicated row (snake_case, ISO `turn_pending_since` parsed to epoch millis). Sharing a mapper would silently drop `active_turn_holder` and strand the board on the wrong player. — `games/async-game-module.ts`
+- **A rejected async turn writes nothing, but a rejected real-time move resyncs.** The asymmetry is in the server contract: `rt-move` echoes authoritative state in `error.details.gameState` so a drifted client can correct itself, while `async-take-turn` echoes nothing and guarantees the row is unchanged (Req 7.7, 7.8).
+- **The async game catalog is a local constant.** It renders offline and on a cold start; the pairing requirement (Req 7.1) is enforced where it actually matters, by the server refusing `async-start` with `PAIRING_REQUIRED` (Req 7.9).
+
+## Edge Function errors
+
+- **The error envelope is unwrapped by hand, in one shared place.** `functions.invoke` collapses every non-2xx into `FunctionsHttpError` and discards the parsed body, but the raw `Response` survives on `error.context`. Without reading it back, `ALREADY_PAIRED` and `NOT_YOUR_TURN` are indistinguishable from a network failure. It lives in `supabase/function-error.ts` rather than per-feature because a second copy is a second chance to get the `context` unwrapping subtly wrong.
+- **Unknown codes fall back rather than pass through.** `narrowCode` keeps a newer server's code, or an `INTERNAL_ERROR`, out of the typed vocabulary a shell switches on.
+
+## Connection Manager (21.3)
+
+- **A `revoke` is obeyed only on a STRICTLY newer epoch (`>`, never `>=`).** `auth-login` broadcasts the revoke carrying the epoch it just minted — the very one the winning client now holds — so `>=` would make every successful sign-in immediately sign itself back out. This is the single most tempting and most damaging edit in the file. — `connection/connection-manager.ts`
+- **A malformed or missing epoch drops the signal instead of signing out.** The server-side epoch guard rejects the stale token on its next request anyway (Req 2.8), and that is the real authority; the Broadcast is only a courtesy for a fast local teardown.
+- **Teardown clears the whole Local Store.** Sign-out and pairing dissolution revoke access to everything cached (Req 4.4); a partial clear would leave a former partner's data on screen after the database has already stopped returning it.
+- **The client's presence constants mirror the server's and are not authoritative.** `DISCONNECT_THRESHOLD_MS` duplicates the value in `supabase/functions/_shared/rt-presence.ts`, but here it only schedules *when to report*. Drift costs a slightly early or late report — the server still refuses to pause before the real threshold — rather than a wrong pause. — `connection/presence.ts`
+- **Disconnect reports repeat every 10s rather than firing once.** The first report can lose a race with a concurrent move or an in-flight rejoin.
+- **`lastSeenAt` is preserved while a partner stays absent.** Realtime re-emits `sync` frequently; refreshing `lastSeenAt` on each one restarts the absence clock, the window never accumulates, and the session never pauses. This is the easy bug in the presence module.
+- **A client never reports its own absence.** It cannot observe it, and reporting it would ask the server to pause the game on the reporter.
+- **21.3 composes 14.2's SyncModule instead of reimplementing it.** The Connection Manager owns the Broadcast and Presence subscriptions and feeds state into the game modules through injected listeners, matching how 14.2 already handed remote changes off rather than caching them itself.
+
+## Mobile shell (22.1a)
+
+- **`disableHierarchicalLookup = true` in `metro.config.js` is load-bearing. Do not remove it.** npm's peer auto-install can hoist a newer React and React Native to the root while Expo pins the SDK-compatible pair under the app. Without this flag, hoisted packages resolve the root React while app code resolves the app's — two React instances in one bundle, surfacing as "Invalid hook call" the moment any hoisted component renders a hook. The root `overrides` pin the versions and the tree currently dedupes to a single copy of each, **but that layout is not stable**: one `expo install` has already reshuffled it. The overrides are belt-and-braces; the Metro resolver is the guarantee, so keep the flag even when `node_modules` looks clean.
+- **Restart Metro with `--clear` after any dependency install.** Metro caches a module map at startup and does not notice npm rewriting `node_modules` underneath it. A stale server fails with `Unable to resolve "react-native" from node_modules/expo/src/Expo.fx.tsx` and then serves `1 module` fast-refresh deltas forever, which surfaces on the device as unrelated `TypeError: property is not writable` spam. The bundle module count is the tell: a real app load is ~1000 modules, so a launch that reports single digits means the server is stale, not that the app is small.
+- **Killing the dev server needs the port, not the npm wrapper.** `npx expo start` spawns a child that survives a `kill` of the parent pid and keeps holding 8081; use `lsof -ti:8081 | xargs kill -9`.
+- **`unstable_enablePackageExports = true`** because `@ldr/core` ships ESM behind an `exports` map that Metro otherwise ignores.
+- **Relative imports inside `apps/mobile` are extensionless**, unlike `packages/core`, which uses NodeNext `.js` specifiers. Metro resolves literally and will not map `./App.js` onto `App.tsx`. The two conventions coexist by design; do not "normalize" either one.
+- **The mobile tsconfig is `emitDeclarationOnly`.** Metro compiles from source, so emitted JS would be dead output, but `composite` still needs declarations for the project reference to `@ldr/core` to resolve. `jsx` is `react-jsx` (React 19 automatic runtime, so no file imports React), and `lib` includes `DOM` because the React and RN types reference DOM types without RN shipping a DOM.
+- **The hex values in `app.json` are a sanctioned exception to `theme.md`.** Native splash and background colors are read by the build before any JavaScript runs, so they cannot come from the TS tokens. They are the only place a raw hex is allowed, and they must be kept in sync with the `background` token by hand. Everything rendered by React still goes through tokens — including React Navigation's own chrome, via the bridge in `src/theme.ts`.
+- **`expo-system-ui` is a dependency of that exception, not an optional extra.** Without it `prebuild` silently ignores `backgroundColor` (it only warns), so the native window stays white behind React content and shows as a flash on launch and during navigation transitions. If the pastel background ever regresses to white, check this package is still installed before debugging component styles.
+- **`bcryptjs` reaches the mobile bundle through `@ldr/core` and that is accepted for now.** The client never hashes — it is there for server-side logic — so the cost is bundle size, not correctness. If it becomes a problem the fix is subpath exports on `@ldr/core`, not vendoring or a client-side reimplementation.
+- **`supportsTablet: false`** matches the iPhone-only MVP. `android.package` is set even though Android is out of MVP scope, because changing an application id after the first build is disruptive and setting it now costs nothing.
+
+## Device builds
+
+- **The phone runs a native dev build (`expo run:ios --device`), not Expo Go.** Chosen deliberately over the faster path: it is the same shape of artifact 22.1c eventually needs, and it does not cap what native modules can be added later. The cost is real and was accepted — it needs CocoaPods and a code-signing identity, and with a free personal Apple ID the provisioning profile expires every 7 days.
+- **Signing facts for this machine, so nobody re-derives them.** Team `9579GM6TA2` — "Zach Goldwyn (Personal Team)", a *free* provisioning team tied to `zachgoldwyn@icloud.com`. That team id is what `DEVELOPMENT_TEAM` must be set to; Xcode caches it in `IDEProvisioningTeams`, not in the repo.
+- **`security find-identity -v` reporting "0 valid identities" is misleading here.** Two `Apple Development` certificates with their private keys are present in the login keychain; both are simply **expired** (the newest lapsed 5 Feb 2025). The keychain is unlocked and the WWDR intermediates are installed, so the fix is regenerating a certificate, not repairing the keychain. Use `security find-identity` *without* `-v` to see expired identities and their real status.
+- **Automatic provisioning cannot be driven headlessly while the Apple ID session is stale.** `xcodebuild -allowProvisioningUpdates` fails with "The login details for account … were rejected," which no flag works around. Re-authenticating in Xcode → Settings → Accounts needs a password and 2FA, so a device build has an unavoidable manual step after any long gap.
+- **A phone still cannot reach `127.0.0.1`.** Running on hardware does not change that the local Supabase stack is simulator/LAN only; hosted Supabase remains `21B.1`.

@@ -31,6 +31,12 @@ Use a concise conventional-commit style that references the spec and task:
 
 Keep the subject under ~70 characters. Add a short body only if the task needs extra context.
 
+## Authorship
+
+- Commits are authored by the repo owner. Do not add `Co-authored-by:` trailers, and never add `Co-authored-by: Cursor <cursoragent@cursor.com>` or any other tool/agent attribution.
+- Do not add "Generated with", "Co-authored-by AI", or similar tool footers to the message body.
+- Leave `user.name` / `user.email` alone; the repo-local config is already correct (`zachgoldwyn@icloud.com`, the address linked to the GitHub account).
+
 ## Safety
 
 - Only create commits — never push, force-push, amend already-pushed commits, or reset without explicit user instruction.

@@ -1,0 +1,18 @@
+---
+description: Follow the Kiro spec workflow and current MVP progress; do not skip tasks.md.
+alwaysApply: true
+---
+
+# Kiro workflow (LDR Companion App)
+
+Source of truth: `.kiro/specs/ldr-companion-app/` (`requirements.md`, `design.md`, `tasks.md`) plus `.kiro/steering/` (theme, commits, workflow).
+
+**MVP:** iPhone sign-in, pair, tic-tac-toe + battleship. Desktop, quizzes, calendar, push are deferred unless the user explicitly asks.
+
+Before coding, read `tasks.md` MVP Critical Path and take the next incomplete **leaf** `[ ]` on that path. Do not reopen `[x]` or `[-]` work; `[-]` remaining bits are owned by a later task (see the note). Do not implement `[DEFERRED, post-MVP]` sections.
+
+Current next sequence (skip any already `[x]`): `21.1` → `21.2` → `21.3` (compose 14.2, do not rewrite) → `22.1a` → `22.1b` → `23.1` → `21B.1` (hosted Supabase is irreversible; confirm first).
+
+One leaf task at a time. Mark it `[x]` in `tasks.md` after verification, then commit that task only. Theme via core tokens, never hardcoded hex. Full rules: `.kiro/steering/workflow.md`. Before changing existing code that looks arbitrary, check `.kiro/steering/decisions.md` — several deliberate choices there are one-character edits away from breaking a requirement.
+
+Commits are authored by the repo owner alone: never append `Co-authored-by:` (especially `Co-authored-by: Cursor <cursoragent@cursor.com>`) or any "generated with" footer, and do not change `user.name` / `user.email`.
