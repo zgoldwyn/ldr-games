@@ -497,10 +497,11 @@ The game-related cron jobs (20.1) were initially deferred and then pulled back I
     - Implemented `deleteAccount` in the shared domain layer. Unconfirmed requests return an explicit no-op decision; confirmed unpaired deletions plan session termination, account-row deletion, and Auth-user deletion; confirmed paired deletions call `dissolvePairing` first, expose the remaining partner's unpaired state, and then plan pairing-owned data removal plus account removal. Focused unit tests cover these cases and invalid pairing context.
     - _Requirements: 12.2, 12.3, 12.8_
 
-  - [ ] 21A.2 Write property tests for account deletion
+  - [x] 21A.2 Write property tests for account deletion
     - **Property 43: Account deletion leaves the remaining partner consistent**
     - **Property 44: An unconfirmed deletion changes nothing**
     - **Validates: Requirements 12.3, 12.8** (exercise both unpaired and paired accounts)
+    - Added property coverage proving confirmed deletion of either member of any active pairing produces the same remaining-partner state as ordinary unlink and fixes dissolve-before-delete ordering. Added unconfirmed-delete coverage across unpaired and paired inputs, asserting byte-identical input state and an empty no-op decision.
 
   - [ ] 21A.3 Implement the delete-account Edge Function and Storage cleanup
     - Dissolve any active pairing first (reusing `dissolve_pairing` so the remaining partner gets the full Req 4 treatment), then delete the `accounts` row and the `auth.users` credential so the email is released; bump and clear `account_session` so already-issued tokens fail the epoch guard; explicitly remove the pairing's prefix from the `drawings` Storage bucket, which does NOT cascade from a Postgres delete; complete within 30s

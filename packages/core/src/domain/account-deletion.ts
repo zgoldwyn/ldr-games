@@ -9,7 +9,7 @@
 import { ERROR_CODES, type AccountDeletionError, type PairingError } from '../errors.js';
 import { err, ok, type Result } from '../result.js';
 import type { Account } from './account.js';
-import type { AccountId, PairingId } from './common.js';
+import type { AccountId, PairingId, Timestamp } from './common.js';
 import type { Notification } from './notification.js';
 import type { Pairing } from './pairing.js';
 import {
@@ -34,7 +34,7 @@ export interface DeleteAccountInput {
   /** Pairing context, when the account is currently paired. */
   readonly pairingContext?: DeleteAccountPairingContext | null;
   /** Reference "current" time, forwarded to pairing dissolution notifications. */
-  readonly now: number;
+  readonly now: Timestamp;
 }
 
 /** Ordered operation for the future server-side deletion transaction. */
