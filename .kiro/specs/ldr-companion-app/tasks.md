@@ -521,10 +521,13 @@ The game-related cron jobs (20.1) were initially deferred and then pulled back I
     - Still deferred to 22.1b as planned: SecureStore session persistence, cache hydration from disk, and every real screen. Nothing here talks to Supabase yet, which is why it runs without the hosted project (`21B.1`).
     - _Requirements: 5.1_
 
-  - [ ] 22.1b Build the MVP mobile screens — **[MVP]**
-    - Screens: sign in / register, pairing (create + accept an invitation), a game list, a tic-tac-toe board, and a battleship board, over the shared modules from 21.1/21.2
-    - Expo SecureStore for the refresh token
-    - Render the theme from `@ldr/core` tokens rather than hardcoded values, per the theme steering doc
+  - [x] 22.1b Build the MVP mobile screens — **[MVP]**
+    - Screens: sign in / register, pairing (create + accept an invitation), a game list, a tic-tac-toe board, and a battleship board, over `AuthenticationModule`, `PairingModule`, `RealTimeGameModule`, and `AsyncGameModule` from 21.1/21.2.
+    - Expo SecureStore holds the domain `Session` and the supabase **refresh token** (peeled out of the supabase-js session blob; access token + user stay in AsyncStorage). Local Store snapshots hydrate from AsyncStorage so a cold start can render cached games (Req 5.1).
+    - Identity gate: no session → sign in (Req 2.5); signed in but unpaired → pairing; active pairing → game list + boards. All colours come from `@ldr/core` tokens via the 22.1a navigation bridge; no component hex.
+    - Game list is tic-tac-toe + battleship only (drawing is filtered out). Battleship start auto-places a classic fleet for both partners because `async-start` has no placement endpoint and a zero-cell fleet can never end (Req 7.10). Join-by-session-id is a temporary bridge until 23.1 delivers invites live.
+    - Connection Manager, sync, and notification reads are **not** wired — that is 23.1. 16 unit tests cover the gate, codecs, storage split, error copy, and board helpers.
+    - Verified: typecheck, lint, unit tests, simulator launch (1090 modules, no runtime errors) against the local stack. `register` returns 201 on `127.0.0.1:54321`.
     - _Requirements: 5.1, 6.1, 7.1_
 
   - [ ] 22.1c iOS release prerequisites — **[required to SUBMIT]**

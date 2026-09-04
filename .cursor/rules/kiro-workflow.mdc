@@ -11,7 +11,7 @@ Source of truth: `.kiro/specs/ldr-companion-app/` (`requirements.md`, `design.md
 
 Before coding, read `tasks.md` MVP Critical Path and take the next incomplete **leaf** `[ ]` on that path. Do not reopen `[x]` or `[-]` work; `[-]` remaining bits are owned by a later task (see the note). Do not implement `[DEFERRED, post-MVP]` sections.
 
-Current next sequence (skip any already `[x]`): `21.1` → `21.2` → `21.3` (compose 14.2, do not rewrite) → `22.1a` → `22.1b` → `23.1` → `21B.1` (hosted Supabase is irreversible; confirm first).
+Current next sequence (skip any already `[x]`): `23.1` → `21B.1` (hosted Supabase is irreversible; confirm first).
 
 One leaf task at a time. Mark it `[x]` in `tasks.md` after verification, then commit that task only. Theme via core tokens, never hardcoded hex. Full rules: `.kiro/steering/workflow.md`. Before changing existing code that looks arbitrary, check `.kiro/steering/decisions.md` — several deliberate choices there are one-character edits away from breaking a requirement.
 

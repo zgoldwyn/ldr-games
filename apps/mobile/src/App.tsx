@@ -1,47 +1,139 @@
 /**
- * Root component: navigation container and the app's stack (task 22.1a).
+ * Root component: identity gate and the MVP stacks (task 22.1b).
  *
- * The stack is declared here rather than per-screen so task 22.1b adds routes to
- * one list: sign in / register, pairing, the game list, and the two boards. The
- * route map is typed, so a navigate() to a route that does not exist — or with
- * the wrong params — fails at compile time rather than on a phone.
+ * Boot restores the SecureStore session and the Local Store snapshot, then
+ * picks SignIn / Pairing / the game stack. Connection Manager live updates are
+ * 23.1 — these screens already call the 21.1/21.2 modules.
  */
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { BootScreen } from './screens/BootScreen';
+import { AppProvider } from './app-context';
+import type { RootStackParamList } from './navigation';
+import { bootRuntime, loadIdentity, type AppRuntime, type Identity } from './runtime';
+import { BattleshipScreen } from './screens/BattleshipScreen';
+import { GameListScreen } from './screens/GameListScreen';
+import { PairingScreen } from './screens/PairingScreen';
+import { SignInScreen } from './screens/SignInScreen';
+import { TicTacToeScreen } from './screens/TicTacToeScreen';
 import { navigationTheme, themeTokens } from './theme';
-
-/** Routes and their params. Task 22.1b extends this. */
-export type RootStackParamList = {
-  readonly Boot: undefined;
-};
+import { AppText } from './ui/AppText';
+import { Screen } from './ui/Screen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
+export type { RootStackParamList };
+
 export function App() {
   const tokens = themeTokens();
+  const [runtime, setRuntime] = useState<AppRuntime | null>(null);
+  const [identity, setIdentity] = useState<Identity | null>(null);
+  const [configError, setConfigError] = useState<string | null>(null);
+
+  const reload = useCallback(async () => {
+    if (runtime === null) return;
+    setIdentity(await loadIdentity(runtime));
+  }, [runtime]);
+
+  useEffect(() => {
+    void bootRuntime().then((result) => {
+      if (!result.ok) {
+        setConfigError(result.message);
+        return;
+      }
+      setRuntime(result.runtime);
+      setIdentity(result.identity);
+    });
+  }, []);
+
+  if (configError !== null) {
+    return (
+      <SafeAreaProvider>
+        <Screen tokens={tokens}>
+          <AppText kind="title" tokens={tokens}>
+            Almost ready
+          </AppText>
+          <AppText kind="muted" tokens={tokens} style={styles.lead}>
+            {configError}
+          </AppText>
+        </Screen>
+        <StatusBar style="dark" />
+      </SafeAreaProvider>
+    );
+  }
+
+  if (runtime === null || identity === null) {
+    return (
+      <SafeAreaProvider>
+        <View style={[styles.boot, { backgroundColor: tokens.background }]}>
+          <ActivityIndicator color={tokens.primaryStrong} />
+          <AppText kind="muted" tokens={tokens} style={styles.lead}>
+            Restoring your session
+          </AppText>
+        </View>
+        <StatusBar style="dark" />
+      </SafeAreaProvider>
+    );
+  }
+
+  const header = {
+    headerStyle: { backgroundColor: tokens.surface },
+    headerTitleStyle: { color: tokens.textPrimary },
+    headerTintColor: tokens.primaryStrong,
+    contentStyle: { backgroundColor: tokens.background },
+  };
 
   return (
-    // SafeAreaProvider wraps the navigator because the boards (22.1b) need the
-    // inset values to keep a grid clear of the home indicator.
     <SafeAreaProvider>
-      <NavigationContainer theme={navigationTheme(tokens)}>
-        <Stack.Navigator
-          screenOptions={{
-            headerStyle: { backgroundColor: tokens.surface },
-            headerTitleStyle: { color: tokens.textPrimary },
-            headerTintColor: tokens.primaryStrong,
-            contentStyle: { backgroundColor: tokens.background },
-          }}
-        >
-          <Stack.Screen name="Boot" component={BootScreen} options={{ title: 'LDR Companion' }} />
-        </Stack.Navigator>
-      </NavigationContainer>
-      {/* Dark glyphs: every colour option's background is a light pastel. */}
+      <AppProvider value={{ runtime, identity, reload }}>
+        <NavigationContainer theme={navigationTheme(tokens)}>
+          {identity.gate === 'signedOut' ? (
+            <Stack.Navigator screenOptions={header}>
+              <Stack.Screen
+                name="SignIn"
+                component={SignInScreen}
+                options={{ title: 'LDR Companion', headerShown: false }}
+              />
+            </Stack.Navigator>
+          ) : identity.gate === 'unpaired' ? (
+            <Stack.Navigator screenOptions={header}>
+              <Stack.Screen
+                name="Pairing"
+                component={PairingScreen}
+                options={{ title: 'Pair up' }}
+              />
+            </Stack.Navigator>
+          ) : (
+            <Stack.Navigator screenOptions={header}>
+              <Stack.Screen
+                name="GameList"
+                component={GameListScreen}
+                options={{ title: 'Play' }}
+              />
+              <Stack.Screen
+                name="TicTacToe"
+                component={TicTacToeScreen}
+                options={{ title: 'Tic-tac-toe' }}
+              />
+              <Stack.Screen
+                name="Battleship"
+                component={BattleshipScreen}
+                options={{ title: 'Battleship' }}
+              />
+            </Stack.Navigator>
+          )}
+        </NavigationContainer>
+      </AppProvider>
       <StatusBar style="dark" />
     </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  boot: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  lead: { marginTop: 16 },
+});

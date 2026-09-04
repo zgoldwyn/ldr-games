@@ -23,7 +23,12 @@
       "package": "com.ldrcompanion.app"
     },
     "plugins": [
-      "expo-status-bar"
-    ]
+      "expo-status-bar",
+      "expo-secure-store"
+    ],
+    "extra": {
+      "supabaseUrl": "http://127.0.0.1:54321",
+      "supabaseAnonKey": ""
+    }
   }
 }

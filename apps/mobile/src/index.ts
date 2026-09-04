@@ -10,6 +10,7 @@
 // Metro, which resolves literally and would look for a real `App.js` next to a
 // file that is actually `App.tsx`. TypeScript's `Bundler` module resolution
 // accepts the extensionless form, so both tools agree.
+import 'react-native-url-polyfill/auto';
 import { registerRootComponent } from 'expo';
 
 import { App } from './App';

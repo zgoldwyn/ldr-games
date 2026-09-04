@@ -37,17 +37,12 @@ Exclusive one-to-one pairing for a long-distance couple: shared real-time games,
 
 ## Current progress (re-check `tasks.md`; do not trust this if it disagrees)
 
-Done: scaffolding (1), schema/RLS (2), all pure domain + property tests (3–11), auth/pairing/sync/game Edge wiring and their integration tests (12–16 except noted gaps), in-app notification reads (19.1a, 19.3), game cron jobs (20.1, 20.3).
+Done: scaffolding (1), schema/RLS (2), all pure domain + property tests (3–11), auth/pairing/sync/game Edge wiring and their integration tests (12–16 except noted gaps), in-app notification reads (19.1a, 19.3), game cron jobs (20.1, 20.3), client modules (21.1–21.3), Expo scaffold (22.1a), MVP screens (22.1b).
 
 **Next MVP sequence** (skip any already `[x]`):
 
-1. `21.1` AuthenticationModule + PairingModule
-2. `21.2` tic-tac-toe + battleship client modules + Local Store
-3. `21.3` Connection Manager: Broadcast, Presence, revoke sign-out (compose 14.2; do not rewrite it)
-4. `22.1a` real Expo app from the `apps/mobile` stub
-5. `22.1b` MVP screens (auth, pairing, game list, both boards) using theme tokens
-6. `23.1` wire those modules into the mobile shell end to end
-7. `21B.1` hosted Supabase — **irreversible; get explicit confirmation before pushing migrations**
+1. `23.1` wire those modules into the mobile shell end to end
+2. `21B.1` hosted Supabase — **irreversible; get explicit confirmation before pushing migrations**
 
 Then-to-submit (not needed to use a local/dev build): `21A.*` account deletion, then `22.1c` App Store extras.
 
