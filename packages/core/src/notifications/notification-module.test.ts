@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { accountId as toAccountId } from '../domain/common.js';
 import { NOTIFICATION_RETENTION_MS } from '../domain/notification-delivery.js';
 import type { Notification, NotificationSettings } from '../domain/notification.js';
+import { createLocalStore, type LocalStore } from '../store/local-store.js';
 import {
   createNotificationModule,
   defaultNotificationSettings,
@@ -38,6 +39,7 @@ function harness(
   options: {
     rows?: NotificationRow[];
     settings?: NotificationSettings | null;
+    store?: LocalStore;
   } = {},
 ) {
   let clock = NOW;
@@ -71,10 +73,14 @@ function harness(
 
   const eligibleArrivals: Notification[] = [];
   const allArrivals: Notification[] = [];
-  const module = createNotificationModule(ports, {
-    onNotification: (n) => eligibleArrivals.push(n),
-    onAnyNotification: (n) => allArrivals.push(n),
-  });
+  const module = createNotificationModule(
+    ports,
+    {
+      onNotification: (n) => eligibleArrivals.push(n),
+      onAnyNotification: (n) => allArrivals.push(n),
+    },
+    options.store,
+  );
 
   return {
     module,
@@ -306,5 +312,116 @@ describe('Notification module — live arrivals (Req 11.1, 11.2)', () => {
 
     h.module.unsubscribe();
     expect(h.unsubscribes()).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Local Store backing (task 21.2)
+// ---------------------------------------------------------------------------
+
+describe('notification reads over the Local Store (Req 5.1)', () => {
+  it('reads notifications synchronously after a list, with no network', async () => {
+    const store = createLocalStore();
+    const h = harness({ rows: [row(), row()], store });
+    await h.module.list(ALICE);
+
+    // No await: the badge and the list render on the frame the screen mounts,
+    // and keep rendering when the device is offline.
+    expect(h.module.cached(ALICE)).toHaveLength(2);
+  });
+
+  it('caches a live arrival, so a badge updates without a refetch (Req 11.1)', () => {
+    const store = createLocalStore();
+    const h = harness({ rows: [], store });
+    h.module.subscribe(ALICE);
+    h.emit(row({ id: 'live-1' }));
+    expect(h.module.cached(ALICE).map((n) => n.id)).toEqual(['live-1']);
+  });
+
+  it('drops an acknowledged notification from the cached read (Req 11.6)', async () => {
+    const store = createLocalStore();
+    const target = row({ id: 'ack-me' });
+    const h = harness({ rows: [target, row({ id: 'keep' })], store });
+    await h.module.list(ALICE);
+
+    await h.module.acknowledge(target.id as never);
+
+    expect(h.module.cached(ALICE).map((n) => n.id)).toEqual(['keep']);
+  });
+
+  it('does not resurrect an acknowledged notification from a stale fetch (Req 11.6)', async () => {
+    // The race: `list` reads the rows, the user dismisses one, and only then does
+    // the in-flight read resolve carrying the pre-dismissal copy. Applying it
+    // would put the notification back on screen after the user cleared it.
+    const store = createLocalStore();
+    const target = row({ id: 'ack-me' });
+    const h = harness({ rows: [target], store });
+    await h.module.list(ALICE);
+    await h.module.acknowledge(target.id as never);
+
+    // Replay the stale, still-unacknowledged copy exactly as a late read would.
+    store.put('notification', target.id, notificationFromRow(target), 0);
+
+    expect(h.module.cached(ALICE)).toHaveLength(0);
+  });
+
+  it('withholds a muted category from the cached read (Req 11.3)', async () => {
+    const store = createLocalStore();
+    const h = harness({
+      rows: [row({ category: 'async_turn' }), row({ category: 'game_invite' })],
+      store,
+      settings: { accountId: ALICE, disabledCategories: ['async_turn'] },
+    });
+    await h.module.list(ALICE);
+    // Settings were learned on the last online read; the offline path honours
+    // them rather than falling back to "deliver everything".
+    expect(h.module.cached(ALICE).map((n) => n.category)).toEqual(['game_invite']);
+  });
+
+  it('withholds a notification past the retention window (Req 11.4)', async () => {
+    const store = createLocalStore();
+    const h = harness({ rows: [row({ id: 'old' })], store });
+    await h.module.list(ALICE);
+    expect(h.module.cached(ALICE)).toHaveLength(1);
+
+    h.advance(NOTIFICATION_RETENTION_MS + 1);
+    // The discard job is task 20.2 and deferred, so the row is still cached; the
+    // read has to age it out itself.
+    expect(h.module.cached(ALICE)).toHaveLength(0);
+  });
+
+  it('never returns another account\'s notifications', async () => {
+    const store = createLocalStore();
+    const other = toAccountId('99999999-9999-4999-8999-999999999999');
+    const h = harness({ rows: [row({ id: 'mine' })], store });
+    await h.module.list(ALICE);
+    // A hydrated snapshot could outlive a sign-out; the recipient filter is the
+    // backstop that keeps it from surfacing.
+    store.put('notification', 'theirs', {
+      ...notificationFromRow(row({ id: 'theirs' })),
+      recipientAccountId: other,
+    });
+
+    expect(h.module.cached(ALICE).map((n) => n.id)).toEqual(['mine']);
+  });
+
+  it('notifies cache subscribers so a badge re-renders', () => {
+    const store = createLocalStore();
+    const h = harness({ rows: [], store });
+    let notified = 0;
+    h.module.subscribeCache(() => {
+      notified += 1;
+    });
+    h.module.subscribe(ALICE);
+    h.emit(row());
+    expect(notified).toBe(1);
+  });
+
+  it('reads empty and subscribes harmlessly when no store is provided', () => {
+    // The store is optional so 19.1a's existing composition keeps working
+    // unchanged; a caller without one simply has no offline read.
+    const h = harness({ rows: [row()] });
+    expect(h.module.cached(ALICE)).toEqual([]);
+    expect(() => h.module.subscribeCache(() => undefined)()).not.toThrow();
   });
 });

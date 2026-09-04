@@ -31,6 +31,7 @@ import {
   shouldDeliver,
 } from '../domain/notification-delivery.js';
 import type { ChannelStatus } from '../sync/connectivity.js';
+import type { LocalStore, StoreListener } from '../store/local-store.js';
 
 /** A `notifications` row as PostgREST returns it. */
 export interface NotificationRow {
@@ -137,23 +138,50 @@ export interface NotificationModule {
   acknowledge(id: NotificationId): Promise<Notification | null>;
   /** Acknowledge every currently eligible notification. */
   acknowledgeAll(accountId: AccountId): Promise<number>;
+  /**
+   * Eligible notifications from the Local Store, read synchronously and without
+   * the network. Empty when no store was provided (Req 5.1).
+   */
+  cached(accountId: AccountId): readonly Notification[];
+  /** Observe cache changes so a badge re-renders. */
+  subscribeCache(listener: StoreListener): () => void;
 }
 
 /**
- * Build a notification module over the given ports.
+ * Build a notification module over the given ports, optionally backed by the
+ * Local Store for instant and offline reads (task 21.2).
  *
  * Settings are re-read on each `list` rather than cached. That is a deliberate
  * choice for the MVP: a stale cache would keep delivering a category the user
  * just muted, and the read is a single indexed lookup on a one-row-per-account
- * table.
+ * table. The cached READ path is the exception — it has no network to consult,
+ * so it filters with the last settings seen.
  */
 export function createNotificationModule(
   ports: NotificationPorts,
   listeners: NotificationListeners = {},
+  store?: LocalStore,
 ): NotificationModule {
   let teardown: (() => void) | null = null;
   /** Settings for the subscribed account, refreshed on subscribe and list. */
   let settings: NotificationSettings | null = null;
+
+  /**
+   * Cache one notification.
+   *
+   * The version is the acknowledgement time, which only ever moves from "not
+   * acknowledged" (0) to a timestamp. That is what stops a `fetchAll` issued
+   * before an acknowledgement, but answered after it, from resurrecting a
+   * notification the user has already dismissed (Req 11.6).
+   */
+  function cache(notification: Notification): void {
+    store?.put(
+      'notification',
+      notification.id,
+      notification,
+      notification.acknowledgedAt ?? 0,
+    );
+  }
 
   async function settingsFor(accountId: AccountId): Promise<NotificationSettings> {
     settings = (await ports.fetchSettings(accountId)) ?? defaultNotificationSettings(accountId);
@@ -182,8 +210,12 @@ export function createNotificationModule(
       settingsFor(accountId),
     ]);
     const now = ports.now();
-    return rows
-      .map(notificationFromRow)
+    const all = rows.map(notificationFromRow);
+    // Everything is cached, not just the eligible ones: acknowledging a
+    // notification is what makes it ineligible, and the cache has to hold the
+    // acknowledged copy for the version guard above to recognise it.
+    for (const notification of all) cache(notification);
+    return all
       .filter((n) => isEligible(n, current, now))
       // Newest first: the most recent invitation or your-turn prompt is the one
       // the recipient most likely wants to act on.
@@ -204,6 +236,7 @@ export function createNotificationModule(
       teardown = ports.subscribeRecipient(accountId, {
         onInsert: (row) => {
           const notification = notificationFromRow(row);
+          cache(notification);
           listeners.onAnyNotification?.(notification);
 
           const current = settings ?? defaultNotificationSettings(accountId);
@@ -233,7 +266,10 @@ export function createNotificationModule(
 
     async acknowledge(id: NotificationId): Promise<Notification | null> {
       const row = await ports.acknowledge(id, ports.now());
-      return row === null ? null : notificationFromRow(row);
+      if (row === null) return null;
+      const notification = notificationFromRow(row);
+      cache(notification);
+      return notification;
     },
 
     async acknowledgeAll(accountId: AccountId): Promise<number> {
@@ -242,7 +278,26 @@ export function createNotificationModule(
       const results = await Promise.all(
         pending.map((n) => ports.acknowledge(n.id, at)),
       );
-      return results.filter((r) => r !== null).length;
+      const applied = results.filter((r) => r !== null);
+      for (const row of applied) cache(notificationFromRow(row));
+      return applied.length;
+    },
+
+    cached(accountId: AccountId): readonly Notification[] {
+      if (store === undefined) return [];
+      const current = settings ?? defaultNotificationSettings(accountId);
+      const now = ports.now();
+      return store
+        .list<Notification>('notification')
+        // The cache is cleared on sign-out, but filtering by recipient keeps a
+        // stale hydrated snapshot from showing another account's notifications.
+        .filter((n) => n.recipientAccountId === accountId)
+        .filter((n) => isEligible(n, current, now))
+        .sort((a, b) => b.createdAt - a.createdAt);
+    },
+
+    subscribeCache(listener: StoreListener): () => void {
+      return store === undefined ? () => undefined : store.subscribe('notification', listener);
     },
   };
 }

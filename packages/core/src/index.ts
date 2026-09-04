@@ -13,6 +13,8 @@ export * from './errors.js';
 export * from './domain/index.js';
 export * from './auth/index.js';
 export * from './sync/index.js';
+export * from './store/index.js';
+export * from './games/index.js';
 export * from './storage/index.js';
 export * from './notifications/index.js';
 
