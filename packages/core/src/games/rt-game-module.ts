@@ -31,6 +31,34 @@ import type { RTError } from '../errors.js';
 import { err, ok, type Result } from '../result.js';
 import type { LocalStore, StoreListener } from '../store/local-store.js';
 
+/**
+ * Broadcast events published on the `rt_session:{id}` channel. Mirrors the
+ * server's `RT_EVENTS` in `supabase/functions/_shared/rt-presence.ts` plus
+ * `rt-move`'s two, which are the whole stream a playing client sees.
+ */
+export const RT_BROADCAST_EVENTS = {
+  /** Full session state after invite, join, or activation (Req 6.2, 6.3). */
+  sessionState: 'session_state',
+  /** Authoritative post-move state (Req 6.4). */
+  move: 'move',
+  /** Paused after a 30s partner disconnect (Req 6.6). */
+  paused: 'paused',
+  /** Resumed from the preserved state on rejoin (Req 6.7). */
+  resumed: 'resumed',
+  /** Terminal; the recorded outcome is presented (Req 6.8). */
+  outcome: 'outcome',
+} as const;
+
+/**
+ * Which session state each lifecycle event implies. These events carry no
+ * `state` field of their own, so the event name IS the transition.
+ */
+const LIFECYCLE_TRANSITIONS: Readonly<Record<string, RTSessionState>> = {
+  [RT_BROADCAST_EVENTS.paused]: 'paused',
+  [RT_BROADCAST_EVENTS.resumed]: 'active',
+  [RT_BROADCAST_EVENTS.outcome]: 'terminal',
+};
+
 /** A real-time session as the `rt-move` / `rt-rejoin` functions return it. */
 export interface RTSessionPayload {
   readonly id: string;
@@ -96,6 +124,11 @@ export interface RealTimeGameModule {
   rejoin(sessionId: SessionId): Promise<Result<RTSession, RTError>>;
   /** Apply a state delivered over Broadcast; called by the Connection Manager. */
   applyRemoteState(payload: RTSessionPayload): void;
+  /**
+   * Apply one Broadcast message from the `rt_session:{id}` channel, resolving
+   * the event name to a session transition. Unknown events are ignored.
+   */
+  applyRemoteEvent(event: string, payload: Record<string, unknown>): void;
   /** The last-known session, readable synchronously and offline. */
   cached(sessionId: SessionId): RTSession | undefined;
   /** Every cached real-time session. */
@@ -109,14 +142,38 @@ export function createRealTimeGameModule(
   ports: RTGamePorts,
   store: LocalStore,
 ): RealTimeGameModule {
-  function cache(payload: RTSessionPayload): RTSession {
-    const session = rtSessionFromPayload(payload);
+  /**
+   * Cache a session, MERGING over whatever is already known.
+   *
+   * A replace would be wrong: `rt-rejoin` and `rt-presence` serialize sessions
+   * with their own narrower `sessionView` that omits `pairingId`, so a rejoin
+   * response would blank a field the client still needs to scope subscriptions.
+   * Merging keeps every field the newest message simply did not mention.
+   */
+  function cache(payload: Partial<RTSessionPayload> & { readonly id: string }): RTSession {
+    const existing = store.get<RTSession>('rt_session', payload.id);
+
+    // `outcome` distinguishes three cases deliberately. Absent means "this
+    // message did not mention it", so the recorded outcome is kept; an explicit
+    // null means "not finished", which `rt-move` always sends and which must be
+    // able to clear a stale one.
+    const outcome = payload.outcome === undefined ? existing?.outcome : payload.outcome;
+
+    const merged: RTSession = {
+      id: payload.id as SessionId,
+      pairingId: (payload.pairingId ?? existing?.pairingId) as PairingId,
+      gameId: (payload.gameId ?? existing?.gameId) as GameId,
+      state: payload.state ?? existing?.state ?? 'pending',
+      gameState: payload.gameState ?? existing?.gameState ?? {},
+      ...(outcome === null || outcome === undefined ? {} : { outcome }),
+    };
+
     // No version: real-time state arrives on ONE ordered Broadcast channel, and
     // requests are only issued in response to a user action, so there is no
     // second stream to race with. Inventing a version here would mean deriving
     // one from game-specific board contents, which the store must not know about.
-    store.put('rt_session', session.id, session);
-    return session;
+    store.put('rt_session', merged.id, merged);
+    return merged;
   }
 
   /**
@@ -166,6 +223,39 @@ export function createRealTimeGameModule(
 
     applyRemoteState(payload: RTSessionPayload): void {
       cache(payload);
+    },
+
+    applyRemoteEvent(event: string, payload: Record<string, unknown>): void {
+      // `session_state` and `move` are serialized with `rt-move`'s full
+      // `sessionView`, so they carry their own `state` and can be cached as-is.
+      if (event === RT_BROADCAST_EVENTS.sessionState || event === RT_BROADCAST_EVENTS.move) {
+        const id = payload.id;
+        if (typeof id !== 'string') return;
+        cache(payload as unknown as RTSessionPayload);
+        return;
+      }
+
+      // The lifecycle events carry `{ sessionId, gameState, ... }` and NO
+      // `state` field, so the transition is inferred from the event name. They
+      // also omit `gameId` and `pairingId`, which is why an unknown session is
+      // skipped rather than half-built — the next full state will carry it.
+      const transition = LIFECYCLE_TRANSITIONS[event];
+      if (transition === undefined) return;
+
+      const sessionId = payload.sessionId;
+      if (typeof sessionId !== 'string') return;
+      if (store.get<RTSession>('rt_session', sessionId) === undefined) return;
+
+      cache({
+        id: sessionId,
+        state: transition,
+        ...(payload.gameState === undefined
+          ? {}
+          : { gameState: payload.gameState as GameState }),
+        ...(event === RT_BROADCAST_EVENTS.outcome
+          ? { outcome: (payload.outcome ?? null) as GameOutcome | null }
+          : {}),
+      });
     },
 
     cached(sessionId: SessionId): RTSession | undefined {

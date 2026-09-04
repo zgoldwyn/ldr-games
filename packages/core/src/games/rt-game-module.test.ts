@@ -243,6 +243,118 @@ describe('RealTimeGameModule.applyRemoteState', () => {
   });
 });
 
+describe('RealTimeGameModule partial payloads', () => {
+  it('keeps fields a partial payload omits (Req 6.7)', async () => {
+    // `rt-rejoin` and `rt-presence` use their own narrower `sessionView` that
+    // omits `pairingId`, unlike `rt-move`'s. Replacing the cached session
+    // wholesale would blank a field the client still needs to scope its
+    // subscriptions.
+    const h = harness({
+      rejoin: async () => ({
+        ok: true,
+        session: {
+          id: SESSION,
+          gameId: 'tic-tac-toe',
+          state: 'active',
+          gameState: board(),
+        } as unknown as RTSessionPayload,
+      }),
+    });
+    await h.module.join(SESSION);
+    expect(h.module.cached(SESSION)?.pairingId).toBe('pairing-1');
+
+    await h.module.rejoin(SESSION);
+    expect(h.module.cached(SESSION)?.pairingId).toBe('pairing-1');
+    expect(h.module.cached(SESSION)?.state).toBe('active');
+  });
+});
+
+describe('RealTimeGameModule.applyRemoteEvent', () => {
+  it('applies a full state carried by session_state (Req 6.3)', () => {
+    const h = harness();
+    h.module.applyRemoteEvent('session_state', {
+      ...payload({ state: 'active' }),
+      joinedAccounts: [ALICE, BOB],
+    } as unknown as Record<string, unknown>);
+    expect(h.module.cached(SESSION)?.state).toBe('active');
+  });
+
+  it('applies the authoritative board carried by move (Req 6.4)', async () => {
+    const h = harness();
+    await h.module.join(SESSION);
+    h.module.applyRemoteEvent('move', {
+      ...payload({ gameState: board([BOB, ...Array(8).fill(null)]) }),
+      actor: BOB,
+      move: { type: 'place', cell: 0 },
+    } as unknown as Record<string, unknown>);
+    const cached = h.module.cached(SESSION);
+    expect((cached?.gameState as { board: unknown[] }).board[0]).toBe(BOB);
+  });
+
+  it('pauses from an event that carries no session state (Req 6.6)', async () => {
+    // `paused` publishes only `{ sessionId, disconnectedPartner, pausedSince,
+    // gameState }` — there is no `state` field to read, so the transition has to
+    // be inferred from the event name and merged onto the cached session.
+    const h = harness();
+    await h.module.join(SESSION);
+    h.module.applyRemoteEvent('paused', {
+      sessionId: SESSION,
+      disconnectedPartner: BOB,
+      pausedSince: new Date(1_700_000_000_000).toISOString(),
+      gameState: board([ALICE, ...Array(8).fill(null)]),
+    });
+
+    const cached = h.module.cached(SESSION);
+    expect(cached?.state).toBe('paused');
+    // The preserved state is what the pause is FOR (Req 6.6).
+    expect((cached?.gameState as { board: unknown[] }).board[0]).toBe(ALICE);
+    expect(cached?.pairingId).toBe('pairing-1');
+  });
+
+  it('resumes from the preserved state (Req 6.7)', async () => {
+    const h = harness();
+    await h.module.join(SESSION);
+    h.module.applyRemoteEvent('paused', { sessionId: SESSION, gameState: board() });
+    h.module.applyRemoteEvent('resumed', {
+      sessionId: SESSION,
+      rejoinedPartner: BOB,
+      gameState: board([ALICE, ...Array(8).fill(null)]),
+    });
+
+    const cached = h.module.cached(SESSION);
+    expect(cached?.state).toBe('active');
+    expect((cached?.gameState as { board: unknown[] }).board[0]).toBe(ALICE);
+  });
+
+  it('records the outcome and goes terminal (Req 6.8)', async () => {
+    const h = harness();
+    await h.module.join(SESSION);
+    h.module.applyRemoteEvent('outcome', {
+      sessionId: SESSION,
+      outcome: { kind: 'completed', winner: ALICE, recordedAt: 1_700_000_000_000 },
+      gameState: board(),
+    });
+
+    const cached = h.module.cached(SESSION);
+    expect(cached?.state).toBe('terminal');
+    expect(cached?.outcome).toMatchObject({ kind: 'completed', winner: ALICE });
+  });
+
+  it('ignores a transition for a session it has never seen', () => {
+    // These events carry no `gameId` or `pairingId`, so there is nothing to
+    // build a session from; inventing a half-populated one would be worse than
+    // waiting for the next full state.
+    const h = harness();
+    h.module.applyRemoteEvent('paused', { sessionId: SESSION, gameState: board() });
+    expect(h.module.cached(SESSION)).toBeUndefined();
+  });
+
+  it('ignores an unrecognized event rather than throwing', () => {
+    const h = harness();
+    expect(() => h.module.applyRemoteEvent('something_new', { sessionId: SESSION })).not.toThrow();
+  });
+});
+
 describe('RealTimeGameModule.cached', () => {
   it('reads without touching the network, so the board survives offline (Req 5.1)', async () => {
     const h = harness({
