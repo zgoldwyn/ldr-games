@@ -92,6 +92,9 @@ export type ReminderErrorCode =
 /** Notification failures (Requirement 11). */
 export type NotificationErrorCode = 'NOTIFICATION_NOT_FOUND';
 
+/** Account deletion failures (Requirement 12). */
+export type AccountDeletionErrorCode = 'INVALID_DELETION_STATE';
+
 /** Reject reason for the pure real-time move engine (Requirement 6.11). */
 export type MoveErrorCode = 'INVALID_MOVE';
 
@@ -114,6 +117,7 @@ export type ErrorCode =
   | CalendarErrorCode
   | ReminderErrorCode
   | NotificationErrorCode
+  | AccountDeletionErrorCode
   | MoveErrorCode
   | TurnErrorCode;
 
@@ -145,6 +149,7 @@ export type QuizError = AppError<QuizErrorCode>;
 export type CalendarError = AppError<CalendarErrorCode>;
 export type ReminderError = AppError<ReminderErrorCode>;
 export type NotificationError = AppError<NotificationErrorCode>;
+export type AccountDeletionError = AppError<AccountDeletionErrorCode>;
 export type MoveError = AppError<MoveErrorCode>;
 export type TurnError = AppError<TurnErrorCode>;
 
@@ -192,4 +197,5 @@ export const ERROR_CODES = {
   DATE_NOT_FOUND: 'DATE_NOT_FOUND',
   INVALID_LEAD_TIME: 'INVALID_LEAD_TIME',
   NOTIFICATION_NOT_FOUND: 'NOTIFICATION_NOT_FOUND',
+  INVALID_DELETION_STATE: 'INVALID_DELETION_STATE',
 } as const satisfies Record<string, ErrorCode>;

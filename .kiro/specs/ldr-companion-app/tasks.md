@@ -492,8 +492,9 @@ The game-related cron jobs (20.1) were initially deferred and then pulled back I
   - Required before iOS submission: an app that supports account creation must offer in-app account deletion. Requirement 4 (unlinking) deliberately RETAINS individual data, so it does not satisfy this. Placed here so the backend exists before the shells add the UI in 22.1/22.2.
   - Sequencing note: this blocks App Store submission but not a working dev build, so it can follow 22.1 if the priority is getting the app into your hands first. It must not be dropped, only ordered.
 
-  - [ ] 21A.1 Implement the deleteAccount pure logic
+  - [x] 21A.1 Implement the deleteAccount pure logic
     - Implement the pure decision for account deletion: require an explicit confirmation, derive the dissolve-first-then-delete ordering, and derive the remaining partner's resulting unpaired state by reusing `dissolvePairing`; an unconfirmed request yields no change
+    - Implemented `deleteAccount` in the shared domain layer. Unconfirmed requests return an explicit no-op decision; confirmed unpaired deletions plan session termination, account-row deletion, and Auth-user deletion; confirmed paired deletions call `dissolvePairing` first, expose the remaining partner's unpaired state, and then plan pairing-owned data removal plus account removal. Focused unit tests cover these cases and invalid pairing context.
     - _Requirements: 12.2, 12.3, 12.8_
 
   - [ ] 21A.2 Write property tests for account deletion

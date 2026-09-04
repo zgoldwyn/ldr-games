@@ -4,6 +4,7 @@
  */
 export * from './common.js';
 export * from './account.js';
+export * from './account-deletion.js';
 export * from './auth-validation.js';
 export * from './auth-hashing.js';
 export * from './auth-lockout.js';
