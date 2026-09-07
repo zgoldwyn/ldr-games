@@ -3,9 +3,10 @@
 Server-authoritative logic for the LDR Companion App runs here as Supabase Edge
 Functions (Deno / TypeScript). These functions run with the service role and are
 the only path allowed to perform sensitive writes and state transitions
-(registration, login epoch hook, pairing accept/unlink, sync write-path with
-HLC conflict resolution, real-time/async game move validation, quiz scoring, and
-the pg_cron-invoked scheduler jobs). See `design.md` for the full mapping.
+(registration, login epoch hook, pairing accept/unlink, account deletion, sync
+write-path with HLC conflict resolution, real-time/async game move validation,
+quiz scoring, and the pg_cron-invoked scheduler jobs). See `design.md` for the
+full mapping.
 
 ## Layout
 
@@ -15,6 +16,7 @@ supabase/functions/
   _shared/         # shared infrastructure helpers (CORS, clients, HTTP, Realtime) — not domain logic
   health/          # health-check skeleton used to verify the edge runtime works
   auth-login/      # single-session login: verify creds, bump epoch, revoke prior client
+  delete-account/  # permanent account/data/Storage/Auth deletion with retry marker
   rt-presence/     # real-time games: Presence-driven 30s disconnect -> pause + notify
   rt-rejoin/       # real-time games: resume from preserved state within 5 min
 ```

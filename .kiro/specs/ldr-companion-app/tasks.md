@@ -503,8 +503,11 @@ The game-related cron jobs (20.1) were initially deferred and then pulled back I
     - **Validates: Requirements 12.3, 12.8** (exercise both unpaired and paired accounts)
     - Added property coverage proving confirmed deletion of either member of any active pairing produces the same remaining-partner state as ordinary unlink and fixes dissolve-before-delete ordering. Added unconfirmed-delete coverage across unpaired and paired inputs, asserting byte-identical input state and an empty no-op decision.
 
-  - [ ] 21A.3 Implement the delete-account Edge Function and Storage cleanup
+  - [x] 21A.3 Implement the delete-account Edge Function and Storage cleanup
     - Dissolve any active pairing first (reusing `dissolve_pairing` so the remaining partner gets the full Req 4 treatment), then delete the `accounts` row and the `auth.users` credential so the email is released; bump and clear `account_session` so already-issued tokens fail the epoch guard; explicitly remove the pairing's prefix from the `drawings` Storage bucket, which does NOT cascade from a Postgres delete; complete within 30s
+    - Implemented `delete-account` plus the service-role-only `delete_account_data` RPC. The RPC serializes on the account, calls `dissolve_pairing`, deletes the pairing so every pairing-owned row cascades, advances/removes the session registry, and deletes the application account in one Postgres transaction. The function recursively removes the pairing's `drawings` prefix and deletes the Auth user last, releasing the email.
+    - Since Postgres, Storage, and Auth cannot share one transaction, the RPC atomically writes a retry marker plus every current/historical pairing prefix into Auth app metadata before deleting application rows. If external cleanup fails, the same confirmed request resumes Storage/Auth cleanup instead of orphaning images or the credential. A displaced token is rejected both at the Edge boundary and again inside the locked database transaction; `verify_jwt` alone checks signature/expiry, not the app's single-session invariant.
+    - Verified by applying the migration locally, `supabase db lint --local` (no schema errors), Deno type/format checks, and a local Edge smoke run proving an unconfirmed request is a no-op while a confirmed unpaired deletion removes both the application row and Auth user.
     - _Requirements: 12.1, 12.3, 12.4, 12.5, 12.6, 12.7_
 
   - [ ] 21A.4 Write account-deletion integration tests

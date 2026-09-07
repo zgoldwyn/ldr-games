@@ -452,6 +452,15 @@ verify_jwt = true
 import_map = "./functions/deno.json"
 entrypoint = "./functions/unlink/index.ts"
 
+[functions.delete-account]
+enabled = true
+# Account deletion is initiated only by the authenticated account being removed.
+# The function uses service-role privileges for application rows, Storage, and
+# the Auth admin API after it has resolved the caller from this verified JWT.
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/delete-account/index.ts"
+
 [functions.rt-move]
 enabled = true
 # Server-authoritative real-time play: the caller's identity decides pairing
