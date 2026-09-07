@@ -73,6 +73,8 @@ export function statusForErrorCode(code: string): number {
     case "INVALID_SESSION_STATE":
     case "QUIZ_SESSION_IN_PROGRESS":
     case "WRONG_PHASE":
+    case "ALREADY_ANSWERED":
+    case "ALREADY_GUESSED":
     // Only the Active_Turn_Holder may take the next turn; another partner's
     // attempt conflicts with the session's current ownership (Req 7.7).
     case "NOT_YOUR_TURN":

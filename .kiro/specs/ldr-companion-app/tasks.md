@@ -352,7 +352,7 @@ The game-related cron jobs (20.1) were initially deferred and then pulled back I
     - Passing against a live stack (7 tests), also covering Req 7.2/7.3/7.8/7.9/7.11. Writing these found that a battleship session started without ship placements could never reach a terminal state — fixed in the preceding commit. Mutation-checked by dropping and gutting the `async_take_turn` RPC (no holder transfer, no outcome, no notifications): 4 tests fail. Note `async-start` takes its options NESTED under `options`, i.e. `{ gameId, options: { ships, size, firstHolder, maxRounds } }`.
     - _Requirements: 7.5, 7.7, 7.10_
 
-- [ ] 17. Quiz wiring — **[DEFERRED, post-MVP]**
+- [x] 17. Quiz wiring — **[DEFERRED, post-MVP]**
   - Cost of deferring: Requirement 8 is entirely unavailable. The pure quiz logic and its property tests (7.x) are already done, so this is wiring only. Note there is **no seed data** for `quiz_defs` / `quiz_questions` yet — whoever picks this up needs to create some before anything can be exercised end to end.
 
   - [x] 17.1 Implement quiz submission and scoring Edge Function
@@ -365,8 +365,9 @@ The game-related cron jobs (20.1) were initially deferred and then pulled back I
     - Added `packages/core/src/quiz/` with a caller-scoped Supabase adapter and client module. Catalog/session reads go directly through authenticated RLS while every mutation invokes the authoritative `quiz` function; completed reads assemble full `QuizResults`, and incomplete reads never synthesize absent partner answers. Seven unit tests cover catalog, mutations, rejection stability, withheld views, caching, and completed results.
     - _Requirements: 8.1, 8.4, 8.8_
 
-  - [ ] 17.3 Write quiz integration tests
+  - [x] 17.3 Write quiz integration tests
     - Assert the RLS policy withholds self-answers during the self-answer phase and reveals them in the guessing/complete phase (**Property 28**), and that scoring/results are correct end to end
+    - Added two live-stack tests covering the full two-question lifecycle, one-active-session rejection, response and direct-RLS withholding/reveal, rejected-duplicate state preservation, normalized scoring, completed results, and displaced-token denial. Writing the suite aligned duplicate answer/guess HTTP responses with conflict semantics (`409`).
     - _Requirements: 8.4, 8.7, 8.8_
 
 - [ ] 18. Calendar and reminder wiring — **[DEFERRED, post-MVP]**
