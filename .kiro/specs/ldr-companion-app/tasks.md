@@ -360,8 +360,9 @@ The game-related cron jobs (20.1) were initially deferred and then pulled back I
     - Added the authenticated `quiz` Edge Function plus service-role-only transactional RPCs. Pairing membership, catalog/question membership, phase, duplicate submissions, and payload shape are rechecked under database locks; the partial unique index arbitrates concurrent starts. Phase gates and score increments are committed atomically, while exact answer matching stays shared with `@ldr/core`. A clean local reset, schema lint, Edge typecheck, and full two-question live smoke all pass.
     - _Requirements: 8.2, 8.3, 8.5, 8.6, 8.7, 8.8, 8.10, 8.11, 8.12, 8.13_
 
-  - [ ] 17.2 Wire the client quiz module with RLS-backed withholding
+  - [x] 17.2 Wire the client quiz module with RLS-backed withholding
     - Implement the client `QuizModule` reading through RLS so the partner's self-answers are non-selectable during the self-answer phase and results (self-answers, guesses, scores) surface on completion
+    - Added `packages/core/src/quiz/` with a caller-scoped Supabase adapter and client module. Catalog/session reads go directly through authenticated RLS while every mutation invokes the authoritative `quiz` function; completed reads assemble full `QuizResults`, and incomplete reads never synthesize absent partner answers. Seven unit tests cover catalog, mutations, rejection stability, withheld views, caching, and completed results.
     - _Requirements: 8.1, 8.4, 8.8_
 
   - [ ] 17.3 Write quiz integration tests

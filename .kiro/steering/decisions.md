@@ -32,6 +32,7 @@ Choices made while implementing the spec that the spec itself does not settle. E
 
 - **Postgres derives phase transitions under the session-row lock.** The Edge Function runs the shared pure state machine first for validation and response semantics, but never writes that speculative aggregate back. The RPC locks the current row, inserts exactly one submission, recounts the locked session, and advances the phase only from committed data. This prevents simultaneous final answers or guesses from losing a submission or stranding the session in the prior phase. — `supabase/migrations/20260906000001_quiz_transaction_rpcs.sql`
 - **Answer matching stays in core; score mutation stays in SQL.** Exact matching includes shared Unicode normalization behavior that should not be reimplemented in PL/pgSQL. The authenticated Edge Function computes only the trusted `matched` boolean, then a service-role-only RPC increments the actor's score document while holding the session lock. Authenticated clients cannot invoke these RPCs directly. — `supabase/functions/quiz/index.ts`
+- **Quiz reads deliberately bypass the Edge Function.** Mutations need server authority, but reads use the ordinary caller-scoped Supabase client so `quiz_self_answers_select_withheld` remains the security boundary. The client module never fills an absent partner answer from another response or cache while RLS is withholding it. — `packages/core/src/quiz/supabase-ports.ts`
 
 ## Account deletion (21A.3)
 
