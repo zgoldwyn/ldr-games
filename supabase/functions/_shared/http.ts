@@ -44,6 +44,8 @@ export function statusForErrorCode(code: string): number {
     case "INVITATION_NOT_FOUND":
     case "SESSION_NOT_FOUND":
     case "GAME_NOT_FOUND":
+    case "QUIZ_NOT_FOUND":
+    case "QUESTION_NOT_FOUND":
     // A sync change addressed to a shared row that does not exist (and whose
     // item type is created by its own flow, not the write path).
     case "ITEM_NOT_FOUND":
@@ -69,6 +71,8 @@ export function statusForErrorCode(code: string): number {
     // action must match the session's current lifecycle state.
     case "PAIRING_REQUIRED":
     case "INVALID_SESSION_STATE":
+    case "QUIZ_SESSION_IN_PROGRESS":
+    case "WRONG_PHASE":
     // Only the Active_Turn_Holder may take the next turn; another partner's
     // attempt conflicts with the session's current ownership (Req 7.7).
     case "NOT_YOUR_TURN":

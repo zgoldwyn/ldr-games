@@ -19,7 +19,11 @@ import {
   statusForErrorCode,
 } from "../_shared/http.ts";
 import { accountTopic, broadcast } from "../_shared/realtime.ts";
-import { authenticatedAccountId, serviceClient } from "../_shared/supabase.ts";
+import {
+  authenticatedAccountId,
+  serviceClient,
+  tokenEpoch,
+} from "../_shared/supabase.ts";
 
 const DRAWINGS_BUCKET = "drawings";
 const DELETION_STARTED_KEY = "account_deletion_started";
@@ -450,30 +454,4 @@ async function removeStoragePrefix(
   }
 
   return null;
-}
-
-/** Read the already-verified JWT's integer epoch claim without trusting it. */
-function tokenEpoch(req: Request): number | null {
-  const header = req.headers.get("Authorization") ?? "";
-  const token = header.match(/^Bearer\s+(.+)$/i)?.[1];
-  const encodedPayload = token?.split(".")[1];
-  if (!encodedPayload) return null;
-
-  try {
-    const normalized = encodedPayload.replaceAll("-", "+").replaceAll("_", "/");
-    const padded = normalized.padEnd(
-      normalized.length + ((4 - normalized.length % 4) % 4),
-      "=",
-    );
-    const payload = JSON.parse(atob(padded)) as Record<string, unknown>;
-    const nested = payload.app_metadata;
-    const raw = payload.epoch ?? (
-      nested && typeof nested === "object"
-        ? (nested as Record<string, unknown>).epoch
-        : undefined
-    );
-    return typeof raw === "number" && Number.isInteger(raw) ? raw : null;
-  } catch {
-    return null;
-  }
 }

@@ -28,6 +28,11 @@ Choices made while implementing the spec that the spec itself does not settle. E
 - **The error envelope is unwrapped by hand, in one shared place.** `functions.invoke` collapses every non-2xx into `FunctionsHttpError` and discards the parsed body, but the raw `Response` survives on `error.context`. Without reading it back, `ALREADY_PAIRED` and `NOT_YOUR_TURN` are indistinguishable from a network failure. It lives in `supabase/function-error.ts` rather than per-feature because a second copy is a second chance to get the `context` unwrapping subtly wrong.
 - **Unknown codes fall back rather than pass through.** `narrowCode` keeps a newer server's code, or an `INTERNAL_ERROR`, out of the typed vocabulary a shell switches on.
 
+## Quiz transactions (17.1)
+
+- **Postgres derives phase transitions under the session-row lock.** The Edge Function runs the shared pure state machine first for validation and response semantics, but never writes that speculative aggregate back. The RPC locks the current row, inserts exactly one submission, recounts the locked session, and advances the phase only from committed data. This prevents simultaneous final answers or guesses from losing a submission or stranding the session in the prior phase. — `supabase/migrations/20260906000001_quiz_transaction_rpcs.sql`
+- **Answer matching stays in core; score mutation stays in SQL.** Exact matching includes shared Unicode normalization behavior that should not be reimplemented in PL/pgSQL. The authenticated Edge Function computes only the trusted `matched` boolean, then a service-role-only RPC increments the actor's score document while holding the session lock. Authenticated clients cannot invoke these RPCs directly. — `supabase/functions/quiz/index.ts`
+
 ## Account deletion (21A.3)
 
 - **Auth is deleted last, and app metadata carries retry context.** Postgres, Storage, and GoTrue cannot participate in one transaction. The application-data RPC patches `auth.users.raw_app_meta_data` atomically with its commit, recording `account_deletion_started` plus every current/historical pairing id. If Storage or credential deletion then fails, the still-valid Auth identity can retry even though its `accounts` row is already gone. Removing the Auth user last releases the email only after every stored-image prefix is gone. — `supabase/functions/delete-account/index.ts`

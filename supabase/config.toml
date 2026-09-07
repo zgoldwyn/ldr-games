@@ -536,6 +536,14 @@ verify_jwt = true
 import_map = "./functions/deno.json"
 entrypoint = "./functions/async-take-turn/index.ts"
 
+[functions.quiz]
+enabled = true
+# Quiz starts and answer/guess submissions are server-authoritative and tied to
+# the caller's active pairing, so a verified JWT is required (Req 8.2-8.13).
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/quiz/index.ts"
+
 [functions.sync-write]
 enabled = true
 # The server-authoritative shared-data write path (Req 5.2, 5.5, 5.6): it applies

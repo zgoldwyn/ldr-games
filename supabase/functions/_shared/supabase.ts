@@ -12,18 +12,15 @@
 // See design.md "Key Design Decisions" (Edge Functions run with the service
 // role and are the only path allowed to perform sensitive writes).
 
-import {
-  createClient,
-  type SupabaseClient,
-} from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 /** Supabase project URL, injected into the edge runtime. */
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 /** Anon key, used only to construct the caller-scoped client. */
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 /** Service-role key (BYPASSRLS) for authoritative writes. */
-const SUPABASE_SERVICE_ROLE_KEY =
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
+  "";
 
 /**
  * A service-role client. Never persists a session and never auto-refreshes; it
@@ -54,4 +51,30 @@ export async function authenticatedAccountId(
   const { data, error } = await scoped.auth.getUser();
   if (error || !data.user) return null;
   return data.user.id;
+}
+
+/** Read the already-verified JWT's integer application-session epoch claim. */
+export function tokenEpoch(req: Request): number | null {
+  const header = req.headers.get("Authorization") ?? "";
+  const token = header.match(/^Bearer\s+(.+)$/i)?.[1];
+  const encodedPayload = token?.split(".")[1];
+  if (!encodedPayload) return null;
+
+  try {
+    const normalized = encodedPayload.replaceAll("-", "+").replaceAll("_", "/");
+    const padded = normalized.padEnd(
+      normalized.length + ((4 - normalized.length % 4) % 4),
+      "=",
+    );
+    const payload = JSON.parse(atob(padded)) as Record<string, unknown>;
+    const nested = payload.app_metadata;
+    const raw = payload.epoch ?? (
+      nested && typeof nested === "object"
+        ? (nested as Record<string, unknown>).epoch
+        : undefined
+    );
+    return typeof raw === "number" && Number.isInteger(raw) ? raw : null;
+  } catch {
+    return null;
+  }
 }

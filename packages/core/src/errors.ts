@@ -69,6 +69,7 @@ export type AsyncErrorCode =
 /** Quiz failures (Requirement 8). */
 export type QuizErrorCode =
   | 'PAIRING_REQUIRED' // 8.10 cannot start without a partner
+  | 'QUIZ_NOT_FOUND'
   | 'QUIZ_SESSION_IN_PROGRESS' // 8.11 one active session per pairing
   | 'SESSION_NOT_FOUND'
   | 'QUESTION_NOT_FOUND'
@@ -186,6 +187,7 @@ export const ERROR_CODES = {
   NOT_YOUR_TURN: 'NOT_YOUR_TURN',
   INVALID_TURN: 'INVALID_TURN',
   QUIZ_SESSION_IN_PROGRESS: 'QUIZ_SESSION_IN_PROGRESS',
+  QUIZ_NOT_FOUND: 'QUIZ_NOT_FOUND',
   QUESTION_NOT_FOUND: 'QUESTION_NOT_FOUND',
   INVALID_ANSWER: 'INVALID_ANSWER',
   ALREADY_ANSWERED: 'ALREADY_ANSWERED',

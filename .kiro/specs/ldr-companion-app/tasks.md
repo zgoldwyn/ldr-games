@@ -355,8 +355,9 @@ The game-related cron jobs (20.1) were initially deferred and then pulled back I
 - [ ] 17. Quiz wiring — **[DEFERRED, post-MVP]**
   - Cost of deferring: Requirement 8 is entirely unavailable. The pure quiz logic and its property tests (7.x) are already done, so this is wiring only. Note there is **no seed data** for `quiz_defs` / `quiz_questions` yet — whoever picks this up needs to create some before anything can be exercised end to end.
 
-  - [ ] 17.1 Implement quiz submission and scoring Edge Function
+  - [x] 17.1 Implement quiz submission and scoring Edge Function
     - Handle `startSession` (partial-UNIQUE one-active-per-pairing), `submitSelfAnswer`/`submitGuess` (validation, retain prior on reject), phase transitions, and `scoreSession`; enforce `requirePairing`
+    - Added the authenticated `quiz` Edge Function plus service-role-only transactional RPCs. Pairing membership, catalog/question membership, phase, duplicate submissions, and payload shape are rechecked under database locks; the partial unique index arbitrates concurrent starts. Phase gates and score increments are committed atomically, while exact answer matching stays shared with `@ldr/core`. A clean local reset, schema lint, Edge typecheck, and full two-question live smoke all pass.
     - _Requirements: 8.2, 8.3, 8.5, 8.6, 8.7, 8.8, 8.10, 8.11, 8.12, 8.13_
 
   - [ ] 17.2 Wire the client quiz module with RLS-backed withholding

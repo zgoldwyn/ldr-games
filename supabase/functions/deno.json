@@ -17,7 +17,9 @@
     "@ldr/core/drawing-images": "../../packages/core/dist/storage/drawing-images.js",
     "@ldr/core/rt-engine": "../../packages/core/dist/domain/rt-engine.js",
     "@ldr/core/rt-session": "../../packages/core/dist/domain/rt-session.js",
-    "@ldr/core/rt-tic-tac-toe": "../../packages/core/dist/domain/rt-tic-tac-toe.js"
+    "@ldr/core/rt-tic-tac-toe": "../../packages/core/dist/domain/rt-tic-tac-toe.js",
+    "@ldr/core/quiz": "../../packages/core/dist/domain/quiz.js",
+    "@ldr/core/quiz-session": "../../packages/core/dist/domain/quiz-session.js"
   },
   "lint": {
     "rules": {

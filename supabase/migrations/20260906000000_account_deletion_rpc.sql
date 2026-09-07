@@ -34,6 +34,13 @@ declare
   v_pairings      uuid[] := '{}'::uuid[];
   v_epoch         integer;
 begin
+  -- Pairing-owned mutations lock pairing before accounts. Match that order so
+  -- deletion cannot deadlock with an in-flight game/quiz submission which
+  -- holds the pairing while checking its members.
+  if p_pairing is not null then
+    perform 1 from pairings where id = p_pairing for update;
+  end if;
+
   -- Serialize deletion with pairing acceptance/dissolution and other account
   -- transitions. A missing row means this request cannot begin; retries after
   -- this transaction are handled by the Edge Function's Auth metadata marker.
