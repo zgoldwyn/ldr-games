@@ -510,8 +510,9 @@ The game-related cron jobs (20.1) were initially deferred and then pulled back I
     - Verified by applying the migration locally, `supabase db lint --local` (no schema errors), Deno type/format checks, and a local Edge smoke run proving an unconfirmed request is a no-op while a confirmed unpaired deletion removes both the application row and Auth user.
     - _Requirements: 12.1, 12.3, 12.4, 12.5, 12.6, 12.7_
 
-  - [ ] 21A.4 Write account-deletion integration tests
+  - [x] 21A.4 Write account-deletion integration tests
     - Assert no row anywhere references the deleted account and the email can register again (**Property 42**), the remaining partner is left consistent and notified (**Property 43**), tokens for the deleted account are refused (12.5), pairing-owned rows AND Storage objects are gone (12.6), and an unconfirmed request changes nothing (**Property 44**)
+    - Added 4 live-stack tests covering unpaired deletion plus same-email re-registration, paired deletion within the 30-second budget, surviving-partner state/notification, account- and pairing-owned SQL cascades, current and historical pairing Storage-prefix removal, post-delete and displaced-token rejection, and the byte-identical unconfirmed no-op. The strengthened historical-pairing case pins the requirement that content from ANY pairing the account belonged to is erased, not only its current pairing.
     - _Requirements: 12.4, 12.5, 12.6, 12.8_
 
 - [ ] 22. Platform shells
