@@ -46,6 +46,7 @@ export function statusForErrorCode(code: string): number {
     case "GAME_NOT_FOUND":
     case "QUIZ_NOT_FOUND":
     case "QUESTION_NOT_FOUND":
+    case "DATE_NOT_FOUND":
     // A sync change addressed to a shared row that does not exist (and whose
     // item type is created by its own flow, not the write path).
     case "ITEM_NOT_FOUND":

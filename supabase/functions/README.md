@@ -17,6 +17,7 @@ supabase/functions/
   health/          # health-check skeleton used to verify the edge runtime works
   auth-login/      # single-session login: verify creds, bump epoch, revoke prior client
   delete-account/  # permanent account/data/Storage/Auth deletion with retry marker
+  calendar/         # RLS-scoped relationship-date validation and writes
   quiz/             # paired quiz start, self-answer, guessing, scoring, results
   rt-presence/     # real-time games: Presence-driven 30s disconnect -> pause + notify
   rt-rejoin/       # real-time games: resume from preserved state within 5 min

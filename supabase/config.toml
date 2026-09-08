@@ -552,3 +552,12 @@ enabled = true
 verify_jwt = true
 import_map = "./functions/deno.json"
 entrypoint = "./functions/sync-write/index.ts"
+
+[functions.calendar]
+# Relationship-date writes use a caller-scoped database client, so the
+# authenticated caller's active-pairing and session-epoch RLS policies authorize
+# every create, edit, and delete (Req 9.1-9.6).
+enabled = true
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/calendar/index.ts"

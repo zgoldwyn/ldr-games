@@ -16,6 +16,7 @@ export * from './sync/index.js';
 export * from './store/index.js';
 export * from './games/index.js';
 export * from './quiz/index.js';
+export * from './calendar/index.js';
 export * from './connection/index.js';
 export * from './storage/index.js';
 export * from './notifications/index.js';

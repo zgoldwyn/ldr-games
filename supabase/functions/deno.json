@@ -5,6 +5,7 @@
     "@supabase/functions-js": "jsr:@supabase/functions-js@^2",
     "std/": "https://deno.land/std@0.224.0/",
     "@ldr/core/common": "../../packages/core/dist/domain/common.js",
+    "@ldr/core/calendar-helpers": "../../packages/core/dist/domain/calendar-helpers.js",
     "@ldr/core/account-deletion": "../../packages/core/dist/domain/account-deletion.js",
     "@ldr/core/pairing-logic": "../../packages/core/dist/domain/pairing-logic.js",
     "@ldr/core/async-engine": "../../packages/core/dist/domain/async-engine.js",

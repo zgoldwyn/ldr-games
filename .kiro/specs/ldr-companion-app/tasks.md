@@ -373,8 +373,9 @@ The game-related cron jobs (20.1) were initially deferred and then pulled back I
 - [ ] 18. Calendar and reminder wiring — **[DEFERRED, post-MVP]**
   - Cost of deferring: Requirements 9 and 10 are entirely unavailable. The pure logic (8.x) is done, as is the Realtime groundwork — migration `20260901000002` already publishes `relationship_dates` and `reminders` and sets `REPLICA IDENTITY FULL` on both so deletes propagate, so this is the cheapest deferred section to pick up.
 
-  - [ ] 18.1 Implement date create/edit/delete writes with Postgres Changes
+  - [x] 18.1 Implement date create/edit/delete writes with Postgres Changes
     - Wire pairing-scoped date create/edit/delete through RLS-guarded writes (validation re-run server-side, not-found rejection) propagating to both partners within 5s, and list dates via `orderDates`
+    - Added an authenticated `calendar` Edge Function which runs the shared title/date validators and writes with the caller's bearer token, preserving the existing pairing/epoch RLS boundary. The client CalendarModule provides ordered reads, local cache, create/edit/delete, and pairing-filtered Postgres Changes with stale-read race protection. A database migration independently rejects ECMAScript-whitespace-only titles and years outside 1..9999. Fourteen unit tests and six live-stack tests pass, including modified-client constraint probes and measured partner propagation (~1.1s under the 5s budget).
     - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7_
 
   - [ ] 18.2 Implement setReminder and reminder scheduling rows

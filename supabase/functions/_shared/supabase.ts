@@ -33,6 +33,22 @@ export function serviceClient(): SupabaseClient {
 }
 
 /**
+ * A short-lived client carrying the request's bearer token. Unlike
+ * {@link serviceClient}, every table operation performed through this client is
+ * subject to the caller's grants and RLS policies. Return null when the request
+ * did not provide a bearer token so endpoints can fail closed before querying.
+ */
+export function callerClient(req: Request): SupabaseClient | null {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader) return null;
+
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: authHeader } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+/**
  * Resolves the authenticated account id from the request's `Authorization`
  * header. Returns `null` when the header is missing or the token does not
  * resolve to a user, so callers can respond with `UNAUTHENTICATED`.
@@ -40,13 +56,8 @@ export function serviceClient(): SupabaseClient {
 export async function authenticatedAccountId(
   req: Request,
 ): Promise<string | null> {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader) return null;
-
-  const scoped = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: authHeader } },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  const scoped = callerClient(req);
+  if (!scoped) return null;
 
   const { data, error } = await scoped.auth.getUser();
   if (error || !data.user) return null;
