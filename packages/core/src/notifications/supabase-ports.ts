@@ -12,16 +12,38 @@
 import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 
 import type { AccountId, NotificationId, Timestamp } from '../domain/common.js';
-import type {
-  NotificationCategory,
-  NotificationSettings,
-} from '../domain/notification.js';
+import { canonicalNotificationCategories, isNotificationCategory } from '../domain/notification.js';
+import type { NotificationSettings } from '../domain/notification.js';
 import type { ChannelStatus } from '../sync/connectivity.js';
 import type { NotificationPorts, NotificationRow } from './notification-module.js';
 
 /** Columns the module needs from a notification row. */
 const NOTIFICATION_COLUMNS =
   'id, recipient_account_id, category, payload, created_at, dedupe_key, acknowledged_at, delivered_at';
+const SETTINGS_COLUMNS = 'account_id, disabled_categories, expo_push_token';
+
+/** The subset of a notification_settings row this adapter consumes and returns. */
+export interface NotificationSettingsRow {
+  readonly account_id: string;
+  readonly disabled_categories: readonly unknown[] | null;
+  readonly expo_push_token: string | null;
+}
+
+/**
+ * Map a settings row without allowing malformed persisted category text to
+ * escape into the domain. The canonical order matches the domain vocabulary,
+ * so equivalent database arrays produce one stable in-memory representation.
+ */
+export function notificationSettingsFromRow(row: NotificationSettingsRow): NotificationSettings {
+  const disabledCategories = canonicalNotificationCategories(
+    (row.disabled_categories ?? []).filter(isNotificationCategory),
+  );
+  return {
+    accountId: row.account_id as AccountId,
+    disabledCategories,
+    ...(row.expo_push_token === null ? {} : { expoPushToken: row.expo_push_token }),
+  };
+}
 
 /**
  * Build {@link NotificationPorts} over an authenticated Supabase client.
@@ -79,23 +101,13 @@ export function createSupabaseNotificationPorts(client: SupabaseClient): Notific
     async fetchSettings(accountId): Promise<NotificationSettings | null> {
       const { data, error } = await client
         .from('notification_settings')
-        .select('account_id, disabled_categories, expo_push_token')
+        .select(SETTINGS_COLUMNS)
         .eq('account_id', accountId)
         .maybeSingle();
 
       if (error || data === null) return null;
 
-      const row = data as {
-        account_id: string;
-        disabled_categories: string[] | null;
-        expo_push_token: string | null;
-      };
-      const token = row.expo_push_token;
-      return {
-        accountId: row.account_id as AccountId,
-        disabledCategories: (row.disabled_categories ?? []) as NotificationCategory[],
-        ...(token === null ? {} : { expoPushToken: token }),
-      };
+      return notificationSettingsFromRow(data as unknown as NotificationSettingsRow);
     },
 
     async acknowledge(id: NotificationId, at: Timestamp): Promise<NotificationRow | null> {

@@ -4,8 +4,8 @@
  *
  * The eligibility rules themselves (`shouldDeliver`, `isExpired`, dedupe) live in
  * `domain/notification-delivery.ts` and are shared with the server. This
- * directory holds the client wiring over them. Out-of-app push (task 19.2) and
- * the settings write path (19.1b) are deferred.
+ * directory holds the client wiring over them. Out-of-app push (task 19.2) is
+ * deferred; category settings reads and writes are client-authenticated here.
  */
 export * from './notification-module.js';
 export * from './supabase-ports.js';

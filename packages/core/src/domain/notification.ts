@@ -5,12 +5,38 @@ import type { AccountId, NotificationId, Timestamp } from './common.js';
 
 /** Categories a user may individually enable or disable (Requirement 11.3). */
 export type NotificationCategory =
-  | 'pairing'
-  | 'game_invite'
-  | 'async_turn'
-  | 'reminder'
-  | 'quiz'
-  | 'system';
+  'pairing' | 'game_invite' | 'async_turn' | 'reminder' | 'quiz' | 'system';
+
+/**
+ * The notification-category vocabulary in its canonical persistence order.
+ *
+ * Settings store categories as a Postgres array. Keeping the array in this
+ * order makes equivalent choices produce the same durable value, regardless of
+ * the order in which a person toggled the individual controls.
+ */
+export const NOTIFICATION_CATEGORIES = [
+  'pairing',
+  'game_invite',
+  'async_turn',
+  'reminder',
+  'quiz',
+  'system',
+] as const satisfies readonly NotificationCategory[];
+
+/** Whether an untrusted persistence value is one of the domain categories. */
+export function isNotificationCategory(value: unknown): value is NotificationCategory {
+  return (
+    typeof value === 'string' && (NOTIFICATION_CATEGORIES as readonly string[]).includes(value)
+  );
+}
+
+/** Deduplicate categories and order them for stable notification-settings writes. */
+export function canonicalNotificationCategories(
+  categories: readonly NotificationCategory[],
+): NotificationCategory[] {
+  const disabled = new Set(categories);
+  return NOTIFICATION_CATEGORIES.filter((category) => disabled.has(category));
+}
 
 /**
  * A durable notification addressed to a single recipient account (the RLS

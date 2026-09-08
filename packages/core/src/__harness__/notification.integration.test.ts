@@ -3,8 +3,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { accountId as toAccountId } from '../domain/common.js';
 import type { Notification } from '../domain/notification.js';
 import { NOTIFICATION_RETENTION_MS } from '../domain/notification-delivery.js';
+import type { DataChange } from '../domain/sync.js';
 import { createNotificationModule } from '../notifications/notification-module.js';
 import { createSupabaseNotificationPorts } from '../notifications/supabase-ports.js';
+import { createSupabaseSyncPorts } from '../sync/supabase-ports.js';
+import { createSyncModule } from '../sync/sync-module.js';
 import {
   callFunction,
   createServiceClient,
@@ -33,6 +36,16 @@ const cfg = getIntegrationConfig();
 /** Req 11.1 / 11.2 budget. */
 const NOTIFY_BUDGET_MS = 5_000;
 const SUBSCRIBE_TIMEOUT_MS = 10_000;
+
+interface LoginResponse {
+  readonly epoch: number;
+  readonly session: { readonly access_token: string };
+  readonly user: { readonly id: string };
+}
+
+interface FunctionErrorResponse {
+  readonly error?: { readonly code?: string; readonly message?: string };
+}
 
 describe.skipIf(cfg === null)('In-app notifications (integration)', () => {
   const config = cfg as IntegrationConfig;
@@ -99,6 +112,22 @@ describe.skipIf(cfg === null)('In-app notifications (integration)', () => {
       .single();
     expect(error).toBeNull();
     return data?.id as string;
+  }
+
+  function settingsChange(
+    account: string,
+    disabledCategories: readonly string[],
+    physical = Date.now(),
+    counter = 0,
+  ): DataChange {
+    const originAccountId = toAccountId(account);
+    return {
+      itemId: account,
+      itemType: 'notification_settings',
+      payload: { disabled_categories: [...disabledCategories] },
+      hlc: { physical, counter, originAccountId },
+      originAccountId,
+    };
   }
 
   beforeAll(async () => {
@@ -256,23 +285,174 @@ describe.skipIf(cfg === null)('In-app notifications (integration)', () => {
   });
 
   // -------------------------------------------------------------------------
-  // Req 11.3 / 11.4 — settings and retention against real rows
+  // Task 19.1b / Req 11.3 — settings RLS and the module write path
   // -------------------------------------------------------------------------
-  it('withholds a disabled category (Req 11.3)', async () => {
+  it('denies direct settings mutations for the owner and another account (Task 19.1b)', async () => {
+    const a = await member();
+    const b = await member();
+
+    const seeded = await admin
+      .from('notification_settings')
+      .insert({ account_id: a.id, disabled_categories: ['game_invite'] })
+      .select('account_id, disabled_categories')
+      .single();
+    expect(seeded.error).toBeNull();
+
+    // Authenticated clients may read their own row, but direct INSERT/UPDATE
+    // are revoked: settings mutations must carry an HLC through sync-write.
+    const ownerRead = await a.client
+      .from('notification_settings')
+      .select('account_id, disabled_categories');
+    expect(ownerRead.error).toBeNull();
+    expect(ownerRead.data ?? []).toHaveLength(1);
+
+    const ownerInsert = await a.client
+      .from('notification_settings')
+      .insert({ account_id: a.id, disabled_categories: ['quiz'] });
+    expect(ownerInsert.error).not.toBeNull();
+
+    const ownerUpdate = await a.client
+      .from('notification_settings')
+      .update({ disabled_categories: ['reminder'] })
+      .select('account_id, disabled_categories');
+    expect(ownerUpdate.error).not.toBeNull();
+    expect(ownerUpdate.data ?? []).toEqual([]);
+
+    // These are deliberately unfiltered probes. The adapter's account filter
+    // cannot make this assertion pass: only notification_settings RLS can hide
+    // A's row from B.
+    const otherRead = await b.client
+      .from('notification_settings')
+      .select('account_id, disabled_categories');
+    expect(otherRead.error).toBeNull();
+    expect(otherRead.data ?? []).toEqual([]);
+
+    const otherInsert = await b.client
+      .from('notification_settings')
+      .insert({ account_id: a.id, disabled_categories: ['quiz'] });
+    expect(otherInsert.error).not.toBeNull();
+
+    // UPDATE may be represented by PostgREST as an empty successful result
+    // rather than an error when USING hides the target. Either way, the row
+    // must not change; the service-role read is only an observation oracle.
+    const otherUpdate = await b.client
+      .from('notification_settings')
+      .update({ disabled_categories: ['quiz'] })
+      .select('account_id, disabled_categories');
+    expect(otherUpdate.error).not.toBeNull();
+    expect(otherUpdate.data ?? []).toEqual([]);
+
+    const afterDeniedWrite = await admin
+      .from('notification_settings')
+      .select('account_id, disabled_categories')
+      .eq('account_id', a.id)
+      .single();
+    expect(afterDeniedWrite.error).toBeNull();
+    expect(afterDeniedWrite.data?.disabled_categories).toEqual(['game_invite']);
+  });
+
+  it('denies a displaced token for settings reads and writes (Task 19.1b)', async () => {
+    const a = await member();
+
+    const seeded = await admin
+      .from('notification_settings')
+      .insert({ account_id: a.id, disabled_categories: ['game_invite'] })
+      .select('account_id, disabled_categories')
+      .single();
+    expect(seeded.error).toBeNull();
+
+    const first = await a.client
+      .from('notification_settings')
+      .select('account_id, disabled_categories');
+    expect(first.error).toBeNull();
+    expect(first.data ?? []).toHaveLength(1);
+
+    // auth-login bumps the account epoch and returns a token carrying the new
+    // epoch. `a.client` deliberately keeps the original access token, making
+    // every probe below a genuine stale-token request.
+    const displaced = await callFunction<LoginResponse>(config, 'auth-login', {
+      email: a.account.email,
+      password: a.account.password,
+    });
+    expect(displaced.status).toBe(200);
+    expect(displaced.body.user.id).toBe(a.id);
+    expect(displaced.body.epoch).toBeGreaterThan(0);
+
+    const staleRead = await a.client
+      .from('notification_settings')
+      .select('account_id, disabled_categories');
+    expect(staleRead.error).toBeNull();
+    expect(staleRead.data ?? []).toEqual([]);
+
+    const staleInsert = await a.client
+      .from('notification_settings')
+      .insert({ account_id: a.id, disabled_categories: ['quiz'] });
+    expect(staleInsert.error).not.toBeNull();
+
+    const staleUpdate = await a.client
+      .from('notification_settings')
+      .update({ disabled_categories: ['quiz'] })
+      .select('account_id, disabled_categories');
+    expect(staleUpdate.error).not.toBeNull();
+    expect(staleUpdate.data ?? []).toEqual([]);
+
+    // Direct writes are not the only bypass to close: sync-write uses the
+    // service role, so it must independently reject this stale JWT epoch.
+    const staleSync = await callFunction<FunctionErrorResponse>(
+      config,
+      'sync-write',
+      {
+        change: settingsChange(a.id, ['quiz'], Date.now() + 1_000),
+      },
+      a.token,
+    );
+    expect(staleSync.status).toBe(401);
+    expect(staleSync.body.error?.code).toBe('SESSION_SUPERSEDED');
+
+    const afterDisplacement = await admin
+      .from('notification_settings')
+      .select('account_id, disabled_categories')
+      .eq('account_id', a.id)
+      .single();
+    expect(afterDisplacement.error).toBeNull();
+    expect(afterDisplacement.data?.disabled_categories).toEqual(['game_invite']);
+  });
+
+  it('disables and re-enables a category through NotificationModule (Req 11.3)', async () => {
     const a = await member();
     await seed(a.id, { category: 'async_turn', dedupe_key: 'turn' });
     await seed(a.id, { category: 'game_invite', dedupe_key: 'invite' });
 
-    // The settings WRITE path is task 19.1b; the row is seeded here so the READ
-    // path's filtering is exercised now rather than being bolted on later.
-    const { error } = await admin
-      .from('notification_settings')
-      .insert({ account_id: a.id, disabled_categories: ['game_invite'] });
-    expect(error).toBeNull();
+    const sync = createSyncModule(createSupabaseSyncPorts(a.client));
+    sync.observe({ kind: 'network', online: true });
+    const notificationPorts = createSupabaseNotificationPorts(a.client);
+    // The real Sync Module is the only writer collaborator. Direct table
+    // writes are revoked by Task 19.1b's migration.
+    const module = createNotificationModule(notificationPorts, {}, undefined, sync);
+    const accountId = toAccountId(a.id);
 
-    const module = createNotificationModule(createSupabaseNotificationPorts(a.client));
-    const listed = await module.list(toAccountId(a.id));
-    expect(listed.map((n) => n.category)).toEqual(['async_turn']);
+    const disabled = await module.setCategoryEnabled(accountId, 'game_invite', false);
+    expect(disabled?.disabledCategories).toEqual(['game_invite']);
+    expect((await module.list(accountId)).map((n) => n.category)).toEqual(['async_turn']);
+
+    // A lower HLC is accepted as a sync decision but reported superseded, and
+    // must not clobber the canonical disabled-category row.
+    const stale = await sync.applyChange(settingsChange(accountId, ['quiz'], 0));
+    expect(stale.kind).toBe('applied');
+    if (stale.kind === 'applied') expect(stale.applied.superseded).toBe(true);
+    const afterStale = await admin
+      .from('notification_settings')
+      .select('disabled_categories')
+      .eq('account_id', a.id)
+      .single();
+    expect(afterStale.data?.disabled_categories).toEqual(['game_invite']);
+
+    const enabled = await module.setCategoryEnabled(accountId, 'game_invite', true);
+    expect(enabled?.disabledCategories).toEqual([]);
+    expect((await module.list(accountId)).map((n) => n.category)).toEqual(
+      expect.arrayContaining(['async_turn', 'game_invite']),
+    );
+    expect(await module.list(accountId)).toHaveLength(2);
   });
 
   it('withholds a notification past the 30-day window (Req 11.4)', async () => {

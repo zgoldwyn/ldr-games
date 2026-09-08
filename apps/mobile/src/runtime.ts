@@ -57,9 +57,7 @@ export type RuntimeResult =
   | { readonly ok: false; readonly message: string };
 
 /** Restore tokens, hydrate the cache, and decide which stack to show. */
-export async function bootRuntime(
-  listeners: ConnectionListeners = {},
-): Promise<RuntimeResult> {
+export async function bootRuntime(listeners: ConnectionListeners = {}): Promise<RuntimeResult> {
   const config = readSupabaseConfig();
   if (config === null) {
     return {
@@ -80,7 +78,12 @@ export async function bootRuntime(
 
   const store = createLocalStore();
   await hydrateStore(store, bulkKv);
-  for (const kind of ['rt_session', 'async_session', 'notification'] as const) {
+  for (const kind of [
+    'rt_session',
+    'async_session',
+    'notification',
+    'notification_settings',
+  ] as const) {
     store.subscribe(kind, () => {
       void persistStore(store, bulkKv);
     });
@@ -92,11 +95,6 @@ export async function bootRuntime(
   const pairing = createPairingModule(createSupabasePairingPorts(client));
   const rt = createRealTimeGameModule(createSupabaseRTGamePorts(client), store);
   const asyncGames = createAsyncGameModule(createSupabaseAsyncGamePorts(client), store);
-  const notifications = createNotificationModule(
-    createSupabaseNotificationPorts(client),
-    {},
-    store,
-  );
   const connection = createConnectionManager({
     ports: createSupabaseConnectionPorts(client),
     syncPorts: createSupabaseSyncPorts(client),
@@ -105,6 +103,12 @@ export async function bootRuntime(
     async: asyncGames,
     listeners,
   });
+  const notifications = createNotificationModule(
+    createSupabaseNotificationPorts(client),
+    {},
+    store,
+    connection.sync,
+  );
 
   // Restores the access token so currentSession's registry read is authorized.
   await client.auth.getSession();

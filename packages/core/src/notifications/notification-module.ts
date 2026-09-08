@@ -14,8 +14,8 @@
  * acknowledges its OWN rows directly. Routing that through a function would add a
  * hop without adding a check the database is not already making.
  *
- * WHAT IS DEFERRED. Out-of-app push (task 19.2) and the settings WRITE path
- * (19.1b) are not here. Category filtering itself IS here, because
+ * WHAT IS DEFERRED. Out-of-app push (task 19.2) is not here. Category filtering
+ * and preference writes ARE here, because
  * `shouldDeliver` already exists and the settings table is already readable —
  * honouring a disabled category costs one query, whereas bolting the filter on
  * afterwards would mean revisiting every read path (Req 11.3).
@@ -25,12 +25,17 @@
  * task 21.3 can compose this into the Connection Manager.
  */
 import type { AccountId, NotificationId, Timestamp } from '../domain/common.js';
-import type { Notification, NotificationSettings } from '../domain/notification.js';
+import { hlcLocalEvent, initialClock } from '../domain/hlc.js';
 import {
-  isExpired,
-  shouldDeliver,
-} from '../domain/notification-delivery.js';
+  canonicalNotificationCategories,
+  type Notification,
+  type NotificationCategory,
+  type NotificationSettings,
+} from '../domain/notification.js';
+import { isExpired, shouldDeliver } from '../domain/notification-delivery.js';
+import type { DataChange, HLCTimestamp } from '../domain/sync.js';
 import type { ChannelStatus } from '../sync/connectivity.js';
+import type { ApplyOutcome } from '../sync/sync-module.js';
 import type { LocalStore, StoreListener } from '../store/local-store.js';
 
 /** A `notifications` row as PostgREST returns it. */
@@ -99,10 +104,7 @@ export interface NotificationPorts {
    * Mark one notification acknowledged AND delivered, returning the updated row
    * (or null when the id does not belong to this account, which RLS enforces).
    */
-  readonly acknowledge: (
-    id: NotificationId,
-    at: Timestamp,
-  ) => Promise<NotificationRow | null>;
+  readonly acknowledge: (id: NotificationId, at: Timestamp) => Promise<NotificationRow | null>;
 
   readonly now: () => number;
 }
@@ -119,6 +121,14 @@ export interface NotificationListeners {
   readonly onAnyNotification?: (notification: Notification) => void;
 }
 
+/**
+ * The only SyncModule capability notification settings need. Kept structural so
+ * this module neither owns a connection nor couples tests to the full sync API.
+ */
+export interface NotificationSettingsSync {
+  readonly applyChange: (change: DataChange) => Promise<ApplyOutcome>;
+}
+
 export interface NotificationModule {
   /** Subscribe to live arrivals for this account (Req 11.1, 11.2). */
   subscribe(accountId: AccountId): void;
@@ -131,6 +141,12 @@ export interface NotificationModule {
   list(accountId: AccountId): Promise<readonly Notification[]>;
   /** How many are currently eligible to present. */
   unreadCount(accountId: AccountId): Promise<number>;
+  /** Enable or disable one category without disturbing the other preferences. */
+  setCategoryEnabled(
+    accountId: AccountId,
+    category: NotificationCategory,
+    enabled: boolean,
+  ): Promise<NotificationSettings | null>;
   /**
    * Acknowledge one notification: marks it delivered and withholds it from this
    * and every later session (Req 11.6).
@@ -161,10 +177,15 @@ export function createNotificationModule(
   ports: NotificationPorts,
   listeners: NotificationListeners = {},
   store?: LocalStore,
+  settingsSync?: NotificationSettingsSync,
 ): NotificationModule {
   let teardown: (() => void) | null = null;
   /** Settings for the subscribed account, refreshed on subscribe and list. */
   let settings: NotificationSettings | null = null;
+  /** One monotonic outgoing HLC stream per settings owner. */
+  const settingsClocks = new Map<AccountId, HLCTimestamp>();
+  /** Local settings accepted into the offline queue but not yet server-confirmed. */
+  const queuedSettings = new Set<AccountId>();
 
   /**
    * Cache one notification.
@@ -175,17 +196,37 @@ export function createNotificationModule(
    * notification the user has already dismissed (Req 11.6).
    */
   function cache(notification: Notification): void {
-    store?.put(
-      'notification',
-      notification.id,
-      notification,
-      notification.acknowledgedAt ?? 0,
+    store?.put('notification', notification.id, notification, notification.acknowledgedAt ?? 0);
+  }
+
+  function rememberSettings(current: NotificationSettings): void {
+    settings = current;
+    store?.put('notification_settings', current.accountId, current);
+  }
+
+  function cachedSettingsFor(accountId: AccountId): NotificationSettings {
+    if (settings?.accountId === accountId) return settings;
+    return (
+      store?.get<NotificationSettings>('notification_settings', accountId) ??
+      defaultNotificationSettings(accountId)
     );
   }
 
   async function settingsFor(accountId: AccountId): Promise<NotificationSettings> {
-    settings = (await ports.fetchSettings(accountId)) ?? defaultNotificationSettings(accountId);
-    return settings;
+    const current =
+      (await ports.fetchSettings(accountId)) ?? defaultNotificationSettings(accountId);
+    rememberSettings(current);
+    return current;
+  }
+
+  function nextSettingsHlc(accountId: AccountId): HLCTimestamp {
+    const previous = settingsClocks.get(accountId);
+    const next =
+      previous === undefined
+        ? initialClock(accountId, ports.now())
+        : hlcLocalEvent(previous, ports.now());
+    settingsClocks.set(accountId, next);
+    return next;
   }
 
   /**
@@ -205,21 +246,20 @@ export function createNotificationModule(
   }
 
   async function eligible(accountId: AccountId): Promise<Notification[]> {
-    const [rows, current] = await Promise.all([
-      ports.fetchAll(accountId),
-      settingsFor(accountId),
-    ]);
+    const [rows, current] = await Promise.all([ports.fetchAll(accountId), settingsFor(accountId)]);
     const now = ports.now();
     const all = rows.map(notificationFromRow);
     // Everything is cached, not just the eligible ones: acknowledging a
     // notification is what makes it ineligible, and the cache has to hold the
     // acknowledged copy for the version guard above to recognise it.
     for (const notification of all) cache(notification);
-    return all
-      .filter((n) => isEligible(n, current, now))
-      // Newest first: the most recent invitation or your-turn prompt is the one
-      // the recipient most likely wants to act on.
-      .sort((a, b) => b.createdAt - a.createdAt);
+    return (
+      all
+        .filter((n) => isEligible(n, current, now))
+        // Newest first: the most recent invitation or your-turn prompt is the one
+        // the recipient most likely wants to act on.
+        .sort((a, b) => b.createdAt - a.createdAt)
+    );
   }
 
   return {
@@ -239,7 +279,7 @@ export function createNotificationModule(
           cache(notification);
           listeners.onAnyNotification?.(notification);
 
-          const current = settings ?? defaultNotificationSettings(accountId);
+          const current = cachedSettingsFor(accountId);
           if (isEligible(notification, current, ports.now())) {
             listeners.onNotification?.(notification);
           }
@@ -264,6 +304,73 @@ export function createNotificationModule(
       return (await eligible(accountId)).length;
     },
 
+    async setCategoryEnabled(
+      accountId: AccountId,
+      category: NotificationCategory,
+      enabled: boolean,
+    ): Promise<NotificationSettings | null> {
+      if (settingsSync === undefined) return null;
+      // Always start from the durable row rather than the in-memory snapshot:
+      // settings can have changed in another session, and this full-array write
+      // must not silently erase an unrelated preference. Crucially, this direct
+      // read does not replace `settings`: on a later failed write the active
+      // live/cache filter must remain exactly as it was before this call.
+      try {
+        const fetched = await ports.fetchSettings(accountId);
+        const cached = settings?.accountId === accountId ? settings : undefined;
+        const current =
+          queuedSettings.has(accountId) && cached !== undefined
+            ? cached
+            : (fetched ?? cached ?? defaultNotificationSettings(accountId));
+        const disabled = new Set(current.disabledCategories);
+        if (enabled) {
+          disabled.delete(category);
+        } else {
+          disabled.add(category);
+        }
+
+        const disabledCategories = canonicalNotificationCategories([...disabled]);
+        const outcome = await settingsSync.applyChange({
+          itemType: 'notification_settings',
+          itemId: accountId,
+          payload: { disabled_categories: disabledCategories },
+          originAccountId: accountId,
+          hlc: nextSettingsHlc(accountId),
+        });
+
+        if (outcome.kind === 'applied' && outcome.applied.superseded) {
+          // The server kept a newer HLC. Replace our optimistic candidate with
+          // the authority before letting cached/live filtering continue.
+          const authoritative =
+            (await ports.fetchSettings(accountId)) ?? defaultNotificationSettings(accountId);
+          queuedSettings.delete(accountId);
+          rememberSettings(authoritative);
+          return authoritative;
+        }
+
+        // Queued is a successful offline mutation (Req 5.4), not a failure.
+        // Both it and an applied, non-superseded change should immediately mute
+        // or unmute the local notifications while sync catches up.
+        const saved: NotificationSettings = {
+          ...current,
+          accountId,
+          disabledCategories,
+        };
+        if (outcome.kind === 'queued') {
+          queuedSettings.add(accountId);
+        } else {
+          queuedSettings.delete(accountId);
+        }
+        rememberSettings(saved);
+        return saved;
+      } catch {
+        // Port implementations normally map transport/RLS errors to null, but
+        // keep the module's failure contract and active filtering stable if a
+        // custom port rejects instead.
+        return null;
+      }
+    },
+
     async acknowledge(id: NotificationId): Promise<Notification | null> {
       const row = await ports.acknowledge(id, ports.now());
       if (row === null) return null;
@@ -275,9 +382,7 @@ export function createNotificationModule(
     async acknowledgeAll(accountId: AccountId): Promise<number> {
       const pending = await eligible(accountId);
       const at = ports.now();
-      const results = await Promise.all(
-        pending.map((n) => ports.acknowledge(n.id, at)),
-      );
+      const results = await Promise.all(pending.map((n) => ports.acknowledge(n.id, at)));
       const applied = results.filter((r) => r !== null);
       for (const row of applied) cache(notificationFromRow(row));
       return applied.length;
@@ -285,15 +390,17 @@ export function createNotificationModule(
 
     cached(accountId: AccountId): readonly Notification[] {
       if (store === undefined) return [];
-      const current = settings ?? defaultNotificationSettings(accountId);
+      const current = cachedSettingsFor(accountId);
       const now = ports.now();
-      return store
-        .list<Notification>('notification')
-        // The cache is cleared on sign-out, but filtering by recipient keeps a
-        // stale hydrated snapshot from showing another account's notifications.
-        .filter((n) => n.recipientAccountId === accountId)
-        .filter((n) => isEligible(n, current, now))
-        .sort((a, b) => b.createdAt - a.createdAt);
+      return (
+        store
+          .list<Notification>('notification')
+          // The cache is cleared on sign-out, but filtering by recipient keeps a
+          // stale hydrated snapshot from showing another account's notifications.
+          .filter((n) => n.recipientAccountId === accountId)
+          .filter((n) => isEligible(n, current, now))
+          .sort((a, b) => b.createdAt - a.createdAt)
+      );
     },
 
     subscribeCache(listener: StoreListener): () => void {

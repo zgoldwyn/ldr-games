@@ -27,7 +27,7 @@
  */
 
 /** The kinds of shared entity the MVP caches. */
-export type EntityKind = 'rt_session' | 'async_session' | 'notification';
+export type EntityKind = 'rt_session' | 'async_session' | 'notification' | 'notification_settings';
 
 /** Called after a change to the subscribed kind. */
 export type StoreListener = () => void;

@@ -43,6 +43,7 @@ import {
 import {
   authenticatedAccountId,
   serviceClient,
+  tokenEpoch,
 } from "../_shared/supabase.ts";
 import {
   type AppliedChange,
@@ -67,7 +68,11 @@ const MAX_BATCH_SIZE = 200;
 /** A failed change carries the stable code plus the HTTP status to return. */
 interface Failure {
   readonly ok: false;
-  readonly error: SyncError | { code: string; message: string; details?: Record<string, unknown> };
+  readonly error: SyncError | {
+    code: string;
+    message: string;
+    details?: Record<string, unknown>;
+  };
   readonly status: number;
 }
 
@@ -103,6 +108,41 @@ Deno.serve(async (req: Request) => {
       "UNAUTHENTICATED",
       "A valid authenticated session is required to write shared data.",
       401,
+    );
+  }
+
+  // sync-write uses the service role for its authoritative write, so the
+  // notification_settings table's authenticated RLS policies cannot enforce
+  // session displacement for us. Check the verified JWT epoch against the
+  // account registry before doing any read or write on behalf of this request.
+  // This mirrors app.session_epoch_ok and keeps a displaced client from
+  // bypassing the direct-write revocation through the sync path.
+  const requestEpoch = tokenEpoch(req);
+  const db = serviceClient();
+  if (requestEpoch === null) {
+    return errorResponse(
+      "SESSION_SUPERSEDED",
+      "This session is no longer current.",
+      statusForErrorCode("SESSION_SUPERSEDED"),
+    );
+  }
+  const { data: registry, error: registryError } = await db
+    .from("account_session")
+    .select("epoch")
+    .eq("account_id", accountId)
+    .maybeSingle();
+  if (registryError) {
+    return errorResponse(
+      "INTERNAL_ERROR",
+      "Failed to validate the current session.",
+      500,
+    );
+  }
+  if (!registry || registry.epoch !== requestEpoch) {
+    return errorResponse(
+      "SESSION_SUPERSEDED",
+      "This session is no longer current.",
+      statusForErrorCode("SESSION_SUPERSEDED"),
     );
   }
 
@@ -146,8 +186,6 @@ Deno.serve(async (req: Request) => {
     }
     changes.push(parsed.change);
   }
-
-  const db = serviceClient();
 
   const pairing = await currentPairing(db, accountId);
   if (!pairing.ok) {
@@ -278,7 +316,15 @@ async function applyChange(
         },
       };
     }
-    return await insertRow(db, spec, change, key, accountId, pairingId, attempt);
+    return await insertRow(
+      db,
+      spec,
+      change,
+      key,
+      accountId,
+      pairingId,
+      attempt,
+    );
   }
 
   // The row exists: confirm it is inside the caller's pairing before reading or
