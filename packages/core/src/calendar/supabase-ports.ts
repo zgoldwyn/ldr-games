@@ -8,8 +8,8 @@
  */
 import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 
-import { dateId, pairingId, type CalendarDate, type DateId } from '../domain/common.js';
-import type { RelationshipDate } from '../domain/calendar.js';
+import { dateId, pairingId, reminderId, type CalendarDate, type DateId } from '../domain/common.js';
+import type { RelationshipDate, Reminder, ReminderStatus } from '../domain/calendar.js';
 import { isValidCalendarDate } from '../domain/calendar-helpers.js';
 import { ERROR_CODES, type CalendarErrorCode } from '../errors.js';
 import { narrowCode, readErrorEnvelope } from '../supabase/function-error.js';
@@ -18,12 +18,17 @@ import type {
   DateDeleteOutcome,
   DateMutationOutcome,
   DateRemoteChange,
+  ReminderMutationOutcome,
 } from './calendar-module.js';
 
 const DATE_COLUMNS = 'id, pairing_id, title, date, recurring';
 const CALENDAR_CODES: readonly string[] = [
   ERROR_CODES.INVALID_TITLE,
   ERROR_CODES.INVALID_DATE,
+  ERROR_CODES.DATE_NOT_FOUND,
+];
+const REMINDER_CODES: readonly string[] = [
+  ERROR_CODES.INVALID_LEAD_TIME,
   ERROR_CODES.DATE_NOT_FOUND,
 ];
 
@@ -34,6 +39,16 @@ export interface RelationshipDateRow {
   readonly title: string;
   readonly date: string;
   readonly recurring: boolean;
+}
+
+/** A raw reminder row or the stable camel-case calendar Function payload. */
+export interface ReminderRow {
+  readonly id: string;
+  readonly date_id: string;
+  readonly pairing_id: string;
+  readonly lead_time_ms: number;
+  readonly next_trigger_at: string;
+  readonly status: string;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -82,6 +97,52 @@ function idFromWire(value: unknown): DateId | null {
   return isRecord(value) && typeof value.id === 'string' ? dateId(value.id) : null;
 }
 
+function reminderStatusFromWire(value: unknown): ReminderStatus | null {
+  return value === 'scheduled' || value === 'cancelled' || value === 'delivered' ? value : null;
+}
+
+/**
+ * Map a database reminder or a stable calendar Function reminder payload.
+ *
+ * The database and domain API both use exact milliseconds. The function's
+ * camel-case payload and an RLS table row therefore map without lossy unit
+ * conversion.
+ */
+export function reminderFromWire(value: unknown): Reminder | null {
+  if (!isRecord(value)) return null;
+  const id = value.id;
+  const rawDateId = value.date_id ?? value.dateId;
+  const rawPairingId = value.pairing_id ?? value.pairingId;
+  const leadTime = value.lead_time_ms ?? value.leadTime;
+  const rawTrigger = value.next_trigger_at ?? value.nextTriggerAt;
+  const status = reminderStatusFromWire(value.status);
+  const nextTriggerAt =
+    typeof rawTrigger === 'number'
+      ? rawTrigger
+      : typeof rawTrigger === 'string'
+        ? Date.parse(rawTrigger)
+        : Number.NaN;
+  if (
+    typeof id !== 'string' ||
+    typeof rawDateId !== 'string' ||
+    typeof rawPairingId !== 'string' ||
+    typeof leadTime !== 'number' ||
+    !Number.isFinite(leadTime) ||
+    !Number.isFinite(nextTriggerAt) ||
+    status === null
+  ) {
+    return null;
+  }
+  return {
+    id: reminderId(id),
+    dateId: dateId(rawDateId),
+    pairingId: pairingId(rawPairingId),
+    leadTime,
+    nextTriggerAt,
+    status,
+  };
+}
+
 function calendarError(
   code: string | undefined,
   message: string | undefined,
@@ -90,6 +151,18 @@ function calendarError(
   return {
     code: narrowCode<CalendarErrorCode>(code, CALENDAR_CODES, ERROR_CODES.DATE_NOT_FOUND),
     message: message ?? 'The calendar request failed.',
+    ...(details === undefined ? {} : { details }),
+  };
+}
+
+function reminderError(
+  code: string | undefined,
+  message: string | undefined,
+  details: Readonly<Record<string, unknown>> | undefined,
+) {
+  return {
+    code: narrowCode(code, REMINDER_CODES, ERROR_CODES.DATE_NOT_FOUND),
+    message: message ?? 'The reminder request failed.',
     ...(details === undefined ? {} : { details }),
   };
 }
@@ -123,6 +196,30 @@ export function createSupabaseCalendarPorts(client: SupabaseClient): CalendarPor
     return { ok: true, date };
   }
 
+  async function invokeReminder(id: DateId, leadTime: number): Promise<ReminderMutationOutcome> {
+    const { data, error } = await client.functions.invoke<unknown>('calendar', {
+      body: { action: 'setReminder', dateId: id, leadTime },
+    });
+    if (error) {
+      const envelope = await readErrorEnvelope(error);
+      return {
+        ok: false,
+        error: reminderError(envelope?.code, envelope?.message, envelope?.details),
+      };
+    }
+    const reminder = reminderFromWire(isRecord(data) ? data.reminder : undefined);
+    if (reminder === null) {
+      return {
+        ok: false,
+        error: {
+          code: ERROR_CODES.DATE_NOT_FOUND,
+          message: 'The calendar server returned an invalid reminder.',
+        },
+      };
+    }
+    return { ok: true, reminder };
+  }
+
   return {
     async fetchDates(): Promise<readonly RelationshipDate[] | null> {
       const { data, error } = await client.from('relationship_dates').select(DATE_COLUMNS);
@@ -153,6 +250,10 @@ export function createSupabaseCalendarPorts(client: SupabaseClient): CalendarPor
     async deleteDate(id): Promise<DateDeleteOutcome> {
       const outcome = await invoke({ action: 'deleteDate', dateId: id });
       return outcome.ok || !('date' in outcome) ? (outcome as DateDeleteOutcome) : outcome;
+    },
+
+    async setReminder(id, leadTime): Promise<ReminderMutationOutcome> {
+      return invokeReminder(id, leadTime);
     },
 
     subscribeDates(requestedPairingId, onChange): () => void {

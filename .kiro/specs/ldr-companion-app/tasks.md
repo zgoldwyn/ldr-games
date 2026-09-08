@@ -378,8 +378,9 @@ The game-related cron jobs (20.1) were initially deferred and then pulled back I
     - Added an authenticated `calendar` Edge Function which runs the shared title/date validators and writes with the caller's bearer token, preserving the existing pairing/epoch RLS boundary. The client CalendarModule provides ordered reads, local cache, create/edit/delete, and pairing-filtered Postgres Changes with stale-read race protection. A database migration independently rejects ECMAScript-whitespace-only titles and years outside 1..9999. Fourteen unit tests and six live-stack tests pass, including modified-client constraint probes and measured partner propagation (~1.1s under the 5s budget).
     - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7_
 
-  - [ ] 18.2 Implement setReminder and reminder scheduling rows
+  - [x] 18.2 Implement setReminder and reminder scheduling rows
     - Persist reminders with `nextTriggerAt` from `reminderTriggerTime` (reject out-of-range/non-future), cascade-delete with their date, and reschedule recurring reminders on delivery
+    - Added `CalendarModule.setReminder` and an authenticated `calendar` action that calculates the next UTC occurrence with the shared helpers using the server clock. A service-role-only transaction rechecks the active pairing, session epoch, date ownership, exact derived trigger, and future/range boundaries under locks before inserting. Reminder durations now stay exact as `bigint` milliseconds end to end; existing seconds are migrated losslessly, authenticated direct mutations and the generic sync-write bypass are closed, and a composite date/pairing foreign key preserves cascade ownership. The delivery transaction marks one-off reminders delivered and advances recurring reminders—with February 29 clamping and delayed/offline-year skipping—to the first future trigger at the same lead time. Twenty-two focused unit tests, thirteen live calendar tests, a clean local migration reset, and database lint pass.
     - _Requirements: 10.1, 10.2, 10.4, 10.5_
 
   - [ ] 18.3 Write calendar/reminder integration tests

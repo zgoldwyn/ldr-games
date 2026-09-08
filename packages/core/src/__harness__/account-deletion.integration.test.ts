@@ -177,7 +177,7 @@ describe.skipIf(cfg === null)('Account deletion (integration)', () => {
     const reminder = await admin.from('reminders').insert({
       date_id: date.data?.id,
       pairing_id: pairingId,
-      lead_time_seconds: 3600,
+      lead_time_ms: 3_600_000,
       next_trigger_at: new Date(Date.now() + 86_400_000).toISOString(),
     });
     expect(reminder.error).toBeNull();

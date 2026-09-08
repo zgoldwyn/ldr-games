@@ -9,10 +9,17 @@
  * an in-flight list unable to resurrect a date that a later Realtime event has
  * removed.
  */
-import type { CalendarDate, DateId, PairingId } from '../domain/common.js';
-import type { RelationshipDate } from '../domain/calendar.js';
-import { isValidCalendarDate, orderDates, validateTitle } from '../domain/calendar-helpers.js';
-import { ERROR_CODES, type CalendarError } from '../errors.js';
+import type { CalendarDate, DateId, Duration, PairingId, Timestamp } from '../domain/common.js';
+import type { RelationshipDate, Reminder } from '../domain/calendar.js';
+import {
+  isValidCalendarDate,
+  isValidLeadTime,
+  nextOccurrence,
+  orderDates,
+  resolveReminderTrigger,
+  validateTitle,
+} from '../domain/calendar-helpers.js';
+import { ERROR_CODES, type CalendarError, type ReminderError } from '../errors.js';
 import { err, ok, type Result } from '../result.js';
 
 /** A committed relationship-date mutation observed through Postgres Changes. */
@@ -31,6 +38,11 @@ export type DateMutationOutcome =
 /** Result of a server-authoritative delete. */
 export type DateDeleteOutcome =
   { readonly ok: true } | { readonly ok: false; readonly error: CalendarError };
+
+/** Result of the server-authoritative reminder scheduling operation. */
+export type ReminderMutationOutcome =
+  | { readonly ok: true; readonly reminder: Reminder }
+  | { readonly ok: false; readonly error: ReminderError };
 
 /** The deliberately small collaborators the module needs. */
 export interface CalendarPorts {
@@ -51,6 +63,8 @@ export interface CalendarPorts {
   ) => Promise<DateMutationOutcome>;
   /** `calendar { action: 'deleteDate', dateId }`. */
   readonly deleteDate: (id: DateId) => Promise<DateDeleteOutcome>;
+  /** `calendar { action: 'setReminder', dateId, leadTime }`. */
+  readonly setReminder: (id: DateId, leadTime: Duration) => Promise<ReminderMutationOutcome>;
   /** Pairing-filtered Postgres Changes, already constrained by RLS. */
   readonly subscribeDates: (
     pairingId: PairingId,
@@ -77,6 +91,12 @@ export interface CalendarModule {
   ): Promise<Result<RelationshipDate, CalendarError>>;
   /** Delete the date (and, server-side, its cascading reminders). */
   deleteDate(id: DateId): Promise<Result<void, CalendarError>>;
+  /** Schedule a reminder relative to the date's next upcoming occurrence. */
+  setReminder(
+    id: DateId,
+    leadTime: Duration,
+    now: Timestamp,
+  ): Promise<Result<Reminder, ReminderError>>;
   /** RLS-backed list ordered for display by next occurrence and title. */
   listDates(now: CalendarDate): Promise<readonly RelationshipDate[]>;
   /** Start receiving committed partner/local changes for one pairing. */
@@ -103,6 +123,25 @@ function invalidDate(): CalendarError {
     code: ERROR_CODES.INVALID_DATE,
     message: 'Relationship dates must use a valid calendar date.',
   };
+}
+
+function invalidLeadTime(): ReminderError {
+  return {
+    code: ERROR_CODES.INVALID_LEAD_TIME,
+    message: 'Reminder lead time must be between 1 minute and 365 days and fire in the future.',
+  };
+}
+
+function utcCalendarDate(now: Timestamp): CalendarDate | null {
+  if (!Number.isFinite(now)) return null;
+  const instant = new Date(now);
+  if (Number.isNaN(instant.getTime())) return null;
+  const date: CalendarDate = {
+    year: instant.getUTCFullYear(),
+    month: instant.getUTCMonth() + 1,
+    day: instant.getUTCDate(),
+  };
+  return isValidCalendarDate(date) ? date : null;
 }
 
 /**
@@ -219,6 +258,25 @@ export function createCalendarModule(ports: CalendarPorts): CalendarModule {
       if (!outcome.ok) return err(outcome.error);
       forget(id);
       return ok(undefined);
+    },
+
+    async setReminder(id, leadTime, now): Promise<Result<Reminder, ReminderError>> {
+      // This preflight makes invalid controls fail immediately. The Edge
+      // Function independently repeats it using its own UTC clock, because a
+      // modified/stale client must never be able to schedule a past trigger.
+      if (!isValidLeadTime(leadTime) || !Number.isSafeInteger(leadTime)) {
+        return err(invalidLeadTime());
+      }
+      const date = dates.get(id);
+      const today = utcCalendarDate(now);
+      if (date !== undefined && today !== null) {
+        const resolved = resolveReminderTrigger(nextOccurrence(date, today), leadTime, now);
+        if (!resolved.ok) return err(resolved.error);
+      }
+
+      const outcome = await ports.setReminder(id, leadTime);
+      if (!outcome.ok) return err(outcome.error);
+      return ok(outcome.reminder);
     },
 
     async listDates(now): Promise<readonly RelationshipDate[]> {

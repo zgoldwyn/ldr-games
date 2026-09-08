@@ -51,8 +51,9 @@ function change(overrides: Partial<DataChange> = {}): DataChange {
 Deno.test("every shared item type has a spec", () => {
   assert(isSharedItemType("relationship_date"));
   assert(isSharedItemType("notification_settings"));
+  assertFalse(isSharedItemType("reminder"));
   assertFalse(isSharedItemType("notification"));
-  assertEquals(Object.keys(SYNC_ITEM_SPECS).length, 8);
+  assertEquals(Object.keys(SYNC_ITEM_SPECS).length, 7);
 });
 
 Deno.test("a composite itemId splits into the table's key columns", () => {

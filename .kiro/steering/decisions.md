@@ -36,9 +36,15 @@ Choices made while implementing the spec that the spec itself does not settle. E
 
 ## Calendar writes (18.1)
 
-- **The calendar Edge Function writes as the caller, not as service role.** Title/date validation must run server-side, but authorization is already correctly expressed by the pairing and session-epoch RLS policies. A bearer-token-scoped client preserves that boundary and also closes a pairing/session change race at the actual mutation. — `supabase/functions/calendar/index.ts`
+- **Calendar date create/edit/delete write as the caller, not as service role.** Title/date validation must run server-side, but authorization is already correctly expressed by the pairing and session-epoch RLS policies. A bearer-token-scoped client preserves that boundary and also closes a pairing/session change race at the actual mutation. Reminder scheduling is the deliberate exception described below. — `supabase/functions/calendar/index.ts`
 - **Postgres independently enforces the public CalendarDate boundary.** The original `date` type accepted years beyond the domain's 1..9999 range, and default `btrim` ignored tabs and Unicode whitespace accepted by JavaScript `trim`. The added constraints mirror those boundaries so a modified client cannot bypass the Edge Function and insert a structurally invalid shared date. — `supabase/migrations/20260907000000_relationship_dates_server_validation.sql`
 - **A Realtime change beats an older list response.** Calendar reads and Postgres Changes naturally race. The client keeps revisions/tombstones plus list generations so a slow fetch cannot resurrect a date already deleted by a partner or overwrite a newer fetch. — `packages/core/src/calendar/calendar-module.ts`
+
+## Reminder scheduling (18.2)
+
+- **Reminder duration is stored as exact milliseconds, not rounded seconds.** The domain `Duration`, `reminderTriggerTime`, and the public module API are millisecond-based. Keeping the old seconds column would silently change valid non-second durations and make annual rescheduling drift from the originally requested lead; the migration converts existing seconds by multiplying by 1,000. — `supabase/migrations/20260907000001_calendar_reminder_authoritative_rpc.sql`
+- **Reminder mutations do not use the generic sync-write path.** `next_trigger_at`, pairing ownership, and lifecycle status are server-derived fields. Letting the service-role sync endpoint accept a queued reminder would bypass the authoritative transaction even after authenticated table writes were revoked, so `reminder` is intentionally excluded from `SYNC_ITEM_SPECS`. — `supabase/functions/_shared/sync-items.ts`
+- **Recurring delivery advances from the scheduled occurrence, then skips to the first future trigger.** Deriving only from delivery time can re-arm the occurrence whose early reminder just fired; adding exactly one year fails when delivery was deferred offline for longer. The transaction reconstructs the scheduled occurrence as trigger plus lead, advances at least once, then skips already-due annual triggers while preserving the original month/day so February 29 returns in leap years. — `supabase/migrations/20260907000001_calendar_reminder_authoritative_rpc.sql`
 
 ## Account deletion (21A.3)
 

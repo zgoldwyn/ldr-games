@@ -1,15 +1,21 @@
 // Relationship-date calendar write endpoint (Requirements 9.1-9.6).
 //
 // The function validates the public request with the shared pure domain
-// helpers, then writes through a bearer-token-scoped Supabase client. It never
-// uses service_role: database grants and the pairing/epoch RLS policies remain
-// the final authorization authority for create, edit, and delete.
+// helpers, then writes through a bearer-token-scoped Supabase client. Calendar
+// create/edit/delete retain that RLS write path; setReminder uses a narrowly
+// service-role-only SQL RPC after caller authentication so its derived trigger,
+// pairing, and session checks occur atomically under row locks.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { CalendarDate } from "@ldr/core/common";
-import { isValidCalendarDate, validateTitle } from "@ldr/core/calendar-helpers";
+import { dateId, pairingId, type CalendarDate } from "@ldr/core/common";
+import {
+  isValidCalendarDate,
+  nextOccurrence,
+  resolveReminderTrigger,
+  validateTitle,
+} from "@ldr/core/calendar-helpers";
 import { handleCors } from "../_shared/cors.ts";
 import {
   errorResponse,
@@ -19,10 +25,11 @@ import {
 import {
   authenticatedAccountId,
   callerClient,
+  serviceClient,
   tokenEpoch,
 } from "../_shared/supabase.ts";
 
-type CalendarAction = "create" | "edit" | "delete";
+type CalendarAction = "create" | "edit" | "delete" | "setReminder";
 
 interface RelationshipDateRow {
   readonly id: string;
@@ -32,6 +39,16 @@ interface RelationshipDateRow {
   readonly recurring: boolean;
   readonly created_at: string;
   readonly updated_at: string;
+}
+
+interface ReminderRpcRow {
+  readonly result_code?: string;
+  readonly reminder_id?: string;
+  readonly date_id?: string;
+  readonly pairing_id?: string;
+  readonly lead_time_ms?: number;
+  readonly next_trigger_at?: string;
+  readonly status?: string;
 }
 
 const DATE_COLUMNS =
@@ -80,7 +97,7 @@ Deno.serve(async (req: Request) => {
   if (!action) {
     return errorResponse(
       "MISSING_REQUIRED_FIELD",
-      "Supply an action of `create`, `edit`, or `delete`.",
+      "Supply an action of `create`, `edit`, `delete`, or `setReminder`.",
       400,
       { fields: ["action"] },
     );
@@ -99,6 +116,8 @@ Deno.serve(async (req: Request) => {
       return editDate(db, body);
     case "delete":
       return deleteDate(db, body);
+    case "setReminder":
+      return setReminder(db, pairing.id, actor, epoch.value, body);
   }
 });
 
@@ -126,6 +145,8 @@ function normalizeAction(value: unknown): CalendarAction | null {
     case "delete":
     case "deleteDate":
       return "delete";
+    case "setReminder":
+      return "setReminder";
     default:
       return null;
   }
@@ -177,7 +198,7 @@ async function currentSessionEpoch(
   db: SupabaseClient,
   actor: string,
   req: Request,
-): Promise<{ ok: true } | { ok: false; response: Response }> {
+): Promise<{ ok: true; value: number } | { ok: false; response: Response }> {
   const presented = tokenEpoch(req);
   const { data, error } = await db
     .from("account_session")
@@ -204,7 +225,9 @@ async function currentSessionEpoch(
       ),
     };
   }
-  return { ok: true };
+  // `presented === null` returned above, so this is the integer JWT epoch the
+  // transaction must check under its row lock as well.
+  return { ok: true, value: presented };
 }
 
 function pairingRequired(): { ok: false; response: Response } {
@@ -348,6 +371,142 @@ async function deleteDate(
   if (error) return writeFailure(error);
   if (!data) return dateNotFoundResponse(id);
   return jsonResponse({ deleted: true, dateId: id });
+}
+
+function invalidLeadTimeResponse(): Response {
+  return errorResponse(
+    "INVALID_LEAD_TIME",
+    "Reminder lead time must be between 1 minute and 365 days and fire in the future.",
+    400,
+  );
+}
+
+function currentUtcCalendarDate(now: number): CalendarDate {
+  const instant = new Date(now);
+  return {
+    year: instant.getUTCFullYear(),
+    month: instant.getUTCMonth() + 1,
+    day: instant.getUTCDate(),
+  };
+}
+
+function calendarDateFromPostgres(value: unknown): CalendarDate | null {
+  if (typeof value !== "string") return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const date: CalendarDate = {
+    year: Number(match[1]),
+    month: Number(match[2]),
+    day: Number(match[3]),
+  };
+  return isValidCalendarDate(date) ? date : null;
+}
+
+function isReminderStatus(value: unknown): value is "scheduled" | "cancelled" | "delivered" {
+  return value === "scheduled" || value === "cancelled" || value === "delivered";
+}
+
+/**
+ * Create a reminder through the locked SQL write path (Requirement 10.1-10.2).
+ *
+ * The pure helpers calculate precisely the same UTC occurrence and trigger
+ * used by the client. This function deliberately gets `now` from its own
+ * server clock and passes it to SQL, where the date/pairing/session/trigger
+ * checks are repeated atomically. A client-supplied clock is never trusted.
+ */
+async function setReminder(
+  db: SupabaseClient,
+  activePairingId: string,
+  actor: string,
+  epoch: number,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  const id = dateIdFrom(body);
+  if (!id) return dateNotFoundResponse(String(body.dateId ?? body.id ?? ""));
+  const leadTime = body.leadTime;
+  // Postgres accepts non-integral JSON numbers for bigint by rounding. Reject
+  // them here so API milliseconds remain exact and portable across clients.
+  if (typeof leadTime !== "number" || !Number.isSafeInteger(leadTime)) {
+    return invalidLeadTimeResponse();
+  }
+
+  // This caller-scoped read gives a stable DATE_NOT_FOUND surface before the
+  // calculation. The RPC still locks and rechecks it, so a concurrent delete,
+  // unlink, or session replacement cannot turn into an unauthorized write.
+  const { data: rawDate, error: dateError } = await db
+    .from("relationship_dates")
+    .select("id, pairing_id, title, date, recurring")
+    .eq("id", id)
+    .eq("pairing_id", activePairingId)
+    .maybeSingle();
+  if (dateError) {
+    return errorResponse("INTERNAL_ERROR", "Failed to load the relationship date.", 500);
+  }
+  if (!rawDate) return dateNotFoundResponse(id);
+  const date = calendarDateFromPostgres(rawDate.date);
+  if (!date || typeof rawDate.title !== "string" || typeof rawDate.recurring !== "boolean") {
+    return errorResponse("INTERNAL_ERROR", "The relationship date is malformed.", 500);
+  }
+
+  const now = Date.now();
+  const trigger = resolveReminderTrigger(
+    nextOccurrence({
+      id: dateId(rawDate.id as string),
+      pairingId: pairingId(activePairingId),
+      title: rawDate.title,
+      date,
+      recurring: rawDate.recurring,
+    }, currentUtcCalendarDate(now)),
+    leadTime,
+    now,
+  );
+  if (!trigger.ok) return invalidLeadTimeResponse();
+
+  const { data, error } = await serviceClient().rpc("set_calendar_reminder", {
+    p_date: id,
+    p_actor: actor,
+    p_epoch: epoch,
+    p_lead_time_ms: leadTime,
+    p_next_trigger_at: new Date(trigger.value).toISOString(),
+    p_now: new Date(now).toISOString(),
+  });
+  if (error) {
+    return errorResponse("INTERNAL_ERROR", "Failed to schedule the reminder.", 500);
+  }
+  const committed = (Array.isArray(data) ? data[0] : data) as ReminderRpcRow | null;
+  const resultCode = committed?.result_code ?? "INTERNAL_ERROR";
+  if (resultCode !== "OK") {
+    return errorResponse(
+      resultCode,
+      resultCode === "INVALID_LEAD_TIME"
+        ? "Reminder lead time must produce a future trigger."
+        : "The reminder could not be scheduled.",
+      resultCode === "INTERNAL_ERROR" ? 500 : statusForErrorCode(resultCode),
+    );
+  }
+  if (
+    !committed ||
+    typeof committed.reminder_id !== "string" ||
+    typeof committed.date_id !== "string" ||
+    typeof committed.pairing_id !== "string" ||
+    typeof committed.lead_time_ms !== "number" ||
+    !Number.isSafeInteger(committed.lead_time_ms) ||
+    typeof committed.next_trigger_at !== "string" ||
+    !Number.isFinite(Date.parse(committed.next_trigger_at)) ||
+    !isReminderStatus(committed.status)
+  ) {
+    return errorResponse("INTERNAL_ERROR", "The reminder transaction returned invalid data.", 500);
+  }
+  return jsonResponse({
+    reminder: {
+      id: committed.reminder_id,
+      dateId: committed.date_id,
+      pairingId: committed.pairing_id,
+      leadTime: committed.lead_time_ms,
+      nextTriggerAt: committed.next_trigger_at,
+      status: committed.status,
+    },
+  }, 201);
 }
 
 function writeFailure(

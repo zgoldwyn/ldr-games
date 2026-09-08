@@ -76,25 +76,21 @@ export interface ItemSpec {
   readonly insertable: boolean;
 }
 
-export const SYNC_ITEM_SPECS: Readonly<Record<SharedItemType, ItemSpec>> = {
+/**
+ * The sync queue has a broader domain union, but reminder rows are derived and
+ * intentionally excluded from this service-role write path.
+ */
+export type SynchronizedItemType = Exclude<SharedItemType, "reminder">;
+
+// Reminders are intentionally absent.  Their trigger and lifecycle status are
+// server-derived, so accepting an HLC sync change here would give a modified
+// client a service-role bypass around set_calendar_reminder.
+export const SYNC_ITEM_SPECS: Readonly<Record<SynchronizedItemType, ItemSpec>> = {
   relationship_date: {
     table: "relationship_dates",
     keyColumns: ["id"],
     scope: "pairing",
     writableColumns: ["title", "date", "recurring"],
-    hasUpdatedAt: true,
-    insertable: true,
-  },
-  reminder: {
-    table: "reminders",
-    keyColumns: ["id"],
-    scope: "pairing",
-    writableColumns: [
-      "date_id",
-      "lead_time_seconds",
-      "next_trigger_at",
-      "status",
-    ],
     hasUpdatedAt: true,
     insertable: true,
   },
@@ -161,7 +157,7 @@ export const SYNC_ITEM_SPECS: Readonly<Record<SharedItemType, ItemSpec>> = {
 };
 
 /** True when `value` names a shared item type the write path understands. */
-export function isSharedItemType(value: unknown): value is SharedItemType {
+export function isSharedItemType(value: unknown): value is SynchronizedItemType {
   return typeof value === "string" &&
     Object.prototype.hasOwnProperty.call(SYNC_ITEM_SPECS, value);
 }
@@ -234,6 +230,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  * without re-asserting the shape at every use.
  */
 export interface ValidatedChange extends DataChange {
+  readonly itemType: SynchronizedItemType;
   readonly payload: Readonly<Record<string, unknown>>;
 }
 

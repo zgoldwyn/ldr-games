@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
-import { dateId, pairingId, type CalendarDate, type DateId } from '../domain/common.js';
-import type { RelationshipDate } from '../domain/calendar.js';
+import {
+  dateId,
+  pairingId,
+  reminderId,
+  type CalendarDate,
+  type DateId,
+  type Duration,
+  type Timestamp,
+} from '../domain/common.js';
+import type { RelationshipDate, Reminder } from '../domain/calendar.js';
 import { ERROR_CODES, type CalendarError } from '../errors.js';
 import {
   createCalendarModule,
@@ -11,6 +19,7 @@ import {
 
 const PAIRING = pairingId('11111111-1111-4111-8111-111111111111');
 const JAN_1: CalendarDate = { year: 2030, month: 1, day: 1 };
+const NOW: Timestamp = Date.UTC(2030, 0, 1, 12, 0, 0);
 
 function relationshipDate(overrides: Partial<RelationshipDate> = {}): RelationshipDate {
   return {
@@ -27,6 +36,18 @@ function calendarError(code: CalendarError['code']): CalendarError {
   return { code, message: code };
 }
 
+function reminder(overrides: Partial<Reminder> = {}): Reminder {
+  return {
+    id: reminderId('r-1'),
+    dateId: dateId('d-1'),
+    pairingId: PAIRING,
+    leadTime: 60_000,
+    nextTriggerAt: Date.UTC(2030, 5, 9, 0, 0, 0),
+    status: 'scheduled',
+    ...overrides,
+  };
+}
+
 function harness(initial: readonly RelationshipDate[] = []) {
   let rows = [...initial];
   let fetch: () => Promise<readonly RelationshipDate[] | null> = async () => rows;
@@ -35,6 +56,7 @@ function harness(initial: readonly RelationshipDate[] = []) {
   const creates: { title: string; date: CalendarDate; recurring: boolean }[] = [];
   const edits: { id: DateId; title: string; date: CalendarDate; recurring?: boolean }[] = [];
   const deletes: DateId[] = [];
+  const reminderRequests: { id: DateId; leadTime: Duration }[] = [];
   let createOutcome: ReturnType<CalendarPorts['createDate']> extends Promise<infer T> ? T : never =
     {
       ok: true,
@@ -48,6 +70,9 @@ function harness(initial: readonly RelationshipDate[] = []) {
     {
       ok: true,
     };
+  let reminderOutcome: ReturnType<CalendarPorts['setReminder']> extends Promise<infer T>
+    ? T
+    : never = { ok: true, reminder: reminder() };
 
   const ports: CalendarPorts = {
     fetchDates: () => fetch(),
@@ -63,6 +88,10 @@ function harness(initial: readonly RelationshipDate[] = []) {
       deletes.push(id);
       return deleteOutcome;
     },
+    setReminder: async (id, leadTime) => {
+      reminderRequests.push({ id, leadTime });
+      return reminderOutcome;
+    },
     subscribeDates: (_pairingId, handler) => {
       remote = handler;
       return () => {
@@ -76,6 +105,7 @@ function harness(initial: readonly RelationshipDate[] = []) {
     creates,
     edits,
     deletes,
+    reminderRequests,
     setRows: (next: readonly RelationshipDate[]) => {
       rows = [...next];
     },
@@ -90,6 +120,9 @@ function harness(initial: readonly RelationshipDate[] = []) {
     },
     setDeleteOutcome: (next: typeof deleteOutcome) => {
       deleteOutcome = next;
+    },
+    setReminderOutcome: (next: typeof reminderOutcome) => {
+      reminderOutcome = next;
     },
     emit: (change: DateRemoteChange) => remote?.(change),
     unsubscribes: () => unsubscribeCount,
@@ -172,6 +205,54 @@ describe('Calendar module — mutation validation and cache (Req 9.1–9.6)', ()
     expect(await h.module.deleteDate(existing.id)).toEqual({ ok: true, value: undefined });
     expect(h.deletes).toEqual([existing.id, existing.id]);
     expect(h.module.cached(JAN_1)).toEqual([]);
+  });
+});
+
+describe('Calendar module — reminder scheduling (Req 10.1–10.2)', () => {
+  it('forwards a valid millisecond lead time and returns the server reminder', async () => {
+    const date = relationshipDate();
+    const scheduled = reminder({ dateId: date.id, leadTime: 86_400_000 });
+    const h = harness([date]);
+    await h.module.listDates(JAN_1);
+    h.setReminderOutcome({ ok: true, reminder: scheduled });
+
+    const result = await h.module.setReminder(date.id, scheduled.leadTime, NOW);
+
+    expect(result).toEqual({ ok: true, value: scheduled });
+    expect(h.reminderRequests).toEqual([{ id: date.id, leadTime: 86_400_000 }]);
+  });
+
+  it('rejects an out-of-range lead time locally without calling the server', async () => {
+    const h = harness();
+
+    const result = await h.module.setReminder(dateId('d-1'), 59_999.5, NOW);
+
+    expect(result).toMatchObject({ ok: false, error: { code: ERROR_CODES.INVALID_LEAD_TIME } });
+    expect(h.reminderRequests).toEqual([]);
+  });
+
+  it('preflights a known date whose calculated trigger is not future', async () => {
+    const past = relationshipDate({ date: { year: 2029, month: 12, day: 31 } });
+    const h = harness([past]);
+    await h.module.listDates(JAN_1);
+
+    const result = await h.module.setReminder(past.id, 60_000, NOW);
+
+    expect(result).toMatchObject({ ok: false, error: { code: ERROR_CODES.INVALID_LEAD_TIME } });
+    expect(h.reminderRequests).toEqual([]);
+  });
+
+  it('still sends an uncached id to the server, which remains authoritative', async () => {
+    const h = harness();
+    h.setReminderOutcome({
+      ok: false,
+      error: { code: ERROR_CODES.DATE_NOT_FOUND, message: 'No date.' },
+    });
+
+    const result = await h.module.setReminder(dateId('not-cached'), 60_000, NOW);
+
+    expect(result).toMatchObject({ ok: false, error: { code: ERROR_CODES.DATE_NOT_FOUND } });
+    expect(h.reminderRequests).toEqual([{ id: dateId('not-cached'), leadTime: 60_000 }]);
   });
 });
 
