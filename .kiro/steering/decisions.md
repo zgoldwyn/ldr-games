@@ -63,6 +63,12 @@ Choices made while implementing the spec that the spec itself does not settle. E
 - **A client never reports its own absence.** It cannot observe it, and reporting it would ask the server to pause the game on the reporter.
 - **21.3 composes 14.2's SyncModule instead of reimplementing it.** The Connection Manager owns the Broadcast and Presence subscriptions and feeds state into the game modules through injected listeners, matching how 14.2 already handed remote changes off rather than caching them itself.
 
+## Push dispatch (19.2)
+
+- **The Edge Function dispatches Expo mobile push; desktop OS presentation stays in the desktop client.** A server process cannot invoke the Notification API inside a user's browser or Electron process. The durable `notifications` row and its existing Realtime subscription are the cross-platform event; task 22.2 will present that event through the desktop OS API. — `supabase/functions/push/index.ts`
+- **Push copy is generic by category and ignores the notification payload.** Payloads can contain relationship or game context that does not belong on a lock screen. The push carries only the durable notification id and category so the authenticated app can load the full row. — `supabase/functions/_shared/push-dispatch.ts`
+- **Provider failure never acknowledges the notification.** Expo is a best-effort external nudge, while the Postgres row is authoritative. Returning a failed outcome with HTTP 200 prevents webhook retries from coupling a committed app operation to Expo availability, and the normal in-app path remains available for up to 30 days. — `supabase/functions/push/index.ts`
+
 ## Mobile shell (22.1a)
 
 - **`disableHierarchicalLookup = true` in `metro.config.js` is load-bearing. Do not remove it.** npm's peer auto-install can hoist a newer React and React Native to the root while Expo pins the SDK-compatible pair under the app. Without this flag, hoisted packages resolve the root React while app code resolves the app's — two React instances in one bundle, surfacing as "Invalid hook call" the moment any hoisted component renders a hook. The root `overrides` pin the versions and the tree currently dedupes to a single copy of each, **but that layout is not stable**: one `expo install` has already reshuffled it. The overrides are belt-and-braces; the Metro resolver is the guarantee, so keep the flag even when `node_modules` looks clean.

@@ -561,3 +561,12 @@ enabled = true
 verify_jwt = true
 import_map = "./functions/deno.json"
 entrypoint = "./functions/calendar/index.ts"
+
+[functions.push]
+enabled = true
+# Database Webhooks call this with the service-role JWT. The gateway validates
+# the signature; the function additionally requires the exact service-role key
+# so an ordinary authenticated user cannot forge a notification event.
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/push/index.ts"

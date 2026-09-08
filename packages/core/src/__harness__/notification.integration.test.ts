@@ -47,6 +47,14 @@ interface FunctionErrorResponse {
   readonly error?: { readonly code?: string; readonly message?: string };
 }
 
+interface PushResponse {
+  readonly notificationId: string;
+  readonly outcome: {
+    readonly status: 'sent' | 'skipped' | 'failed';
+    readonly reason?: string;
+  };
+}
+
 describe.skipIf(cfg === null)('In-app notifications (integration)', () => {
   const config = cfg as IntegrationConfig;
   let admin: SupabaseClient;
@@ -453,6 +461,55 @@ describe.skipIf(cfg === null)('In-app notifications (integration)', () => {
       expect.arrayContaining(['async_turn', 'game_invite']),
     );
     expect(await module.list(accountId)).toHaveLength(2);
+  });
+
+  it('dispatches only service-authenticated, category-enabled push webhooks (Task 19.2)', async () => {
+    const a = await member();
+    const notificationId = await seed(a.id, {
+      category: 'game_invite',
+      dedupe_key: 'push-disabled',
+    });
+    const settings = await admin.from('notification_settings').insert({
+      account_id: a.id,
+      disabled_categories: ['game_invite'],
+      // No network call is made because the category is disabled, but a valid
+      // token proves that category filtering—not missing configuration—skips it.
+      expo_push_token: 'ExpoPushToken[integration-test]',
+    });
+    expect(settings.error).toBeNull();
+
+    const webhook = {
+      type: 'INSERT',
+      table: 'notifications',
+      schema: 'public',
+      record: { id: notificationId },
+      old_record: null,
+    };
+
+    const forged = await callFunction<FunctionErrorResponse>(config, 'push', webhook, a.token);
+    expect(forged.status).toBe(401);
+    expect(forged.body.error?.code).toBe('UNAUTHENTICATED');
+
+    const dispatched = await callFunction<PushResponse>(
+      config,
+      'push',
+      webhook,
+      config.serviceRoleKey,
+    );
+    expect(dispatched.status).toBe(200);
+    expect(dispatched.body).toEqual({
+      notificationId,
+      outcome: { status: 'skipped', reason: 'category_disabled' },
+    });
+
+    // A skipped/failed external nudge never acknowledges the durable row.
+    const retained = await admin
+      .from('notifications')
+      .select('acknowledged_at, delivered_at')
+      .eq('id', notificationId)
+      .single();
+    expect(retained.error).toBeNull();
+    expect(retained.data).toEqual({ acknowledged_at: null, delivered_at: null });
   });
 
   it('withholds a notification past the 30-day window (Req 11.4)', async () => {

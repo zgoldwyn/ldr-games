@@ -19,6 +19,7 @@ supabase/functions/
   delete-account/  # permanent account/data/Storage/Auth deletion with retry marker
   calendar/         # RLS-scoped relationship-date validation and writes
   quiz/             # paired quiz start, self-answer, guessing, scoring, results
+  push/             # notifications INSERT webhook -> best-effort Expo Push
   rt-presence/     # real-time games: Presence-driven 30s disconnect -> pause + notify
   rt-rejoin/       # real-time games: resume from preserved state within 5 min
 ```
@@ -59,6 +60,18 @@ non-revealing error (Req 2.2).
   imported from the shared `@ldr/core` package rather than duplicated here.
 - Function-specific auth behavior (`verify_jwt`) is configured per function under
   `[functions.<name>]` in `supabase/config.toml`.
+
+### Push dispatch
+
+`push` accepts only a service-role-authenticated Database Webhook payload for an
+INSERT on `public.notifications`. Configure that webhook after deployment and
+set `EXPO_ACCESS_TOKEN` when Expo enhanced push security is enabled. The handler
+re-reads the durable row, applies `notification_settings`, and sends generic
+lock-screen copy through Expo; failures never acknowledge or remove the row.
+
+Desktop OS notifications are presented by the desktop client after it receives
+the durable notification. An Edge Function cannot call an API inside a user's
+desktop process, so that presentation stays with task 22.2.
 
 ## Running locally
 

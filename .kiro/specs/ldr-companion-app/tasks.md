@@ -388,7 +388,7 @@ The game-related cron jobs (20.1) were initially deferred and then pulled back I
     - Thirteen live-stack tests now cover the complete calendar/reminder boundary. The Realtime test measures create, edit, and delete independently from mutation start and asserts the partner's cached content—not merely receipt of an event—within five seconds. The suite also probes invalid title/date/lead-time requests with before/after row equality, exact trigger persistence and inclusive lead bounds, cross-pairing not-found behavior, direct-write denial, delete cascade, and recurring/one-off delivery lifecycle behavior. The targeted suite and the full 76-test local integration run pass.
     - _Requirements: 9.1, 9.4, 10.2, 10.4_
 
-- [ ] 19. Notification wiring — **partially [MVP]**
+- [x] 19. Notification wiring — **partially [MVP]**
   - 19.1 is SPLIT. The in-app read path is MVP: the pairing, game-invite and `your_turn` rows are already being written by the pairing and game Edge Functions, and nothing reads them. Out-of-app push and category settings are deferred.
 
   - [x] 19.1a Implement in-app notification reads and acknowledgement — **[MVP]**
@@ -398,13 +398,15 @@ The game-related cron jobs (20.1) were initially deferred and then pulled back I
     - `notifications` is already in the `supabase_realtime` publication (migration `20260826062557`) and is recipient-scoped by RLS, so no schema work is needed
     - _Requirements: 11.1, 11.2, 11.4, 11.6_
 
-  - [ ] 19.1b Implement notification category settings — **[DEFERRED, post-MVP]**
+  - [x] 19.1b Implement notification category settings — **[DEFERRED, post-MVP]**
     - Cost of deferring: Req 11.3 unavailable, so a user cannot mute a category. Acceptable while the only categories are game invites and your-turn.
+    - Implemented through `NotificationModule.setCategoryEnabled` and the existing HLC sync path. Settings are canonicalized, persisted for offline filtering, protected by epoch-aware RLS, and covered by unit plus live-stack tests.
     - _Requirements: 11.3_
 
-  - [ ] 19.2 Implement push dispatch Edge Function — **[DEFERRED, post-MVP]**
+  - [x] 19.2 Implement push dispatch Edge Function — **[DEFERRED, post-MVP]**
     - Cost of deferring: notifications only appear while the app is OPEN. For an asynchronous game that means you learn it is your turn on next launch rather than being told. Tolerable for MVP, and the single highest-value post-MVP addition.
     - Dispatch best-effort out-of-app push to Expo Push (mobile) and the desktop notification API from an Edge Function, on top of the durable notifications table
+    - Implemented as the service-role-authenticated `push` Database Webhook target. It re-reads the durable row, honors category settings, sends privacy-safe Expo copy, and leaves the row untouched on provider failure. The webhook itself is configured after deployment so no environment URL or credential is committed. Desktop OS notification presentation remains with task 22.2 because a server process cannot invoke an API inside the user's desktop client.
     - _Requirements: 11.1, 11.2_
 
   - [x] 19.3 Write notification integration tests — **[MVP for the 19.1a slice]**
