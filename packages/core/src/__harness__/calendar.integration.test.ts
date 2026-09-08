@@ -671,7 +671,7 @@ describe.skipIf(cfg === null)('Calendar date writes (integration)', () => {
   }, 60_000);
 
   it(
-    "delivers a partner's committed date within 5 seconds",
+    "delivers a partner's create, edit, and delete within 5 seconds each",
     async () => {
       const a = await member();
       const b = await member();
@@ -709,12 +709,20 @@ describe.skipIf(cfg === null)('Calendar date writes (integration)', () => {
           candidate.unsubscribe();
           return null;
         }
-        return { candidate, received, unsubscribe };
+        return { candidate, unsubscribe };
       });
 
-      live.received.length = 0;
-      const started = Date.now();
       const moduleA = moduleFor(a.client);
+
+      async function waitForPartner(started: number, predicate: () => boolean): Promise<void> {
+        while (!predicate() && Date.now() - started < PROPAGATION_BUDGET_MS) {
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+        expect(predicate()).toBe(true);
+        expect(Date.now() - started).toBeLessThan(PROPAGATION_BUDGET_MS);
+      }
+
+      const createStarted = Date.now();
       const createdDate = await moduleA.createDate(
         'Realtime anniversary',
         {
@@ -727,14 +735,54 @@ describe.skipIf(cfg === null)('Calendar date writes (integration)', () => {
       expect(createdDate.ok).toBe(true);
       if (!createdDate.ok) return;
       const id = String(createdDate.value.id);
-      while (live.received.length === 0 && Date.now() - started < PROPAGATION_BUDGET_MS) {
-        await new Promise((resolve) => setTimeout(resolve, 25));
+
+      try {
+        await waitForPartner(createStarted, () =>
+          live.candidate
+            .cached({ year: 2026, month: 1, day: 1 })
+            .some((date) => String(date.id) === id && date.title === 'Realtime anniversary'),
+        );
+
+        const editStarted = Date.now();
+        const editedDate = await moduleA.editDate(
+          createdDate.value.id,
+          'Realtime anniversary edited',
+          {
+            year: 2027,
+            month: 10,
+            day: 10,
+          },
+        );
+        expect(editedDate.ok).toBe(true);
+        if (!editedDate.ok) return;
+        await waitForPartner(editStarted, () =>
+          live.candidate
+            .cached({ year: 2026, month: 1, day: 1 })
+            .some(
+              (date) =>
+                String(date.id) === id &&
+                date.title === 'Realtime anniversary edited' &&
+                date.date.year === 2027 &&
+                date.date.month === 10 &&
+                date.date.day === 10,
+            ),
+        );
+
+        const deleteStarted = Date.now();
+        const deletedDate = await moduleA.deleteDate(createdDate.value.id);
+        expect(deletedDate.ok).toBe(true);
+        if (!deletedDate.ok) return;
+        await waitForPartner(
+          deleteStarted,
+          () =>
+            !live.candidate
+              .cached({ year: 2026, month: 1, day: 1 })
+              .some((date) => String(date.id) === id),
+        );
+      } finally {
+        live.unsubscribe();
+        live.candidate.unsubscribe();
       }
-      expect(live.received.length).toBeGreaterThan(0);
-      expect(Date.now() - started).toBeLessThan(PROPAGATION_BUDGET_MS);
-      expect(live.received).toContain(id);
-      live.unsubscribe();
-      live.candidate.unsubscribe();
     },
     SUBSCRIBE_TIMEOUT_MS + 40_000,
   );

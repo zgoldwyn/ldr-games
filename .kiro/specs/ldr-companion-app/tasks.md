@@ -370,7 +370,7 @@ The game-related cron jobs (20.1) were initially deferred and then pulled back I
     - Added two live-stack tests covering the full two-question lifecycle, one-active-session rejection, response and direct-RLS withholding/reveal, rejected-duplicate state preservation, normalized scoring, completed results, and displaced-token denial. Writing the suite aligned duplicate answer/guess HTTP responses with conflict semantics (`409`).
     - _Requirements: 8.4, 8.7, 8.8_
 
-- [ ] 18. Calendar and reminder wiring — **[DEFERRED, post-MVP]**
+- [x] 18. Calendar and reminder wiring — **[DEFERRED, post-MVP]**
   - Cost of deferring: Requirements 9 and 10 are entirely unavailable. The pure logic (8.x) is done, as is the Realtime groundwork — migration `20260901000002` already publishes `relationship_dates` and `reminders` and sets `REPLICA IDENTITY FULL` on both so deletes propagate, so this is the cheapest deferred section to pick up.
 
   - [x] 18.1 Implement date create/edit/delete writes with Postgres Changes
@@ -383,8 +383,9 @@ The game-related cron jobs (20.1) were initially deferred and then pulled back I
     - Added `CalendarModule.setReminder` and an authenticated `calendar` action that calculates the next UTC occurrence with the shared helpers using the server clock. A service-role-only transaction rechecks the active pairing, session epoch, date ownership, exact derived trigger, and future/range boundaries under locks before inserting. Reminder durations now stay exact as `bigint` milliseconds end to end; existing seconds are migrated losslessly, authenticated direct mutations and the generic sync-write bypass are closed, and a composite date/pairing foreign key preserves cascade ownership. The delivery transaction marks one-off reminders delivered and advances recurring reminders—with February 29 clamping and delayed/offline-year skipping—to the first future trigger at the same lead time. Twenty-two focused unit tests, thirteen live calendar tests, a clean local migration reset, and database lint pass.
     - _Requirements: 10.1, 10.2, 10.4, 10.5_
 
-  - [ ] 18.3 Write calendar/reminder integration tests
+  - [x] 18.3 Write calendar/reminder integration tests
     - Assert create/edit/delete propagate within 5s, invalid title/date/lead-time are rejected with no change, and deleting a date cascades reminder cancellation
+    - Thirteen live-stack tests now cover the complete calendar/reminder boundary. The Realtime test measures create, edit, and delete independently from mutation start and asserts the partner's cached content—not merely receipt of an event—within five seconds. The suite also probes invalid title/date/lead-time requests with before/after row equality, exact trigger persistence and inclusive lead bounds, cross-pairing not-found behavior, direct-write denial, delete cascade, and recurring/one-off delivery lifecycle behavior. The targeted suite and the full 76-test local integration run pass.
     - _Requirements: 9.1, 9.4, 10.2, 10.4_
 
 - [ ] 19. Notification wiring — **partially [MVP]**
