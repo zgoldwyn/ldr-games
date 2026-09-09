@@ -415,7 +415,7 @@ The game-related cron jobs (20.1) were initially deferred and then pulled back I
     - MVP portion: assert game-invite and your-turn notifications arrive within 5s and that acknowledged notifications are not re-delivered. The disabled-category assertion waits for 19.1b.
     - _Requirements: 11.1, 11.2, 11.6_
 
-- [ ] 20. Scheduler (pg_cron) — **20.1 is [MVP]**
+- [x] 20. Scheduler (pg_cron) — **20.1 is [MVP]**
   - Moved into the MVP after confirming feasibility against the local stack: `pg_cron` 1.6.4 is in `shared_preload_libraries` and fires reliably at 1-second granularity (a probe job scheduled at `1 seconds` produced 14 successful runs in 8 seconds). So there is no infrastructure risk here, and 20.1 is what stops abandoned real-time sessions accumulating.
   - **Deviation from design.md, deliberate.** The design says these are "cron jobs invoking Edge Functions". For 20.1 they are implemented as **plpgsql functions called directly by pg_cron**, with no Edge Function and no `pg_net`. All three jobs are the same shape — compare a timestamp, transition a row, insert notifications — which is exactly what `dissolve_pairing` and `app.insert_derived_notifications` already do. Reasons:
     - **Transactional:** the transition and its notifications commit together. Across an HTTP hop they cannot, so a failure mid-flight could terminate a session without notifying anyone.
@@ -433,18 +433,19 @@ The game-related cron jobs (20.1) were initially deferred and then pulled back I
     - Reuse `app.insert_derived_notifications` so notification dedupe behaves identically to the turn path (Req 11.6)
     - _Requirements: 6.9, 6.10, 7.12_
 
-  - [ ] 20.2 Implement reminder, inactivity, and retention cron jobs — **[DEFERRED, post-MVP]**
+  - [x] 20.2 Implement reminder, inactivity, and retention cron jobs — **[DEFERRED, post-MVP]**
     - Cost of deferring: reminders never deliver (Req 10.3), sessions never expire from 30-day inactivity (2.6), and notifications are never discarded at 30 days (11.5). The first is moot while 18.x is deferred; the other two only matter over a long-lived deployment.
     - Create pg_cron jobs for reminder delivery within 60s of trigger (defer offline), 30-day session inactivity revocation, and 30-day notification retention/discard
+    - Implemented as three deterministic, service-role-only SQL functions plus pg_cron schedules. Due reminders create deduped durable rows for both partners and reuse the recurring/one-off lifecycle transaction from 18.2; inactive sessions atomically bump their epoch, mark the registry expired, and delete the GoTrue session; notifications are deleted only when strictly past the shared 30-day boundary. Ten live scheduler tests bracket all thresholds and verify all six schedules.
     - _Requirements: 2.6, 10.3, 11.4, 11.5_
 
   - [x] 20.3 Write scheduler integration tests — **[MVP for the 20.1 jobs]**
-    - 7 tests passing. Mutation-checked three ways: changing `48 hours` to `48 minutes` and `60 seconds` to `60 minutes` fails the bracketed tests (so unit mix-ups are caught), and adding a `state = 'terminal'` update to the nudge fails the Req 7.12 test (so a forfeit regression is caught). The 20.2 windows wait for 20.2.
+    - 10 tests passing. Mutation-checked three ways: changing `48 hours` to `48 minutes` and `60 seconds` to `60 minutes` fails the bracketed tests (so unit mix-ups are caught), and adding a `state = 'terminal'` update to the nudge fails the Req 7.12 test (so a forfeit regression is caught).
     - Call each function directly with a synthetic `p_now`, BRACKETING the window: at `threshold - 1s` nothing transitions, at `threshold + 1s` it does. Bracketing is what makes the test about the specific window rather than "any elapsed time triggers it".
     - Import the TS threshold constants and assert the SQL agrees with them, so drift between the two fails here.
     - Separately assert the pg_cron schedules exist and are enabled (`cron.job`), since a correct function that is never scheduled is still a broken feature.
     - Assert the 48h nudge does NOT terminate or forfeit the session (Req 7.12) and does not duplicate on repeated runs (Req 11.6).
-    - The 20.2 windows (reminder delivery, 30-day inactivity/retention) wait for 20.2.
+    - The 20.2 coverage brackets reminder due time and both 30-day boundaries, proves inactivity blocks access-token use and refresh, and verifies reminder delivery remains durable and idempotent.
     - _Requirements: 6.9, 6.10, 7.12_
 
 - [ ] 21. Client service modules and Connection Manager — **[MVP]**

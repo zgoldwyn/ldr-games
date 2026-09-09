@@ -1,13 +1,16 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { TURN_NUDGE_THRESHOLD_MS } from '../domain/async-lifecycle.js';
+import { NOTIFICATION_RETENTION_MS } from '../domain/notification-delivery.js';
 import { JOIN_WINDOW_MS, REJOIN_WINDOW_MS } from '../domain/rt-session.js';
+import { INACTIVITY_LIMIT_MS } from '../domain/session-epoch.js';
 import {
   createPairing,
   createServiceClient,
   createTestAccount,
   deleteTestAccount,
   getIntegrationConfig,
+  signIn,
   type IntegrationConfig,
   type TestAccount,
 } from './supabase.js';
@@ -40,6 +43,8 @@ const cfg = getIntegrationConfig();
 
 /** A fixed base instant; every probe is computed relative to this. */
 const BASE = Date.UTC(2026, 0, 1, 0, 0, 0);
+/** Future relative to real cron, so synthetic boundary rows cannot race it. */
+const FUTURE_BASE = Date.UTC(2035, 0, 1, 0, 0, 0);
 
 const iso = (ms: number): string => new Date(ms).toISOString();
 
@@ -91,7 +96,7 @@ describe.skipIf(cfg === null)('Game scheduler jobs (integration)', () => {
   // -------------------------------------------------------------------------
   // The schedules themselves
   // -------------------------------------------------------------------------
-  it('has all three cron jobs scheduled and active', async () => {
+  it('has all six cron jobs scheduled and active', async () => {
     // A correct function that is never scheduled is still a broken feature, so the
     // schedule is asserted separately from the behaviour. `cron.job` is not exposed
     // by the Data API, which is why migration 20260901000003 adds the
@@ -111,6 +116,9 @@ describe.skipIf(cfg === null)('Game scheduler jobs (integration)', () => {
       'ldr-rt-join-expiry',
       'ldr-rt-pause-termination',
       'ldr-async-turn-nudge',
+      'ldr-reminder-delivery',
+      'ldr-session-inactivity',
+      'ldr-notification-retention',
     ]) {
       const job = byName.get(name);
       expect(job, `${name} is not scheduled`).toBeDefined();
@@ -382,5 +390,165 @@ describe.skipIf(cfg === null)('Game scheduler jobs (integration)', () => {
     const ran = await runJob('nudge_stale_async_turns', BASE + 10 * TURN_NUDGE_THRESHOLD_MS);
     expect(ran).not.toContain(sessionId);
     expect(await notificationsFor([a.id, b.id], 'async_turn:turn_reminder:')).toHaveLength(0);
+  });
+
+  // -------------------------------------------------------------------------
+  // Requirement 10.3 — due reminder delivery within the minute cadence
+  // -------------------------------------------------------------------------
+  it('delivers a due reminder to both partners once and advances it (Req 10.3)', async () => {
+    const { a, b, pairing } = await pairedAccounts();
+    const date = await admin
+      .from('relationship_dates')
+      .insert({
+        pairing_id: pairing,
+        title: 'Our day',
+        date: '2035-01-02',
+        recurring: false,
+      })
+      .select('id')
+      .single();
+    expect(date.error).toBeNull();
+
+    const triggerAt = FUTURE_BASE + 60_000;
+    const reminder = await admin
+      .from('reminders')
+      .insert({
+        date_id: date.data?.id,
+        pairing_id: pairing,
+        lead_time_ms: 60_000,
+        next_trigger_at: iso(triggerAt),
+        status: 'scheduled',
+      })
+      .select('id')
+      .single();
+    expect(reminder.error).toBeNull();
+    const reminderId = reminder.data?.id as string;
+
+    expect(await runJob('deliver_due_calendar_reminders', triggerAt - 1)).not.toContain(
+      reminderId,
+    );
+    expect(await notificationsFor([a.id, b.id], `reminder:${reminderId}:`)).toHaveLength(0);
+
+    expect(await runJob('deliver_due_calendar_reminders', triggerAt)).toContain(reminderId);
+    const notes = await notificationsFor([a.id, b.id], `reminder:${reminderId}:`);
+    expect(notes).toHaveLength(2);
+    expect(new Set(notes.map((note) => note.recipient_account_id))).toEqual(
+      new Set([a.id, b.id]),
+    );
+    expect(notes.every((note) => note.category === 'reminder')).toBe(true);
+    expect(notes.every((note) => note.delivered_at === null)).toBe(true);
+
+    const advanced = await admin.from('reminders').select('status').eq('id', reminderId).single();
+    expect(advanced.data?.status).toBe('delivered');
+    expect(await runJob('deliver_due_calendar_reminders', triggerAt + 60_000)).not.toContain(
+      reminderId,
+    );
+    expect(await notificationsFor([a.id, b.id], `reminder:${reminderId}:`)).toHaveLength(2);
+  });
+
+  // -------------------------------------------------------------------------
+  // Requirement 2.6 — 30-day inactivity revocation
+  // -------------------------------------------------------------------------
+  it('revokes a session exactly at 30 days and cannot repeat (Req 2.6)', async () => {
+    const account = await createTestAccount(admin);
+    created.push(account.id);
+    const client = await signIn(config, account);
+    const protectedRow = await admin
+      .from('notifications')
+      .insert({
+        recipient_account_id: account.id,
+        category: 'system',
+        payload: {},
+        dedupe_key: 'inactivity-probe',
+        created_at: iso(FUTURE_BASE),
+      })
+      .select('id')
+      .single();
+    expect(protectedRow.error).toBeNull();
+
+    await admin
+      .from('account_session')
+      .update({ last_activity_at: iso(FUTURE_BASE), expired_at: null })
+      .eq('account_id', account.id);
+
+    const inside = await runJob(
+      'expire_inactive_account_sessions',
+      FUTURE_BASE + INACTIVITY_LIMIT_MS - 1,
+    );
+    expect(inside).not.toContain(account.id);
+    expect((await client.from('notifications').select('id')).data).toHaveLength(1);
+
+    const expired = await runJob(
+      'expire_inactive_account_sessions',
+      FUTURE_BASE + INACTIVITY_LIMIT_MS,
+    );
+    expect(expired).toContain(account.id);
+    const registry = await admin
+      .from('account_session')
+      .select('epoch, expired_at')
+      .eq('account_id', account.id)
+      .single();
+    expect(registry.data?.epoch).toBe(1);
+    expect(Date.parse(registry.data?.expired_at as string)).toBe(
+      FUTURE_BASE + INACTIVITY_LIMIT_MS,
+    );
+
+    // The still-signed access token is denied by the registry marker, and the
+    // GoTrue session deletion prevents its refresh token from reviving it.
+    expect((await client.from('notifications').select('id')).data).toEqual([]);
+    expect((await client.auth.refreshSession()).error).not.toBeNull();
+    expect(
+      await runJob('expire_inactive_account_sessions', FUTURE_BASE + 2 * INACTIVITY_LIMIT_MS),
+    ).not.toContain(account.id);
+  });
+
+  // -------------------------------------------------------------------------
+  // Requirement 11.5 — strict 30-day retention boundary
+  // -------------------------------------------------------------------------
+  it('discards only notifications strictly older than 30 days (Req 11.4, 11.5)', async () => {
+    const account = await createTestAccount(admin);
+    created.push(account.id);
+    const now = FUTURE_BASE + 2 * NOTIFICATION_RETENTION_MS;
+    const seeded = await admin
+      .from('notifications')
+      .insert([
+        {
+          recipient_account_id: account.id,
+          category: 'system',
+          payload: {},
+          dedupe_key: 'retention-inside',
+          created_at: iso(now - NOTIFICATION_RETENTION_MS + 1),
+        },
+        {
+          recipient_account_id: account.id,
+          category: 'system',
+          payload: {},
+          dedupe_key: 'retention-boundary',
+          created_at: iso(now - NOTIFICATION_RETENTION_MS),
+        },
+        {
+          recipient_account_id: account.id,
+          category: 'system',
+          payload: {},
+          dedupe_key: 'retention-expired',
+          created_at: iso(now - NOTIFICATION_RETENTION_MS - 1),
+        },
+      ])
+      .select('id, dedupe_key');
+    expect(seeded.error).toBeNull();
+    const byKey = new Map((seeded.data ?? []).map((row) => [row.dedupe_key, row.id]));
+
+    const discarded = await runJob('discard_expired_notifications', now);
+    expect(discarded).toContain(byKey.get('retention-expired'));
+    expect(discarded).not.toContain(byKey.get('retention-inside'));
+    expect(discarded).not.toContain(byKey.get('retention-boundary'));
+    const retained = await admin
+      .from('notifications')
+      .select('dedupe_key')
+      .eq('recipient_account_id', account.id)
+      .like('dedupe_key', 'retention-%');
+    expect(new Set((retained.data ?? []).map((row) => row.dedupe_key))).toEqual(
+      new Set(['retention-inside', 'retention-boundary']),
+    );
   });
 });
