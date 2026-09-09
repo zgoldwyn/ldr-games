@@ -19,7 +19,7 @@ supabase/functions/
   delete-account/  # permanent account/data/Storage/Auth deletion with retry marker
   calendar/         # RLS-scoped relationship-date validation and writes
   quiz/             # paired quiz start, self-answer, guessing, scoring, results
-  push/             # notifications INSERT webhook -> best-effort Expo Push
+  push/             # notifications INSERT webhook -> best-effort direct APNs
   rt-presence/     # real-time games: Presence-driven 30s disconnect -> pause + notify
   rt-rejoin/       # real-time games: resume from preserved state within 5 min
 ```
@@ -64,10 +64,12 @@ non-revealing error (Req 2.2).
 ### Push dispatch
 
 `push` accepts only a service-role-authenticated Database Webhook payload for an
-INSERT on `public.notifications`. Configure that webhook after deployment and
-set `EXPO_ACCESS_TOKEN` when Expo enhanced push security is enabled. The handler
-re-reads the durable row, applies `notification_settings`, and sends generic
-lock-screen copy through Expo; failures never acknowledge or remove the row.
+INSERT on `public.notifications`. Configure that webhook after deployment. The
+handler re-reads the durable row, applies `notification_settings`, and sends
+generic lock-screen copy directly to APNs; failures never acknowledge or remove
+the row. Production requires `APNS_KEY_ID`, `APNS_TEAM_ID`, and
+`APNS_PRIVATE_KEY` project secrets. `APNS_TOPIC` is optional and defaults to the
+app bundle identifier, `com.ldrcompanion.app`.
 
 Desktop OS notifications are presented by the desktop client after it receives
 the durable notification. An Edge Function cannot call an API inside a user's

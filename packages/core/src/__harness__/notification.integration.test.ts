@@ -194,60 +194,63 @@ describe.skipIf(cfg === null)('In-app notifications (integration)', () => {
   // -------------------------------------------------------------------------
   // Req 11.2 — a real game invite arrives live within 5 seconds
   // -------------------------------------------------------------------------
-  it('delivers a real game-invite notification within 5 seconds (Req 11.2)', async () => {
-    const a = await member();
-    const b = await member();
-    await pair(a.token, b.token);
+  it(
+    'delivers a real game-invite notification within 5 seconds (Req 11.2)',
+    async () => {
+      const a = await member();
+      const b = await member();
+      await pair(a.token, b.token);
 
-    // Warm-up outside the budget, retried with a FRESH subscription. Two reasons,
-    // same as the sync suite: SUBSCRIBED does not mean the binding is attached
-    // (and Req 11.2's 5s is about delivery, not setup), and the first
-    // subscription after the replication slot is recreated is dead — only a new
-    // one recovers, so waiting longer on it would not help.
-    const { moduleB, arrivals } = await withRealtimeRetry(async () => {
-      const captured: Notification[] = [];
-      const candidate = createNotificationModule(
-        createSupabaseNotificationPorts(b.client),
-        { onNotification: (n) => captured.push(n) },
+      // Warm-up outside the budget, retried with a FRESH subscription. Two reasons,
+      // same as the sync suite: SUBSCRIBED does not mean the binding is attached
+      // (and Req 11.2's 5s is about delivery, not setup), and the first
+      // subscription after the replication slot is recreated is dead — only a new
+      // one recovers, so waiting longer on it would not help.
+      const { moduleB, arrivals } = await withRealtimeRetry(async () => {
+        const captured: Notification[] = [];
+        const candidate = createNotificationModule(createSupabaseNotificationPorts(b.client), {
+          onNotification: (n) => captured.push(n),
+        });
+        candidate.subscribe(toAccountId(b.id));
+
+        await seed(b.id, { dedupe_key: `warm-up-${Math.random().toString(36).slice(2)}` });
+        const deadline = Date.now() + 6_000;
+        while (captured.length === 0 && Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 25));
+        }
+        if (captured.length === 0) {
+          candidate.unsubscribe();
+          return null;
+        }
+        return { moduleB: candidate, arrivals: captured };
+      });
+
+      arrivals.length = 0;
+
+      // A real invite through rt-move, not a seeded row.
+      const started = Date.now();
+      const invited = await callFunction<{ session: { id: string } }>(
+        config,
+        'rt-move',
+        { action: 'invite', gameId: 'tic-tac-toe' },
+        a.token,
       );
-      candidate.subscribe(toAccountId(b.id));
+      expect(invited.status).toBe(201);
 
-      await seed(b.id, { dedupe_key: `warm-up-${Math.random().toString(36).slice(2)}` });
-      const deadline = Date.now() + 6_000;
-      while (captured.length === 0 && Date.now() < deadline) {
+      while (arrivals.length === 0 && Date.now() - started < NOTIFY_BUDGET_MS) {
         await new Promise((r) => setTimeout(r, 25));
       }
-      if (captured.length === 0) {
-        candidate.unsubscribe();
-        return null;
-      }
-      return { moduleB: candidate, arrivals: captured };
-    });
+      expect(arrivals.length).toBeGreaterThan(0);
+      expect(Date.now() - started).toBeLessThan(NOTIFY_BUDGET_MS);
+      expect(arrivals[0]?.category).toBe('game_invite');
+      expect((arrivals[0]?.payload as { sessionId?: string })?.sessionId).toBe(
+        invited.body.session.id,
+      );
 
-    arrivals.length = 0;
-
-    // A real invite through rt-move, not a seeded row.
-    const started = Date.now();
-    const invited = await callFunction<{ session: { id: string } }>(
-      config,
-      'rt-move',
-      { action: 'invite', gameId: 'tic-tac-toe' },
-      a.token,
-    );
-    expect(invited.status).toBe(201);
-
-    while (arrivals.length === 0 && Date.now() - started < NOTIFY_BUDGET_MS) {
-      await new Promise((r) => setTimeout(r, 25));
-    }
-    expect(arrivals.length).toBeGreaterThan(0);
-    expect(Date.now() - started).toBeLessThan(NOTIFY_BUDGET_MS);
-    expect(arrivals[0]?.category).toBe('game_invite');
-    expect((arrivals[0]?.payload as { sessionId?: string })?.sessionId).toBe(
-      invited.body.session.id,
-    );
-
-    moduleB.unsubscribe();
-  }, SUBSCRIBE_TIMEOUT_MS + 40_000);
+      moduleB.unsubscribe();
+    },
+    SUBSCRIBE_TIMEOUT_MS + 40_000,
+  );
 
   // -------------------------------------------------------------------------
   // Req 11.6 — acknowledgement is durable across sessions
@@ -474,7 +477,8 @@ describe.skipIf(cfg === null)('In-app notifications (integration)', () => {
       disabled_categories: ['game_invite'],
       // No network call is made because the category is disabled, but a valid
       // token proves that category filtering—not missing configuration—skips it.
-      expo_push_token: 'ExpoPushToken[integration-test]',
+      apns_device_token: 'a'.repeat(64),
+      apns_environment: 'development',
     });
     expect(settings.error).toBeNull();
 

@@ -3,29 +3,29 @@
     "name": "LDR Companion",
     "slug": "ldr-companion",
     "version": "0.1.0",
+    "icon": "./assets/icon.png",
     "orientation": "portrait",
     "scheme": "ldr",
-    "platforms": [
-      "ios",
-      "android"
-    ],
+    "platforms": ["ios", "android"],
     "userInterfaceStyle": "light",
     "backgroundColor": "#FFF6F8",
     "splash": {
+      "image": "./assets/splash.png",
       "backgroundColor": "#FFF6F8",
       "resizeMode": "contain"
     },
     "ios": {
       "bundleIdentifier": "com.ldrcompanion.app",
-      "supportsTablet": false
+      "supportsTablet": false,
+      "icon": "./assets/icon.png",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.ldrcompanion.app"
     },
-    "plugins": [
-      "expo-status-bar",
-      "expo-secure-store"
-    ],
+    "plugins": ["expo-status-bar", "expo-secure-store", "expo-notifications"],
     "extra": {
       "supabaseUrl": "https://xbtnbrzwnarbqrqsxdch.supabase.co",
       "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhidG5icnp3bmFyYnFycXN4ZGNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc3NzUxNTEsImV4cCI6MjEwMzM1MTE1MX0.Y1WPMUBk4pMh2UueiJ512E5bJD_5-XTnnCyapwlu7ro"

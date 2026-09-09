@@ -25,7 +25,7 @@ The backend is built on **Supabase** — a managed platform combining Postgres, 
 | pg_cron + scheduled Edge Functions for time-based transitions | 60s join expiry, 5-min pause termination, 48h async nudge, reminder trigger times, and 30-day windows are cron jobs invoking Edge Functions, keeping every transition server-authoritative. |
 | Custom single-session registry overriding Supabase's default multi-session behavior | Supabase Auth permits many concurrent sessions per user by default. Req 2.7–2.9 require exactly one. A `session epoch` per account, set on login by an Edge Function, plus an RLS/edge guard rejecting stale-epoch tokens and a per-account Realtime signal to force-sign-out the old client, overrides the default. |
 | HLC timestamps on every shared-data change | Provides monotonic, causally-ordered timestamps for last-write-wins plus a deterministic tiebreak (HLC counter, then origin account id) so identical wall-clock times still converge (Req 5.5, 5.6). |
-| Expo Push Notifications (mobile) + web/desktop notifications as external push integration | Supabase does not deliver mobile push. In-app notifications are a `notifications` table surfaced via Realtime; out-of-app push is delegated to Expo Push (mobile) and the platform notification API (desktop), invoked from an Edge Function. |
+| Direct Apple Push Notification service (mobile) + web/desktop notifications as external push integration | Supabase does not deliver mobile push. In-app notifications are a `notifications` table surfaced via Realtime; an Edge Function sends native device tokens directly to APNs on iOS, while the desktop shell uses its platform notification API. |
 | Field-level encryption for personal free-text (quiz short answers, date titles, drawings) | Limits blast radius if the database is compromised; sensitive relationship content is encrypted with pgsodium/Vault or application-layer keys on top of Supabase's at-rest encryption. |
 
 ### Research Notes
@@ -35,7 +35,7 @@ The backend is built on **Supabase** — a managed platform combining Postgres, 
 - **Single active session.** Supabase issues a JWT access token plus a refresh token per session and allows multiple concurrent sessions per user. Req 2.8 mandates the newest login *wins*. This is a session-epoch pattern: an `account_session` registry row per account holds the current epoch; login (via Edge Function) increments it, a per-account Realtime channel signals the displaced client to sign out (Req 2.9), and an RLS/edge guard rejects any request whose token epoch is stale (Req 2.7, 2.8) even if the signal was missed. This explicitly overrides Supabase's default multi-session behavior.
 - **Conflict resolution.** Last-write-wins is mandated by Req 5.5. Plain wall-clock LWW can lose updates and cannot break ties. A Hybrid Logical Clock (HLC) combines physical time with a logical counter, preserving causality and giving a total order; ties are broken by comparing the originating account id, yielding the deterministic convergence Req 5.6 demands. The comparison runs in the write-path Edge Function so the client cannot bypass it. Sources: Kulkarni et al., "Logical Physical Clocks" (HLC paper); CRDT/LWW-register literature.
 - **Real-time vs asynchronous over Realtime.** Real-time games need both partners connected and use ephemeral, latency-sensitive Broadcast messages with Edge-Function-validated authoritative state (Req 6); Presence detects the 30s disconnect. Asynchronous games persist authoritative state in Postgres that advances one turn at a time and must survive arbitrary partner absence (Req 7.11), so they are modeled as durable rows with turn ownership and surfaced via Postgres Changes, not live sessions.
-- **Push notifications.** Supabase has no native mobile push. Expo Push Notifications is the standard path for React Native/Expo; desktop uses the OS/browser notification API. In-app notifications are delivered through the `notifications` table + Realtime and remain the source of truth; push is a best-effort out-of-app nudge dispatched from an Edge Function.
+- **Push notifications.** Supabase has no native mobile push. The iOS shell obtains its native APNs device token through the local `expo-notifications` bridge and the Edge Function sends directly to Apple; no Expo-hosted push gateway is used. Desktop uses the OS/browser notification API. In-app notifications are delivered through the `notifications` table + Realtime and remain the source of truth; push is a best-effort out-of-app nudge.
 
 ## Architecture
 
@@ -56,7 +56,7 @@ graph TB
         CRON[pg_cron<br/>scheduled Edge Functions]
     end
     subgraph External
-        EXPO[Expo Push Notifications<br/>mobile push]
+        APNS[Apple Push Notification service<br/>mobile push]
         OSN[Desktop/Web Notification API]
     end
 
@@ -74,7 +74,7 @@ graph TB
     RT --> PG
     ST --> PG
     CRON --> EF
-    EF --> EXPO
+    EF --> APNS
     EF --> OSN
     PG -->|Postgres Changes| RT
 ```
@@ -96,7 +96,7 @@ graph TB
         SB[supabase-js<br/>auth / data / realtime / storage]
     end
     subgraph "Platform Shells"
-        RN[React Native / Expo<br/>mobile UI + SecureStore + Expo Push]
+        RN[React Native / Expo<br/>mobile UI + SecureStore + native APNs]
         EL[Electron / Web<br/>desktop UI + safeStorage/OS keychain]
     end
     UI --> LS
@@ -349,7 +349,7 @@ function isExpired(n: Notification, now: Timestamp): boolean; // created > 30 da
 
 Supabase mapping:
 - In-app notifications are `notifications` rows surfaced to the recipient via a **Realtime** subscription (RLS-scoped to the recipient account); online delivery within 5s for pairing invites (11.1) and game invites (11.2).
-- Out-of-app **push** is dispatched by an Edge Function to **Expo Push** (mobile) and the desktop notification API; this is an explicit external integration, best-effort on top of the durable table.
+- Out-of-app **push** is dispatched by an Edge Function directly to **APNs** using a native iOS device token; the desktop shell uses its own notification API. This is a best-effort external nudge on top of the durable table.
 - `shouldDeliver` withholds disabled categories (11.3); rows are retained up to 30 days and delivered on next session (11.4); a **pg_cron** job discards notifications older than 30 days (11.5); acknowledgement marks delivered and suppresses re-delivery (11.6).
 
 ### Scheduler (pg_cron + scheduled Edge Functions)
@@ -495,7 +495,8 @@ interface Notification {
 interface NotificationSettings {
   accountId: AccountId;
   disabledCategories: NotificationCategory[]; // Req 11.3
-  expoPushToken?: string;    // external push registration
+  apnsDeviceToken?: string;  // native Apple push registration
+  apnsEnvironment?: 'development' | 'production';
 }
 
 // ---- Sync ----

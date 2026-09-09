@@ -14,8 +14,8 @@
  * acknowledges its OWN rows directly. Routing that through a function would add a
  * hop without adding a check the database is not already making.
  *
- * WHAT IS DEFERRED. Out-of-app push (task 19.2) is not here. Category filtering
- * and preference writes ARE here, because
+ * Out-of-app delivery is handled by the server's direct APNs webhook. This
+ * module owns the native registration and category filtering, because
  * `shouldDeliver` already exists and the settings table is already readable —
  * honouring a disabled category costs one query, whereas bolting the filter on
  * afterwards would mean revisiting every read path (Req 11.3).
@@ -28,6 +28,7 @@ import type { AccountId, NotificationId, Timestamp } from '../domain/common.js';
 import { hlcLocalEvent, initialClock } from '../domain/hlc.js';
 import {
   canonicalNotificationCategories,
+  type ApnsEnvironment,
   type Notification,
   type NotificationCategory,
   type NotificationSettings,
@@ -146,6 +147,12 @@ export interface NotificationModule {
     accountId: AccountId,
     category: NotificationCategory,
     enabled: boolean,
+  ): Promise<NotificationSettings | null>;
+  /** Persist or clear the mobile device's native APNs registration. */
+  setApnsDeviceToken(
+    accountId: AccountId,
+    apnsDeviceToken: string | null,
+    apnsEnvironment: ApnsEnvironment | null,
   ): Promise<NotificationSettings | null>;
   /**
    * Acknowledge one notification: marks it delivered and withholds it from this
@@ -367,6 +374,69 @@ export function createNotificationModule(
         // Port implementations normally map transport/RLS errors to null, but
         // keep the module's failure contract and active filtering stable if a
         // custom port rejects instead.
+        return null;
+      }
+    },
+
+    async setApnsDeviceToken(
+      accountId: AccountId,
+      apnsDeviceToken: string | null,
+      apnsEnvironment: ApnsEnvironment | null,
+    ): Promise<NotificationSettings | null> {
+      if (settingsSync === undefined) return null;
+      try {
+        const fetched = await ports.fetchSettings(accountId);
+        const cached = settings?.accountId === accountId ? settings : undefined;
+        const current =
+          queuedSettings.has(accountId) && cached !== undefined
+            ? cached
+            : (fetched ?? cached ?? defaultNotificationSettings(accountId));
+        // APNs requires the endpoint to match the token. Treat a partial
+        // registration as a clear so the database pair constraint is never
+        // violated by a client write.
+        const nextToken =
+          apnsDeviceToken !== null && apnsEnvironment !== null ? apnsDeviceToken : null;
+        const nextEnvironment = nextToken === null ? null : apnsEnvironment;
+        const outcome = await settingsSync.applyChange({
+          itemType: 'notification_settings',
+          itemId: accountId,
+          payload: {
+            apns_device_token: nextToken,
+            apns_environment: nextEnvironment,
+          },
+          originAccountId: accountId,
+          hlc: nextSettingsHlc(accountId),
+        });
+
+        if (outcome.kind === 'applied' && outcome.applied.superseded) {
+          const authoritative =
+            (await ports.fetchSettings(accountId)) ?? defaultNotificationSettings(accountId);
+          rememberSettings(authoritative);
+          return authoritative;
+        }
+
+        if (outcome.kind === 'queued') {
+          queuedSettings.add(accountId);
+        } else {
+          queuedSettings.delete(accountId);
+        }
+
+        const {
+          apnsDeviceToken: _previousToken,
+          apnsEnvironment: _previousEnvironment,
+          ...withoutRegistration
+        } = current;
+        const saved: NotificationSettings =
+          nextToken === null
+            ? withoutRegistration
+            : {
+                ...withoutRegistration,
+                apnsDeviceToken: nextToken,
+                apnsEnvironment: nextEnvironment as ApnsEnvironment,
+              };
+        rememberSettings(saved);
+        return saved;
+      } catch {
         return null;
       }
     },

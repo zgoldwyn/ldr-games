@@ -19,7 +19,9 @@ import { BattleshipScreen } from './screens/BattleshipScreen';
 import { GameListScreen } from './screens/GameListScreen';
 import { PairingScreen } from './screens/PairingScreen';
 import { SignInScreen } from './screens/SignInScreen';
+import { SettingsScreen } from './screens/SettingsScreen';
 import { TicTacToeScreen } from './screens/TicTacToeScreen';
+import { registerApnsToken, subscribeApnsTokenRotation } from './notifications/apns-registration';
 import { navigationTheme, themeTokens } from './theme';
 import { AppText } from './ui/AppText';
 import { Screen } from './ui/Screen';
@@ -66,6 +68,19 @@ export function App() {
       setIdentity(result.identity);
     });
   }, []);
+
+  useEffect(() => {
+    if (runtime === null || identity?.session === null || identity?.session === undefined) return;
+
+    // Refresh an already-authorized native token without ever prompting at
+    // boot. Permission prompts are initiated only from Settings.
+    void registerApnsToken(runtime.notifications, identity.session.accountId, false);
+    const stopTokenRotation = subscribeApnsTokenRotation(
+      runtime.notifications,
+      identity.session.accountId,
+    );
+    return stopTokenRotation;
+  }, [identity?.session?.accountId, runtime]);
 
   useEffect(() => {
     if (
@@ -151,6 +166,11 @@ export function App() {
                 component={PairingScreen}
                 options={{ title: 'Pair up' }}
               />
+              <Stack.Screen
+                name="Settings"
+                component={SettingsScreen}
+                options={{ title: 'Settings' }}
+              />
             </Stack.Navigator>
           ) : (
             <Stack.Navigator screenOptions={header}>
@@ -158,6 +178,11 @@ export function App() {
                 name="GameList"
                 component={GameListScreen}
                 options={{ title: 'Play' }}
+              />
+              <Stack.Screen
+                name="Settings"
+                component={SettingsScreen}
+                options={{ title: 'Settings' }}
               />
               <Stack.Screen
                 name="TicTacToe"

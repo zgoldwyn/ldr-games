@@ -65,9 +65,10 @@ Choices made while implementing the spec that the spec itself does not settle. E
 
 ## Push dispatch (19.2)
 
-- **The Edge Function dispatches Expo mobile push; desktop OS presentation stays in the desktop client.** A server process cannot invoke the Notification API inside a user's browser or Electron process. The durable `notifications` row and its existing Realtime subscription are the cross-platform event; task 22.2 will present that event through the desktop OS API. — `supabase/functions/push/index.ts`
+- **The Edge Function dispatches directly to APNs; desktop OS presentation stays in the desktop client.** The iOS shell obtains Apple's native token through the local `expo-notifications` bridge, but neither token registration nor delivery calls Expo's hosted services. A server process cannot invoke the Notification API inside a user's browser or Electron process, so task 22.2 will present the durable Realtime event through the desktop OS API. — `supabase/functions/push/index.ts`
 - **Push copy is generic by category and ignores the notification payload.** Payloads can contain relationship or game context that does not belong on a lock screen. The push carries only the durable notification id and category so the authenticated app can load the full row. — `supabase/functions/_shared/push-dispatch.ts`
-- **Provider failure never acknowledges the notification.** Expo is a best-effort external nudge, while the Postgres row is authoritative. Returning a failed outcome with HTTP 200 prevents webhook retries from coupling a committed app operation to Expo availability, and the normal in-app path remains available for up to 30 days. — `supabase/functions/push/index.ts`
+- **Provider failure never acknowledges the notification.** APNs is a best-effort external nudge, while the Postgres row is authoritative. Returning a failed outcome with HTTP 200 prevents webhook retries from coupling a committed app operation to Apple availability, and the normal in-app path remains available for up to 30 days. — `supabase/functions/push/index.ts`
+- **iOS builds stay local instead of using EAS Build.** Expo remains the React Native framework and native-module bridge, but Xcode owns compilation, signing, physical-device installation, and App Store submission. This avoids an unnecessary hosted build dependency while keeping generated native projects reproducible from `app.json`. — `apps/mobile/app.json`
 
 ## Remaining scheduler jobs (20.2)
 

@@ -405,8 +405,8 @@ The game-related cron jobs (20.1) were initially deferred and then pulled back I
 
   - [x] 19.2 Implement push dispatch Edge Function — **[DEFERRED, post-MVP]**
     - Cost of deferring: notifications only appear while the app is OPEN. For an asynchronous game that means you learn it is your turn on next launch rather than being told. Tolerable for MVP, and the single highest-value post-MVP addition.
-    - Dispatch best-effort out-of-app push to Expo Push (mobile) and the desktop notification API from an Edge Function, on top of the durable notifications table
-    - Implemented as the service-role-authenticated `push` Database Webhook target. It re-reads the durable row, honors category settings, sends privacy-safe Expo copy, and leaves the row untouched on provider failure. The webhook itself is configured after deployment so no environment URL or credential is committed. Desktop OS notification presentation remains with task 22.2 because a server process cannot invoke an API inside the user's desktop client.
+    - Dispatch best-effort out-of-app push directly to Apple Push Notification service (mobile) and through the desktop notification API from the platform shell, on top of the durable notifications table
+    - Implemented as the service-role-authenticated `push` Database Webhook target. It re-reads the durable row, honors category settings, sends privacy-safe copy directly to APNs using a short-lived provider JWT, and leaves the row untouched on provider failure. The webhook itself is configured after deployment so no environment URL or credential is committed. Desktop OS notification presentation remains with task 22.2 because a server process cannot invoke an API inside the user's desktop client.
     - _Requirements: 11.1, 11.2_
 
   - [x] 19.3 Write notification integration tests — **[MVP for the 19.1a slice]**
@@ -548,8 +548,8 @@ The game-related cron jobs (20.1) were initially deferred and then pulled back I
 
   - [ ] 22.1c iOS release prerequisites — **[required to SUBMIT]**
     - A 1024x1024 app icon and a splash image (`app.json` currently sets only `backgroundColor`)
-    - `eas.json` with build profiles, and an EAS build that installs on a real device
-    - APNs key, once 19.2 (push) lands
+    - A locally signed Xcode release build that installs on a real device; Expo EAS Build is deliberately not used
+    - A native APNs device token and direct-APNs provider key, once 19.2 (push) lands; Expo Push is deliberately not used
     - The two-step account-deletion confirmation UI from 21A (Req 12.1, 12.2)
     - A privacy policy URL and the App Privacy disclosures — this app handles email, relationship dates and user-drawn images, so the questionnaire is non-trivial
     - A demo account **pair** for App Review: reviewers cannot test a two-person pairing feature with a single login, which is a common rejection cause for partner apps

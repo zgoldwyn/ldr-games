@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { invitationCode, isErr, isOk } from '@ldr/core';
 
 import { useApp } from '../app-context';
 import { messageForError } from '../copy/error-copy';
+import type { RootStackParamList } from '../navigation';
 import { themeTokens } from '../theme';
 import { AppButton } from '../ui/AppButton';
 import { AppField } from '../ui/AppField';
@@ -12,6 +15,7 @@ import { Screen } from '../ui/Screen';
 
 export function PairingScreen() {
   const tokens = themeTokens();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { runtime, identity, reload } = useApp();
   const [code, setCode] = useState('');
   const [issued, setIssued] = useState<string | null>(null);
@@ -108,6 +112,13 @@ export function PairingScreen() {
           </AppText>
           <AppButton
             variant="quiet"
+            label="Settings"
+            tokens={tokens}
+            onPress={() => navigation.navigate('Settings')}
+          />
+          <View style={styles.spacer} />
+          <AppButton
+            variant="quiet"
             label="Sign out"
             tokens={tokens}
             onPress={() => {
@@ -133,4 +144,5 @@ const styles = StyleSheet.create({
   banner: { marginTop: 16 },
   signOut: { marginTop: 40 },
   account: { marginBottom: 12 },
+  spacer: { height: 12 },
 });

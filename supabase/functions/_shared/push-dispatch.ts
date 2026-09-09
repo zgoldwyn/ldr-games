@@ -1,6 +1,7 @@
-/** Pure/injected Expo Push dispatch used by the notification webhook. */
+/** Pure/injected direct APNs dispatch used by the notification webhook. */
 
-export const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
+export const APNS_PRODUCTION_URL = "https://api.push.apple.com";
+export const APNS_DEVELOPMENT_URL = "https://api.sandbox.push.apple.com";
 
 export const PUSH_CATEGORIES = [
   "pairing",
@@ -12,6 +13,7 @@ export const PUSH_CATEGORIES = [
 ] as const;
 
 export type PushCategory = (typeof PUSH_CATEGORIES)[number];
+export type ApnsEnvironment = "development" | "production";
 
 export interface PushNotification {
   readonly id: string;
@@ -23,22 +25,18 @@ export interface PushNotification {
 
 export interface PushSettings {
   readonly disabledCategories: readonly PushCategory[];
-  readonly expoPushToken: string | null;
+  readonly apnsDeviceToken: string | null;
+  readonly apnsEnvironment: ApnsEnvironment | null;
 }
 
-export interface ExpoPushMessage {
-  readonly to: string;
-  readonly title: string;
-  readonly body: string;
-  readonly sound: "default";
-  readonly data: {
-    readonly notificationId: string;
-    readonly category: PushCategory;
-  };
+export interface ApnsProviderCredentials {
+  readonly keyId: string;
+  readonly teamId: string;
+  readonly privateKey: string;
 }
 
 export type PushDispatchOutcome =
-  | { readonly status: "sent"; readonly ticketId: string }
+  | { readonly status: "sent"; readonly apnsId: string | null }
   | {
     readonly status: "skipped";
     readonly reason:
@@ -49,38 +47,90 @@ export type PushDispatchOutcome =
   }
   | {
     readonly status: "failed";
-    readonly reason: "provider_error" | "provider_rejected" | "transport_error";
+    readonly reason:
+      | "provider_auth"
+      | "provider_rejected"
+      | "transport_error";
     readonly providerStatus?: number;
+    readonly providerReason?: string;
   };
 
 export interface PushDispatchOptions {
   readonly fetch?: typeof fetch;
-  readonly endpoint?: string;
-  readonly accessToken?: string;
+  readonly endpointBase?: string;
+  readonly topic: string;
+  readonly providerToken: () => Promise<string>;
 }
 
 const RETENTION_MS = 30 * 24 * 60 * 60 * 1_000;
 
-/** Narrow an untrusted database enum value before dispatch. */
 export function isPushCategory(value: unknown): value is PushCategory {
   return typeof value === "string" &&
     (PUSH_CATEGORIES as readonly string[]).includes(value);
 }
 
-/** Expo supports the current and legacy token prefixes. */
-export function isExpoPushToken(value: unknown): value is string {
-  return typeof value === "string" &&
-    /^(Expo|Exponent)PushToken\[[^\]\s]+\]$/.test(value);
+/** Apple treats device tokens as opaque, variable-length byte sequences. */
+export function isApnsDeviceToken(value: unknown): value is string {
+  return typeof value === "string" && /^(?:[0-9a-f]{2})+$/i.test(value);
 }
 
-/**
- * Use fixed copy by category. Notification payloads may contain relationship or
- * game details and must not be copied onto a lock screen by a server webhook.
- */
+export function isApnsEnvironment(value: unknown): value is ApnsEnvironment {
+  return value === "development" || value === "production";
+}
+
+function base64Url(bytes: Uint8Array): string {
+  return btoa(String.fromCharCode(...bytes))
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replaceAll("=", "");
+}
+
+function jsonBase64Url(value: unknown): string {
+  return base64Url(new TextEncoder().encode(JSON.stringify(value)));
+}
+
+function pemBytes(pem: string): Uint8Array {
+  const encoded = pem
+    .replace("-----BEGIN PRIVATE KEY-----", "")
+    .replace("-----END PRIVATE KEY-----", "")
+    .replaceAll(/\s/g, "");
+  if (encoded.length === 0) throw new Error("Missing APNs private key.");
+  return Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
+}
+
+/** Create Apple's ES256 provider JWT from the secret .p8 key. */
+export async function createApnsProviderToken(
+  credentials: ApnsProviderCredentials,
+  now: number,
+): Promise<string> {
+  if (!credentials.keyId || !credentials.teamId) {
+    throw new Error("Missing APNs provider identifiers.");
+  }
+  const header = jsonBase64Url({ alg: "ES256", kid: credentials.keyId });
+  const claims = jsonBase64Url({
+    iss: credentials.teamId,
+    iat: Math.floor(now / 1_000),
+  });
+  const unsigned = `${header}.${claims}`;
+  const key = await crypto.subtle.importKey(
+    "pkcs8",
+    pemBytes(credentials.privateKey),
+    { name: "ECDSA", namedCurve: "P-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign(
+    { name: "ECDSA", hash: "SHA-256" },
+    key,
+    new TextEncoder().encode(unsigned),
+  );
+  return `${unsigned}.${base64Url(new Uint8Array(signature))}`;
+}
+
+/** Fixed privacy-safe copy; private notification payloads stay in Supabase. */
 export function pushMessage(
   notification: PushNotification,
-  token: string,
-): ExpoPushMessage {
+): Record<string, unknown> {
   const copy: Record<PushCategory, { title: string; body: string }> = {
     pairing: {
       title: "Relationship update",
@@ -109,22 +159,18 @@ export function pushMessage(
   };
 
   return {
-    to: token,
-    ...copy[notification.category],
-    sound: "default",
-    data: {
-      notificationId: notification.id,
-      category: notification.category,
-    },
+    aps: { alert: copy[notification.category], sound: "default" },
+    notificationId: notification.id,
+    category: notification.category,
   };
 }
 
-/** Send one best-effort push without changing the durable notification row. */
-export async function dispatchExpoPush(
+/** Send one best-effort push directly to Apple without changing the durable row. */
+export async function dispatchApnsPush(
   notification: PushNotification,
   settings: PushSettings,
   now: number,
-  options: PushDispatchOptions = {},
+  options: PushDispatchOptions,
 ): Promise<PushDispatchOutcome> {
   if (notification.acknowledgedAt !== null) {
     return { status: "skipped", reason: "acknowledged" };
@@ -135,26 +181,40 @@ export async function dispatchExpoPush(
   if (settings.disabledCategories.includes(notification.category)) {
     return { status: "skipped", reason: "category_disabled" };
   }
-  if (!isExpoPushToken(settings.expoPushToken)) {
+  if (
+    !isApnsDeviceToken(settings.apnsDeviceToken) ||
+    !isApnsEnvironment(settings.apnsEnvironment)
+  ) {
     return { status: "skipped", reason: "no_token" };
   }
 
-  const headers: Record<string, string> = {
-    Accept: "application/json",
-    "Content-Type": "application/json",
-  };
-  if (options.accessToken) {
-    headers.Authorization = `Bearer ${options.accessToken}`;
+  let authorization: string;
+  try {
+    authorization = await options.providerToken();
+  } catch {
+    return { status: "failed", reason: "provider_auth" };
   }
 
+  const defaultBase = settings.apnsEnvironment === "production"
+    ? APNS_PRODUCTION_URL
+    : APNS_DEVELOPMENT_URL;
   let response: Response;
   try {
     response = await (options.fetch ?? fetch)(
-      options.endpoint ?? EXPO_PUSH_URL,
+      `${
+        options.endpointBase ?? defaultBase
+      }/3/device/${settings.apnsDeviceToken}`,
       {
         method: "POST",
-        headers,
-        body: JSON.stringify(pushMessage(notification, settings.expoPushToken)),
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `bearer ${authorization}`,
+          "apns-topic": options.topic,
+          "apns-push-type": "alert",
+          "apns-priority": "10",
+          "apns-expiration": "0",
+        },
+        body: JSON.stringify(pushMessage(notification)),
       },
     );
   } catch {
@@ -162,25 +222,19 @@ export async function dispatchExpoPush(
   }
 
   if (!response.ok) {
+    let providerReason: string | undefined;
+    try {
+      const body = await response.json() as { readonly reason?: unknown };
+      if (typeof body.reason === "string") providerReason = body.reason;
+    } catch {
+      // APNs normally returns JSON, but status alone is still actionable.
+    }
     return {
       status: "failed",
       reason: "provider_rejected",
       providerStatus: response.status,
+      ...(providerReason === undefined ? {} : { providerReason }),
     };
   }
-
-  try {
-    const body = await response.json() as {
-      readonly data?:
-        | { readonly status?: unknown; readonly id?: unknown }
-        | readonly { readonly status?: unknown; readonly id?: unknown }[];
-    };
-    const ticket = Array.isArray(body.data) ? body.data[0] : body.data;
-    if (ticket?.status === "ok" && typeof ticket.id === "string") {
-      return { status: "sent", ticketId: ticket.id };
-    }
-    return { status: "failed", reason: "provider_error" };
-  } catch {
-    return { status: "failed", reason: "provider_error" };
-  }
+  return { status: "sent", apnsId: response.headers.get("apns-id") };
 }

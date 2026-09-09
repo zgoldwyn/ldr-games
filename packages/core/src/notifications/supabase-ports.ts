@@ -12,7 +12,11 @@
 import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 
 import type { AccountId, NotificationId, Timestamp } from '../domain/common.js';
-import { canonicalNotificationCategories, isNotificationCategory } from '../domain/notification.js';
+import {
+  canonicalNotificationCategories,
+  isNotificationCategory,
+  type ApnsEnvironment,
+} from '../domain/notification.js';
 import type { NotificationSettings } from '../domain/notification.js';
 import type { ChannelStatus } from '../sync/connectivity.js';
 import type { NotificationPorts, NotificationRow } from './notification-module.js';
@@ -20,13 +24,14 @@ import type { NotificationPorts, NotificationRow } from './notification-module.j
 /** Columns the module needs from a notification row. */
 const NOTIFICATION_COLUMNS =
   'id, recipient_account_id, category, payload, created_at, dedupe_key, acknowledged_at, delivered_at';
-const SETTINGS_COLUMNS = 'account_id, disabled_categories, expo_push_token';
+const SETTINGS_COLUMNS = 'account_id, disabled_categories, apns_device_token, apns_environment';
 
 /** The subset of a notification_settings row this adapter consumes and returns. */
 export interface NotificationSettingsRow {
   readonly account_id: string;
   readonly disabled_categories: readonly unknown[] | null;
-  readonly expo_push_token: string | null;
+  readonly apns_device_token: string | null;
+  readonly apns_environment: string | null;
 }
 
 /**
@@ -41,7 +46,13 @@ export function notificationSettingsFromRow(row: NotificationSettingsRow): Notif
   return {
     accountId: row.account_id as AccountId,
     disabledCategories,
-    ...(row.expo_push_token === null ? {} : { expoPushToken: row.expo_push_token }),
+    ...(row.apns_device_token === null ||
+    (row.apns_environment !== 'development' && row.apns_environment !== 'production')
+      ? {}
+      : {
+          apnsDeviceToken: row.apns_device_token,
+          apnsEnvironment: row.apns_environment as ApnsEnvironment,
+        }),
   };
 }
 

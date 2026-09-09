@@ -245,6 +245,50 @@ describe('Notification module — list eligibility', () => {
 });
 
 describe('Notification module — category settings writes', () => {
+  it('persists a native APNs registration without changing category preferences', async () => {
+    const h = harness({
+      settings: { accountId: ALICE, disabledCategories: ['quiz'] },
+    });
+
+    await expect(
+      h.module.setApnsDeviceToken(ALICE, 'a'.repeat(64), 'development'),
+    ).resolves.toEqual({
+      accountId: ALICE,
+      disabledCategories: ['quiz'],
+      apnsDeviceToken: 'a'.repeat(64),
+      apnsEnvironment: 'development',
+    });
+    expect(h.changes[0]).toMatchObject({
+      itemType: 'notification_settings',
+      itemId: ALICE,
+      payload: {
+        apns_device_token: 'a'.repeat(64),
+        apns_environment: 'development',
+      },
+      originAccountId: ALICE,
+    });
+  });
+
+  it('clears a native APNs registration with an explicit null write', async () => {
+    const h = harness({
+      settings: {
+        accountId: ALICE,
+        disabledCategories: [],
+        apnsDeviceToken: 'b'.repeat(64),
+        apnsEnvironment: 'production',
+      },
+    });
+
+    await expect(h.module.setApnsDeviceToken(ALICE, null, null)).resolves.toEqual({
+      accountId: ALICE,
+      disabledCategories: [],
+    });
+    expect(h.changes[0]?.payload).toEqual({
+      apns_device_token: null,
+      apns_environment: null,
+    });
+  });
+
   it('submits a complete canonical sync change while preserving unrelated categories', async () => {
     const h = harness({
       settings: { accountId: ALICE, disabledCategories: ['quiz', 'pairing'] },

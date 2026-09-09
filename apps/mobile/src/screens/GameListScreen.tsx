@@ -102,7 +102,9 @@ export function GameListScreen() {
     .cached(self)
     .map((notification) => ({ notification, invite: incomingInvite(notification) }))
     .filter(
-      (item): item is {
+      (
+        item,
+      ): item is {
         readonly notification: Notification;
         readonly invite: IncomingInvite;
       } => item.invite !== null,
@@ -265,6 +267,13 @@ export function GameListScreen() {
         ) : null}
 
         <View style={styles.signOut}>
+          <AppButton
+            variant="quiet"
+            label="Settings"
+            tokens={tokens}
+            onPress={() => navigation.navigate('Settings')}
+          />
+          <View style={styles.spacer} />
           <AppButton
             variant="quiet"
             label="Sign out"

@@ -85,79 +85,86 @@ export type SynchronizedItemType = Exclude<SharedItemType, "reminder">;
 // Reminders are intentionally absent.  Their trigger and lifecycle status are
 // server-derived, so accepting an HLC sync change here would give a modified
 // client a service-role bypass around set_calendar_reminder.
-export const SYNC_ITEM_SPECS: Readonly<Record<SynchronizedItemType, ItemSpec>> = {
-  relationship_date: {
-    table: "relationship_dates",
-    keyColumns: ["id"],
-    scope: "pairing",
-    writableColumns: ["title", "date", "recurring"],
-    hasUpdatedAt: true,
-    insertable: true,
-  },
-  rt_session: {
-    table: "rt_sessions",
-    keyColumns: ["id"],
-    scope: "pairing",
-    writableColumns: [
-      "state",
-      "game_state",
-      "outcome",
-      "pending_since",
-      "paused_since",
-    ],
-    hasUpdatedAt: true,
-    insertable: false,
-  },
-  async_session: {
-    table: "async_sessions",
-    keyColumns: ["id"],
-    scope: "pairing",
-    writableColumns: [
-      "state",
-      "active_turn_holder",
-      "turn_pending_since",
-      "game_state",
-      "outcome",
-    ],
-    hasUpdatedAt: true,
-    insertable: false,
-  },
-  quiz_session: {
-    table: "quiz_sessions",
-    keyColumns: ["id"],
-    scope: "pairing",
-    writableColumns: ["phase", "scores"],
-    hasUpdatedAt: true,
-    insertable: false,
-  },
-  quiz_self_answer: {
-    table: "quiz_self_answers",
-    keyColumns: ["session_id", "account_id", "question_id"],
-    scope: "quiz_session",
-    writableColumns: ["answer"],
-    hasUpdatedAt: false,
-    insertable: true,
-  },
-  quiz_guess: {
-    table: "quiz_guesses",
-    keyColumns: ["session_id", "account_id", "question_id"],
-    scope: "quiz_session",
-    writableColumns: ["guess"],
-    hasUpdatedAt: false,
-    insertable: true,
-  },
-  notification_settings: {
-    table: "notification_settings",
-    keyColumns: ["account_id"],
-    scope: "account",
-    writableColumns: ["disabled_categories", "expo_push_token"],
-    hasUpdatedAt: true,
-    insertable: true,
-  },
-};
+export const SYNC_ITEM_SPECS: Readonly<Record<SynchronizedItemType, ItemSpec>> =
+  {
+    relationship_date: {
+      table: "relationship_dates",
+      keyColumns: ["id"],
+      scope: "pairing",
+      writableColumns: ["title", "date", "recurring"],
+      hasUpdatedAt: true,
+      insertable: true,
+    },
+    rt_session: {
+      table: "rt_sessions",
+      keyColumns: ["id"],
+      scope: "pairing",
+      writableColumns: [
+        "state",
+        "game_state",
+        "outcome",
+        "pending_since",
+        "paused_since",
+      ],
+      hasUpdatedAt: true,
+      insertable: false,
+    },
+    async_session: {
+      table: "async_sessions",
+      keyColumns: ["id"],
+      scope: "pairing",
+      writableColumns: [
+        "state",
+        "active_turn_holder",
+        "turn_pending_since",
+        "game_state",
+        "outcome",
+      ],
+      hasUpdatedAt: true,
+      insertable: false,
+    },
+    quiz_session: {
+      table: "quiz_sessions",
+      keyColumns: ["id"],
+      scope: "pairing",
+      writableColumns: ["phase", "scores"],
+      hasUpdatedAt: true,
+      insertable: false,
+    },
+    quiz_self_answer: {
+      table: "quiz_self_answers",
+      keyColumns: ["session_id", "account_id", "question_id"],
+      scope: "quiz_session",
+      writableColumns: ["answer"],
+      hasUpdatedAt: false,
+      insertable: true,
+    },
+    quiz_guess: {
+      table: "quiz_guesses",
+      keyColumns: ["session_id", "account_id", "question_id"],
+      scope: "quiz_session",
+      writableColumns: ["guess"],
+      hasUpdatedAt: false,
+      insertable: true,
+    },
+    notification_settings: {
+      table: "notification_settings",
+      keyColumns: ["account_id"],
+      scope: "account",
+      writableColumns: [
+        "disabled_categories",
+        "apns_device_token",
+        "apns_environment",
+      ],
+      hasUpdatedAt: true,
+      insertable: true,
+    },
+  };
 
 /** True when `value` names a shared item type the write path understands. */
-export function isSharedItemType(value: unknown): value is SynchronizedItemType {
+export function isSharedItemType(
+  value: unknown,
+): value is SynchronizedItemType {
   return typeof value === "string" &&
     Object.prototype.hasOwnProperty.call(SYNC_ITEM_SPECS, value);
 }
@@ -295,8 +302,7 @@ export function parseChange(
       ok: false,
       error: {
         code: "INVALID_HLC",
-        message:
-          "`hlc` must be { physical: non-negative integer, counter: " +
+        message: "`hlc` must be { physical: non-negative integer, counter: " +
           "non-negative integer, originAccountId: string }.",
         details: { itemId: raw.itemId },
       },

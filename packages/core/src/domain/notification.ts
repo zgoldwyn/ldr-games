@@ -7,6 +7,9 @@ import type { AccountId, NotificationId, Timestamp } from './common.js';
 export type NotificationCategory =
   'pairing' | 'game_invite' | 'async_turn' | 'reminder' | 'quiz' | 'system';
 
+/** The APNs endpoint associated with a native iOS device token. */
+export type ApnsEnvironment = 'development' | 'production';
+
 /**
  * The notification-category vocabulary in its canonical persistence order.
  *
@@ -57,11 +60,12 @@ export interface Notification {
 
 /**
  * Per-account notification preferences. `disabledCategories` lists categories to
- * withhold (Requirement 11.3); `expoPushToken` is the optional external push
+ * withhold (Requirement 11.3); the APNs fields are the optional native iOS
  * registration for out-of-app delivery.
  */
 export interface NotificationSettings {
   readonly accountId: AccountId;
   readonly disabledCategories: readonly NotificationCategory[];
-  readonly expoPushToken?: string;
+  readonly apnsDeviceToken?: string;
+  readonly apnsEnvironment?: ApnsEnvironment;
 }
