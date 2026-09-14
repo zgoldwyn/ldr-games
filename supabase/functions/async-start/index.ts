@@ -30,31 +30,9 @@ import {
   jsonResponse,
   statusForErrorCode,
 } from "../_shared/http.ts";
-import {
-  authenticatedAccountId,
-  serviceClient,
-} from "../_shared/supabase.ts";
-
-/** A grid coordinate for Battleship ship placement. */
-interface Cell {
-  row: number;
-  col: number;
-}
+import { authenticatedAccountId, serviceClient } from "../_shared/supabase.ts";
 
 const MAX_OPEN_SESSIONS_PER_GAME = 3;
-
-/** Keeps only well-formed, non-negative integer grid coordinates. */
-function normalizeCells(value: unknown): Cell[] {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((cell) => {
-    if (cell === null || typeof cell !== "object") return [];
-    const c = cell as Record<string, unknown>;
-    const { row, col } = c;
-    if (typeof row !== "number" || !Number.isInteger(row) || row < 0) return [];
-    if (typeof col !== "number" || !Number.isInteger(col) || col < 0) return [];
-    return [{ row, col }];
-  });
-}
 
 Deno.serve(async (req: Request) => {
   const preflight = handleCors(req);
@@ -167,7 +145,9 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  const partner = pairing.member_a === actor ? pairing.member_b : pairing.member_a;
+  const partner = pairing.member_a === actor
+    ? pairing.member_b
+    : pairing.member_a;
   // The initiator plays first unless the request names the partner explicitly;
   // the ruleset factory turns this into the initial Active_Turn_Holder (Req 7.2).
   const requestedHolder = options.firstHolder;
@@ -181,44 +161,9 @@ Deno.serve(async (req: Request) => {
 
   const sessionId = crypto.randomUUID();
 
-  // Ship placements are per-partner: the engine treats a coordinate list as that
-  // partner's own fleet, and the opponent wins by hitting every one of its cells
-  // (see async-battleship.ts).
-  const ships = (options.ships ?? {}) as Record<string, unknown>;
-  const actorShips = normalizeCells(ships[actor]);
-  const partnerShips = normalizeCells(ships[partner]);
-
-  // Both fleets must be non-empty. The ruleset derives "all sunk" from the
-  // opponent's ship cells, so a fleet of ZERO cells can never be fully hit and
-  // the session could never reach a terminal state (Req 7.10) — a permanently
-  // unfinishable game. There is no separate ship-placement endpoint, so the start
-  // request is the only place this can be established.
-  if (
-    gameId === BATTLESHIP_GAME_ID &&
-    (actorShips.length === 0 || partnerShips.length === 0)
-  ) {
-    return errorResponse(
-      "INVALID_TURN",
-      "Battleship requires a non-empty fleet for both partners; a fleet of zero " +
-        "cells can never be sunk, so the session could never end.",
-      statusForErrorCode("INVALID_TURN"),
-      {
-        fields: ["options.ships"],
-        missingFor: [
-          ...(actorShips.length === 0 ? [actor] : []),
-          ...(partnerShips.length === 0 ? [partner] : []),
-        ],
-      },
-    );
-  }
-
   const engine = gameId === BATTLESHIP_GAME_ID
     ? createBattleshipGame({
       players,
-      ships: {
-        [actor]: actorShips,
-        [partner]: partnerShips,
-      },
       firstHolder,
       ...(typeof options.size === "number" ? { size: options.size } : {}),
     })

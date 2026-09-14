@@ -16,16 +16,28 @@
 import type { AccountId, GameId } from './common.js';
 import { gameId } from './common.js';
 import type { AsyncGameDef } from './game.js';
-import type {
-  AsyncEngineState,
-  AsyncRuleset,
-  RulesetApplyResult,
-} from './async-engine.js';
+import type { AsyncEngineState, AsyncRuleset, RulesetApplyResult } from './async-engine.js';
 
 /** A single grid coordinate; `row` and `col` are zero-based integers. */
 export interface Cell {
   readonly row: number;
   readonly col: number;
+}
+
+/** One straight ship and the five-ship fleet a player places before play. */
+export type ShipPlacement = readonly Cell[];
+export type BattleshipFleet = readonly ShipPlacement[];
+
+/** The classic fleet lengths, largest first. */
+export const BATTLESHIP_FLEET_LENGTHS = [5, 4, 3, 3, 2] as const;
+
+export type FleetPlacementError =
+  'wrong-fleet' | 'off-grid' | 'not-straight' | 'not-contiguous' | 'overlap';
+
+export interface FleetPlacementValidation {
+  readonly ok: boolean;
+  readonly error?: FleetPlacementError;
+  readonly cells?: readonly Cell[];
 }
 
 /** A shot fired by a partner at the opponent's grid, with its resolved result. */
@@ -43,6 +55,8 @@ export interface Shot {
 export interface BattleshipState {
   readonly kind: 'battleship';
   readonly size: number;
+  readonly phase?: 'placement' | 'playing';
+  readonly readyPlayers?: readonly AccountId[];
   readonly ships: Readonly<Record<AccountId, readonly Cell[]>>;
   readonly shots: Readonly<Record<AccountId, readonly Shot[]>>;
 }
@@ -67,6 +81,47 @@ const cellKey = (row: number, col: number): string => `${row},${col}`;
 
 const isIntInRange = (value: unknown, size: number): value is number =>
   typeof value === 'number' && Number.isInteger(value) && value >= 0 && value < size;
+
+/**
+ * Validate the complete placement before it is accepted by either shell or
+ * server. Ships must be straight, contiguous, on-grid, and may never overlap.
+ */
+export function validateBattleshipFleet(
+  fleet: BattleshipFleet,
+  size = 10,
+): FleetPlacementValidation {
+  const lengths = fleet.map((ship) => ship.length).sort((a, b) => b - a);
+  if (
+    lengths.length !== BATTLESHIP_FLEET_LENGTHS.length ||
+    lengths.some((length, index) => length !== BATTLESHIP_FLEET_LENGTHS[index])
+  ) {
+    return { ok: false, error: 'wrong-fleet' };
+  }
+
+  const occupied = new Set<string>();
+  const flattened: Cell[] = [];
+  for (const ship of fleet) {
+    if (ship.some((cell) => !isIntInRange(cell.row, size) || !isIntInRange(cell.col, size))) {
+      return { ok: false, error: 'off-grid' };
+    }
+    const sameRow = ship.every((cell) => cell.row === ship[0]?.row);
+    const sameCol = ship.every((cell) => cell.col === ship[0]?.col);
+    if (!sameRow && !sameCol) return { ok: false, error: 'not-straight' };
+
+    const positions = ship.map((cell) => (sameRow ? cell.col : cell.row)).sort((a, b) => a - b);
+    if (positions.some((position, index) => index > 0 && position !== positions[index - 1]! + 1)) {
+      return { ok: false, error: 'not-contiguous' };
+    }
+
+    for (const cell of ship) {
+      const key = cellKey(cell.row, cell.col);
+      if (occupied.has(key)) return { ok: false, error: 'overlap' };
+      occupied.add(key);
+      flattened.push(cell);
+    }
+  }
+  return { ok: true, cells: flattened };
+}
 
 /**
  * The Battleship ruleset: validates and applies one shot for the active turn
@@ -112,11 +167,8 @@ export const battleshipRuleset: AsyncRuleset<BattleshipState, BattleshipAction> 
     };
 
     // The actor wins once every opponent ship cell has been hit.
-    const hitKeys = new Set(
-      nextShots.filter((s) => s.hit).map((s) => cellKey(s.row, s.col)),
-    );
-    const allSunk =
-      shipKeys.size > 0 && [...shipKeys].every((k) => hitKeys.has(k));
+    const hitKeys = new Set(nextShots.filter((s) => s.hit).map((s) => cellKey(s.row, s.col)));
+    const allSunk = shipKeys.size > 0 && [...shipKeys].every((k) => hitKeys.has(k));
 
     return {
       rulesetState: nextState,
@@ -134,11 +186,12 @@ export const battleshipRuleset: AsyncRuleset<BattleshipState, BattleshipAction> 
  */
 export function createBattleshipGame(params: {
   readonly players: readonly [AccountId, AccountId];
-  readonly ships: Readonly<Record<AccountId, readonly Cell[]>>;
+  readonly ships?: Readonly<Record<AccountId, readonly Cell[]>>;
   readonly firstHolder?: AccountId;
   readonly size?: number;
 }): AsyncEngineState {
-  const { players, ships } = params;
+  const { players } = params;
+  const ships = params.ships ?? {};
   const size = params.size ?? 10;
   const firstHolder = params.firstHolder ?? players[0];
   return {
@@ -151,6 +204,8 @@ export function createBattleshipGame(params: {
     ruleset: {
       kind: 'battleship',
       size,
+      phase: Object.keys(ships).length === 2 ? 'playing' : 'placement',
+      readyPlayers: Object.keys(ships) as AccountId[],
       ships,
       shots: { [players[0]]: [], [players[1]]: [] },
     },

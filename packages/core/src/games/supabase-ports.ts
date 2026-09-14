@@ -18,6 +18,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { RealTimeGameDef } from '../domain/game.js';
 import type { Move, TurnAction } from '../domain/game.js';
+import type { BattleshipFleet } from '../domain/async-battleship.js';
 import { ERROR_CODES, type AsyncErrorCode, type RTErrorCode } from '../errors.js';
 import { narrowCode, readErrorEnvelope } from '../supabase/function-error.js';
 import type {
@@ -25,8 +26,14 @@ import type {
   AsyncSessionOutcome,
   AsyncSessionPayload,
   AsyncStartOptions,
+  FleetPlacementOutcome,
 } from './async-game-module.js';
-import type { RTCatalogOutcome, RTGamePorts, RTSessionOutcome, RTSessionPayload } from './rt-game-module.js';
+import type {
+  RTCatalogOutcome,
+  RTGamePorts,
+  RTSessionOutcome,
+  RTSessionPayload,
+} from './rt-game-module.js';
 
 const RT_CODES: readonly string[] = [
   ERROR_CODES.PAIRING_REQUIRED,
@@ -51,10 +58,9 @@ export function createSupabaseRTGamePorts(client: SupabaseClient): RTGamePorts {
     fn: 'rt-move' | 'rt-rejoin',
     body: Record<string, unknown>,
   ): Promise<RTSessionOutcome> {
-    const { data, error } = await client.functions.invoke<{ session?: RTSessionPayload }>(
-      fn,
-      { body },
-    );
+    const { data, error } = await client.functions.invoke<{ session?: RTSessionPayload }>(fn, {
+      body,
+    });
 
     if (error) {
       const envelope = await readErrorEnvelope(error);
@@ -64,11 +70,7 @@ export function createSupabaseRTGamePorts(client: SupabaseClient): RTGamePorts {
           // A transport failure falls back to SESSION_NOT_FOUND rather than
           // INVALID_MOVE: telling a player their legal move was illegal is worse
           // than telling them the session could not be reached.
-          code: narrowCode<RTErrorCode>(
-            envelope?.code,
-            RT_CODES,
-            ERROR_CODES.SESSION_NOT_FOUND,
-          ),
+          code: narrowCode<RTErrorCode>(envelope?.code, RT_CODES, ERROR_CODES.SESSION_NOT_FOUND),
           message: envelope?.message ?? 'The real-time game request failed.',
           // Carries `gameState` on an invalid move, which is what lets the module
           // resynchronise a drifted board (Req 6.11).
@@ -103,11 +105,7 @@ export function createSupabaseRTGamePorts(client: SupabaseClient): RTGamePorts {
           error: {
             // The catalog is gated on the pairing (Req 6.5), so that is the
             // meaningful failure a shell acts on.
-            code: narrowCode<RTErrorCode>(
-              envelope?.code,
-              RT_CODES,
-              ERROR_CODES.PAIRING_REQUIRED,
-            ),
+            code: narrowCode<RTErrorCode>(envelope?.code, RT_CODES, ERROR_CODES.PAIRING_REQUIRED),
             message: envelope?.message ?? 'The game catalog could not be read.',
           },
         };
@@ -135,10 +133,9 @@ export function createSupabaseAsyncGamePorts(client: SupabaseClient): AsyncGameP
     fn: 'async-start' | 'async-take-turn',
     body: Record<string, unknown>,
   ): Promise<AsyncSessionOutcome> {
-    const { data, error } = await client.functions.invoke<{ session?: AsyncSessionPayload }>(
-      fn,
-      { body },
-    );
+    const { data, error } = await client.functions.invoke<{ session?: AsyncSessionPayload }>(fn, {
+      body,
+    });
 
     if (error) {
       const envelope = await readErrorEnvelope(error);
@@ -175,10 +172,39 @@ export function createSupabaseAsyncGamePorts(client: SupabaseClient): AsyncGameP
     takeTurn: (sessionId: string, action: TurnAction) =>
       session('async-take-turn', { sessionId, action }),
 
+    async placeFleet(sessionId: string, fleet: BattleshipFleet): Promise<FleetPlacementOutcome> {
+      const { data, error } = await client.functions.invoke<{
+        session?: AsyncSessionPayload;
+        fleet?: BattleshipFleet;
+      }>('battleship-place', { body: { sessionId, fleet } });
+      if (error || data?.session === undefined || data.fleet === undefined) {
+        const envelope = error ? await readErrorEnvelope(error) : null;
+        return {
+          ok: false,
+          error: {
+            code: narrowCode<AsyncErrorCode>(envelope?.code, ASYNC_CODES, ERROR_CODES.INVALID_TURN),
+            message: envelope?.message ?? 'The fleet could not be placed.',
+          },
+        };
+      }
+      return { ok: true, session: data.session, fleet: data.fleet };
+    },
+
+    async fetchOwnFleet(sessionId: string): Promise<BattleshipFleet | null> {
+      const { data, error } = await client
+        .from('battleship_placements')
+        .select('fleet')
+        .eq('session_id', sessionId)
+        .maybeSingle();
+      return error || data === null ? null : (data.fleet as BattleshipFleet);
+    },
+
     async fetchSessions(): Promise<readonly AsyncSessionPayload[]> {
       const { data, error } = await client
         .from('async_sessions')
-        .select('id, pairing_id, game_id, state, active_turn_holder, turn_pending_since, game_state, outcome');
+        .select(
+          'id, pairing_id, game_id, state, active_turn_holder, turn_pending_since, game_state, outcome',
+        );
 
       if (error || data === null) return [];
 

@@ -1,3 +1,4 @@
+import { forwardRef } from 'react';
 import { StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
 import type { ThemeTokens } from '@ldr/core';
 
@@ -5,11 +6,10 @@ import { themeTokens } from '../theme';
 import { AppText } from './AppText';
 
 /** Labelled field. Placeholder colour comes from `textMuted`. */
-export function AppField({
-  label,
-  tokens,
-  ...rest
-}: TextInputProps & { readonly label: string; readonly tokens?: ThemeTokens }) {
+export const AppField = forwardRef<
+  TextInput,
+  TextInputProps & { readonly label: string; readonly tokens?: ThemeTokens }
+>(function AppField({ label, tokens, ...rest }, ref) {
   const theme = tokens ?? themeTokens();
   return (
     <View style={styles.wrap}>
@@ -18,6 +18,8 @@ export function AppField({
       </AppText>
       <TextInput
         {...rest}
+        ref={ref}
+        accessibilityLabel={rest.accessibilityLabel ?? label}
         placeholderTextColor={theme.textMuted}
         style={[
           styles.input,
@@ -31,12 +33,13 @@ export function AppField({
       />
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   wrap: { marginBottom: 16 },
   label: { marginBottom: 8 },
   input: {
+    minHeight: 48,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 14,

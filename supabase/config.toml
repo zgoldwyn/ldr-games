@@ -536,6 +536,14 @@ verify_jwt = true
 import_map = "./functions/deno.json"
 entrypoint = "./functions/async-take-turn/index.ts"
 
+[functions.battleship-place]
+enabled = true
+# Each partner submits a private fleet before play. The function validates the
+# placement and commits only readiness to the shared session state.
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/battleship-place/index.ts"
+
 [functions.quiz]
 enabled = true
 # Quiz starts and answer/guess submissions are server-authoritative and tied to

@@ -1,10 +1,13 @@
 import { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { COLOR_OPTIONS } from '@ldr/core';
 
 import { requestAccountDeletion } from '../account/delete-account';
 import { useApp } from '../app-context';
 import { registerApnsToken } from '../notifications/apns-registration';
-import { themeTokens } from '../theme';
+import type { RootStackParamList } from '../navigation';
 import { AppButton } from '../ui/AppButton';
 import { AppText } from '../ui/AppText';
 import { Screen } from '../ui/Screen';
@@ -12,8 +15,8 @@ import { Screen } from '../ui/Screen';
 type DeleteStep = 'idle' | 'review';
 
 export function SettingsScreen() {
-  const tokens = themeTokens();
-  const { runtime, identity, reload } = useApp();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { runtime, identity, reload, tokens, colorOption, setColorOption } = useApp();
   const [deleteStep, setDeleteStep] = useState<DeleteStep>('idle');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +75,35 @@ export function SettingsScreen() {
         </AppText>
 
         <AppText kind="label" tokens={tokens} style={styles.section}>
+          Theme
+        </AppText>
+        <AppText kind="muted" tokens={tokens} style={styles.copy}>
+          Choose a color palette. Your choice is saved on this device.
+        </AppText>
+        <View style={styles.paletteRow}>
+          {Object.values(COLOR_OPTIONS).map((option) => (
+            <Pressable
+              key={option.name}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: colorOption === option.name }}
+              onPress={() => setColorOption(option.name)}
+              style={[
+                styles.palette,
+                {
+                  backgroundColor: option.light.primary,
+                  borderColor:
+                    colorOption === option.name ? option.light.onPrimary : option.light.border,
+                },
+              ]}
+            >
+              <AppText kind="label" tokens={option.light}>
+                {option.label}
+              </AppText>
+            </Pressable>
+          ))}
+        </View>
+
+        <AppText kind="label" tokens={tokens} style={styles.section}>
           Notifications
         </AppText>
         <AppText kind="muted" tokens={tokens} style={styles.copy}>
@@ -90,8 +122,30 @@ export function SettingsScreen() {
         ) : null}
 
         <AppText kind="label" tokens={tokens} style={styles.section}>
+          Legal & privacy
+        </AppText>
+        <AppText kind="muted" tokens={tokens} style={styles.copy}>
+          Review our policies and current data practices.
+        </AppText>
+        <AppButton
+          variant="quiet"
+          label="Open legal and privacy policies"
+          tokens={tokens}
+          onPress={() => navigation.navigate('Legal')}
+        />
+
+        <AppText kind="label" tokens={tokens} style={styles.section}>
           Account
         </AppText>
+
+        <AppButton
+          variant="quiet"
+          label="Sign out"
+          tokens={tokens}
+          disabled={busy}
+          onPress={() => void runtime.auth.signOut().then(() => reload())}
+        />
+        <View style={styles.accountSpacer} />
 
         {deleteStep === 'idle' ? (
           <>
@@ -163,4 +217,16 @@ const styles = StyleSheet.create({
   warningTitle: { fontWeight: '600', marginBottom: 8 },
   spacer: { height: 12 },
   error: { marginTop: 16 },
+  accountSpacer: { height: 16 },
+  paletteRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  palette: {
+    minWidth: 92,
+    minHeight: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 999,
+    borderWidth: 2,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
 });

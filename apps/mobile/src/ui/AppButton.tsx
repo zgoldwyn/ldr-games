@@ -22,7 +22,11 @@ export function AppButton({
   return (
     <Pressable
       {...rest}
+      accessibilityRole={rest.accessibilityRole ?? 'button'}
+      accessibilityLabel={rest.accessibilityLabel ?? label}
+      accessibilityState={{ ...rest.accessibilityState, disabled: disabled === true }}
       disabled={disabled}
+      hitSlop={rest.hitSlop ?? 4}
       style={({ pressed }) => [
         styles.base,
         {
@@ -53,6 +57,8 @@ export function AppButton({
 
 const styles = StyleSheet.create({
   base: {
+    minHeight: 48,
+    justifyContent: 'center',
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
     paddingVertical: 14,

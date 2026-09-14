@@ -27,10 +27,8 @@ import {
 //             deferred for one without a current session
 //   Req 7.11  inactivity never terminates or forfeits a session
 //
-// Battleship is used because it is the ruleset that can reach a terminal state:
-// a partner wins by hitting every cell of the opponent's fleet. Tests give each
-// partner a single-cell fleet on a small board so a game can be driven to
-// terminal in one shot rather than by exhaustive firing.
+// Battleship uses a private placement phase. Each partner submits their own
+// classic fleet; opponent coordinates never appear in the shared session row.
 //
 // Run with: npm run test:integration:local
 
@@ -100,34 +98,49 @@ describe.skipIf(cfg === null)('Asynchronous game wiring (integration)', () => {
    */
   async function startBattleship(
     a: { id: string; token: string },
-    b: { id: string },
+    b: { id: string; token: string },
   ): Promise<AsyncSessionView> {
     const started = await callFunction<{ session: AsyncSessionView }>(
       config,
       'async-start',
       {
         gameId: 'battleship',
-        options: {
-          size: 3,
-          ships: { [a.id]: [{ row: 0, col: 0 }], [b.id]: [{ row: 1, col: 1 }] },
-        },
+        options: {},
       },
       a.token,
     );
     expect(started.status).toBe(201);
-    return started.body.session;
+    const first = await placeFleet(a.token, started.body.session.id, fleetA);
+    expect(first.status).toBe(200);
+    const second = await placeFleet(b.token, started.body.session.id, fleetB);
+    expect(second.status).toBe(200);
+    return second.body.session;
   }
 
-  /** The cell holding `accountId`'s single-cell fleet, i.e. what to shoot at. */
-  function fleetCellOf(accountId: string, a: { id: string }): { row: number; col: number } {
-    return accountId === a.id ? { row: 0, col: 0 } : { row: 1, col: 1 };
+  const ship = (row: number, col: number, length: number, vertical = false) =>
+    Array.from({ length }, (_, offset) => ({
+      row: row + (vertical ? offset : 0),
+      col: col + (vertical ? 0 : offset),
+    }));
+  const fleetA = [ship(0, 0, 5), ship(2, 0, 4), ship(4, 0, 3), ship(6, 0, 3), ship(8, 0, 2)];
+  const fleetB = [
+    ship(0, 9, 5, true),
+    ship(0, 7, 4, true),
+    ship(0, 5, 3, true),
+    ship(5, 5, 3, true),
+    ship(0, 3, 2, true),
+  ];
+
+  async function placeFleet(token: string, id: string, fleet: unknown) {
+    return callFunction<{ session: AsyncSessionView } & FunctionErrorBody>(
+      config,
+      'battleship-place',
+      { sessionId: id, fleet },
+      token,
+    );
   }
 
-  async function fire(
-    token: string,
-    sessionId: string,
-    cell: { row: number; col: number },
-  ) {
+  async function fire(token: string, sessionId: string, cell: { row: number; col: number }) {
     return await callFunction<{ session: AsyncSessionView } & FunctionErrorBody>(
       config,
       'async-take-turn',
@@ -180,9 +193,7 @@ describe.skipIf(cfg === null)('Asynchronous game wiring (integration)', () => {
       .select('category, payload')
       .eq('recipient_account_id', b.id);
     expect(
-      (data ?? []).some(
-        (n) => (n.payload as { kind?: string })?.kind === 'async_game_invite',
-      ),
+      (data ?? []).some((n) => (n.payload as { kind?: string })?.kind === 'async_game_invite'),
     ).toBe(true);
 
     // Req 7.9: no partner, no session.
@@ -197,38 +208,62 @@ describe.skipIf(cfg === null)('Asynchronous game wiring (integration)', () => {
     expect(refused.body.error?.code).toBe('PAIRING_REQUIRED');
   });
 
-  it('refuses a battleship start with an empty fleet, which could never end', async () => {
+  it('requires each partner to place a valid private, non-overlapping fleet', async () => {
     const a = await member();
     const b = await member();
     await pair(a.token, b.token);
 
-    // The ruleset derives "all sunk" from the opponent's ship cells, so a fleet of
-    // zero cells can never be fully hit and the session could never reach a
-    // terminal state (Req 7.10).
-    const refused = await callFunction<FunctionErrorBody>(
+    const started = await callFunction<{ session: AsyncSessionView }>(
       config,
       'async-start',
       { gameId: 'battleship' },
       a.token,
     );
-    expect(refused.status).toBe(400);
-    expect(refused.body.error?.code).toBe('INVALID_TURN');
+    expect(started.status).toBe(201);
+    expect(started.body.session.gameState.ruleset).toMatchObject({ phase: 'placement' });
 
-    // One-sided placement is refused too.
-    const oneSided = await callFunction<FunctionErrorBody>(
+    const overlapping = [...fleetA.slice(0, 4), ship(0, 0, 2)];
+    const rejected = await placeFleet(a.token, started.body.session.id, overlapping);
+    expect(rejected.status).toBe(400);
+    expect(rejected.body.error?.code).toBe('INVALID_TURN');
+
+    expect((await placeFleet(a.token, started.body.session.id, fleetA)).status).toBe(200);
+    const waiting = await sessionRow(started.body.session.id);
+    expect((waiting?.game_state as { ruleset: { phase: string } }).ruleset.phase).toBe('placement');
+    const ready = await placeFleet(b.token, started.body.session.id, fleetB);
+    expect(ready.body.session.gameState.ruleset).toMatchObject({ phase: 'playing' });
+
+    // Shared state exposes readiness and shots, never either private fleet.
+    expect(JSON.stringify(ready.body.session.gameState)).not.toContain('"fleet"');
+    expect(ready.body.session.gameState.ruleset).toMatchObject({ ships: {} });
+    const own = await a.client
+      .from('battleship_placements')
+      .select('account_id, fleet')
+      .eq('session_id', started.body.session.id);
+    expect(own.data).toHaveLength(1);
+    expect(own.data?.[0]?.account_id).toBe(a.id);
+  });
+
+  it('rejects fleet placement from a displaced session', async () => {
+    const a = await member();
+    const b = await member();
+    await pair(a.token, b.token);
+    const started = await callFunction<{ session: AsyncSessionView }>(
       config,
       'async-start',
-      { gameId: 'battleship', options: { ships: { [a.id]: [{ row: 0, col: 0 }] } } },
+      { gameId: 'battleship' },
       a.token,
     );
-    expect(oneSided.status).toBe(400);
+    expect(started.status).toBe(201);
+    const displaced = await admin
+      .from('account_session')
+      .update({ epoch: 1, updated_at: new Date().toISOString() })
+      .eq('account_id', a.id);
+    expect(displaced.error).toBeNull();
 
-    // Nothing was created by either rejected attempt.
-    const { data } = await admin
-      .from('async_sessions')
-      .select('id')
-      .eq('pairing_id', (await admin.from('accounts').select('pairing_id').eq('id', a.id).single()).data?.pairing_id);
-    expect(data ?? []).toHaveLength(0);
+    const rejected = await placeFleet(a.token, started.body.session.id, fleetA);
+    expect(rejected.status).toBe(401);
+    expect(rejected.body.error?.code).toBe('SESSION_SUPERSEDED');
   });
 
   it('refuses a fourth open asynchronous session of the same game type', async () => {
@@ -245,10 +280,7 @@ describe.skipIf(cfg === null)('Asynchronous game wiring (integration)', () => {
       'async-start',
       {
         gameId: 'battleship',
-        options: {
-          size: 3,
-          ships: { [a.id]: [{ row: 0, col: 0 }], [b.id]: [{ row: 1, col: 1 }] },
-        },
+        options: {},
       },
       a.token,
     );
@@ -388,10 +420,7 @@ describe.skipIf(cfg === null)('Asynchronous game wiring (integration)', () => {
     // Req 7.11: age the pending turn far beyond any threshold. The session must
     // remain active — inactivity never forfeits or terminates it.
     const longAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
-    await admin
-      .from('async_sessions')
-      .update({ turn_pending_since: longAgo })
-      .eq('id', session.id);
+    await admin.from('async_sessions').update({ turn_pending_since: longAgo }).eq('id', session.id);
 
     const aged = await sessionRow(session.id);
     expect(aged?.state).toBe('active');
@@ -415,12 +444,25 @@ describe.skipIf(cfg === null)('Asynchronous game wiring (integration)', () => {
     const holder = session.activeTurnHolder === a.id ? a : b;
     const loser = session.activeTurnHolder === a.id ? b : a;
 
-    // The partner who is about to LOSE signs out first, so the outcome has to be
-    // waiting for them rather than pushed live (Req 7.10's deferral clause).
+    const targetFleet = loser.id === a.id ? fleetA : fleetB;
+    const targetCells = targetFleet.flat();
+    const holderFleetKeys = new Set(
+      (holder.id === a.id ? fleetA : fleetB).flat().map((cell) => `${cell.row},${cell.col}`),
+    );
+    const safeMisses = Array.from({ length: 100 }, (_, index) => ({
+      row: Math.floor(index / 10),
+      col: index % 10,
+    })).filter((cell) => !holderFleetKeys.has(`${cell.row},${cell.col}`));
+
+    // Alternate until one target cell remains. The future loser participates
+    // normally, then signs out before the decisive shot so delivery must defer.
+    for (let index = 0; index < targetCells.length - 1; index += 1) {
+      expect((await fire(holder.token, session.id, targetCells[index]!)).status).toBe(200);
+      expect((await fire(loser.token, session.id, safeMisses[index]!)).status).toBe(200);
+    }
     await loser.client.auth.signOut();
 
-    // One accurate shot sinks the opponent's single-cell fleet.
-    const finished = await fire(holder.token, session.id, fleetCellOf(loser.id, a));
+    const finished = await fire(holder.token, session.id, targetCells.at(-1)!);
     expect(finished.status).toBe(200);
     expect(finished.body.session.state).toBe('terminal');
     expect(finished.body.session.outcome).toMatchObject({
@@ -441,9 +483,7 @@ describe.skipIf(cfg === null)('Asynchronous game wiring (integration)', () => {
     const results = (data ?? []).filter(
       (n) => (n.payload as { kind?: string })?.kind === 'session_result',
     );
-    expect(new Set(results.map((n) => n.recipient_account_id))).toEqual(
-      new Set([a.id, b.id]),
-    );
+    expect(new Set(results.map((n) => n.recipient_account_id))).toEqual(new Set([a.id, b.id]));
     for (const note of results) {
       expect(note.delivered_at).toBeNull();
     }

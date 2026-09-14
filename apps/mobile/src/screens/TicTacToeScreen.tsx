@@ -1,16 +1,22 @@
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { isErr, sessionId, type AccountId, type TicTacToeState } from '@ldr/core';
 
 import { useApp } from '../app-context';
 import { messageForError } from '../copy/error-copy';
-import { markForCell } from '../games/tic-tac-toe-view';
+import {
+  markForCell,
+  markForPlayer,
+  ticTacToeBoardLayout,
+  ticTacToeStatus,
+  winningCells,
+} from '../games/tic-tac-toe-view';
 import type { RootStackParamList } from '../navigation';
-import { themeTokens } from '../theme';
 import { AppButton } from '../ui/AppButton';
 import { AppText } from '../ui/AppText';
 import { Screen } from '../ui/Screen';
+import { TicTacToeMark } from '../ui/TicTacToeMark';
 
 function asBoard(state: unknown): TicTacToeState | null {
   if (state === null || typeof state !== 'object') return null;
@@ -24,12 +30,12 @@ function asBoard(state: unknown): TicTacToeState | null {
 type Props = NativeStackScreenProps<RootStackParamList, 'TicTacToe'>;
 
 export function TicTacToeScreen({ route }: Props) {
-  const tokens = themeTokens();
-  const { runtime, identity } = useApp();
+  const { runtime, identity, tokens } = useApp();
   const id = sessionId(route.params.sessionId);
   const [, setTick] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const { width: viewportWidth } = useWindowDimensions();
 
   useEffect(() => runtime.rt.subscribe(() => setTick((n) => n + 1)), [runtime.rt]);
   useEffect(() => {
@@ -45,6 +51,16 @@ export function TicTacToeScreen({ route }: Props) {
     self !== undefined &&
     board.currentTurn === self &&
     cached?.state === 'active';
+  const status = ticTacToeStatus({
+    sessionState: cached?.state,
+    boardStatus: board?.status,
+    currentTurn: board?.currentTurn,
+    winner: board?.winner,
+    self,
+  });
+  const ownMark = markForPlayer(self, board?.players);
+  const winning = new Set(board === null ? [] : winningCells(board.board));
+  const { boardSize, cellSize } = ticTacToeBoardLayout(viewportWidth);
 
   async function place(cell: number) {
     if (!myTurn || busy) return;
@@ -71,38 +87,58 @@ export function TicTacToeScreen({ route }: Props) {
 
   return (
     <Screen tokens={tokens}>
-      <AppText kind="muted" tokens={tokens} style={styles.status}>
-        {cached?.state ?? 'unknown'}
-        {board?.status === 'won' && board.winner !== null
-          ? ` · ${board.winner === self ? 'You won' : 'Partner won'}`
-          : ''}
-        {board?.status === 'draw' ? ' · Draw' : ''}
-      </AppText>
+      <View
+        accessible
+        accessibilityRole="summary"
+        accessibilityLiveRegion="polite"
+        style={[styles.statusCard, { backgroundColor: tokens.surfaceMuted }]}
+      >
+        <AppText kind="title" tokens={tokens} style={styles.statusTitle}>
+          {status.title}
+        </AppText>
+        <AppText kind="muted" tokens={tokens}>
+          {status.detail}
+        </AppText>
+        {ownMark !== '' ? (
+          <AppText kind="label" tokens={tokens} style={styles.identity}>
+            You are {ownMark}
+          </AppText>
+        ) : null}
+      </View>
       {cached?.state === 'pending' ? (
         <AppText kind="muted" tokens={tokens} selectable>
-          Waiting for your partner. Session {id}
+          Invite sent · Session {id}
         </AppText>
       ) : null}
 
-      <View style={styles.grid}>
+      <View style={[styles.grid, { width: boardSize, height: boardSize }]}>
         {(board?.board ?? Array<AccountId | null>(9).fill(null)).map((cell, index) => (
           <Pressable
             key={index}
-            disabled={!myTurn}
+            accessibilityRole="button"
+            accessibilityLabel={`Row ${Math.floor(index / 3) + 1}, column ${(index % 3) + 1}, ${board === null || cell === null ? 'empty' : markForCell(cell, board.players)}`}
+            accessibilityHint={myTurn && cell === null ? 'Places your mark' : undefined}
+            accessibilityState={{ disabled: !myTurn || cell !== null }}
+            disabled={!myTurn || cell !== null}
             onPress={() => {
               void place(index);
             }}
-            style={[
+            style={({ pressed }) => [
               styles.cell,
               {
-                backgroundColor: tokens.surface,
+                backgroundColor: winning.has(index) ? tokens.accent : tokens.surface,
                 borderColor: tokens.border,
+                borderRightWidth: index % 3 < 2 ? 2 : 0,
+                borderBottomWidth: Math.floor(index / 3) < 2 ? 2 : 0,
+                opacity: pressed ? 0.78 : 1,
+                width: cellSize,
+                height: cellSize,
               },
             ]}
           >
-            <AppText kind="title" tokens={tokens} style={styles.mark}>
-              {board ? markForCell(cell, board.players) : ''}
-            </AppText>
+            {board && markForCell(cell, board.players) !== '' ? (
+              <TicTacToeMark mark={markForCell(cell, board.players) as 'X' | 'O'} tokens={tokens} />
+            ) : null}
           </Pressable>
         ))}
       </View>
@@ -119,7 +155,13 @@ export function TicTacToeScreen({ route }: Props) {
       ) : null}
 
       {error !== null ? (
-        <AppText kind="error" tokens={tokens} style={styles.banner}>
+        <AppText
+          kind="error"
+          tokens={tokens}
+          style={styles.banner}
+          accessibilityRole="alert"
+          accessibilityLiveRegion="assertive"
+        >
           {error}
         </AppText>
       ) : null}
@@ -128,21 +170,18 @@ export function TicTacToeScreen({ route }: Props) {
 }
 
 const styles = StyleSheet.create({
-  status: { marginBottom: 16 },
+  statusCard: { borderRadius: 20, padding: 18, marginBottom: 20 },
+  statusTitle: { marginBottom: 4 },
+  identity: { marginTop: 12 },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginHorizontal: -4,
+    marginTop: 16,
+    alignSelf: 'center',
   },
   cell: {
-    width: '33.333%',
-    aspectRatio: 1,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 4,
   },
-  mark: { fontSize: 32 },
   banner: { marginTop: 16 },
 });

@@ -1,10 +1,20 @@
-import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { useRef, useState } from 'react';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+  type TextInput,
+} from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { isErr, isOk } from '@ldr/core';
 
 import { messageForError } from '../copy/error-copy';
 import { useApp } from '../app-context';
-import { themeTokens } from '../theme';
+import type { RootStackParamList } from '../navigation';
 import { AppButton } from '../ui/AppButton';
 import { AppField } from '../ui/AppField';
 import { AppText } from '../ui/AppText';
@@ -13,16 +23,21 @@ import { Screen } from '../ui/Screen';
 type Mode = 'signIn' | 'register';
 
 export function SignInScreen() {
-  const tokens = themeTokens();
-  const { runtime, reload } = useApp();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { runtime, reload, tokens } = useApp();
   const [mode, setMode] = useState<Mode>('signIn');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [legalAccepted, setLegalAccepted] = useState(false);
+  const passwordRef = useRef<TextInput>(null);
+
+  const canSubmit = !busy && (mode === 'signIn' || legalAccepted);
 
   async function submit() {
+    if (!canSubmit) return;
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -75,29 +90,93 @@ export function SignInScreen() {
             textContentType="emailAddress"
             value={email}
             onChangeText={setEmail}
+            returnKeyType="next"
+            blurOnSubmit={false}
+            onSubmitEditing={() => passwordRef.current?.focus()}
           />
           <AppField
+            ref={passwordRef}
             label="Password"
             tokens={tokens}
             secureTextEntry
             textContentType={mode === 'register' ? 'newPassword' : 'password'}
             value={password}
             onChangeText={setPassword}
+            returnKeyType="done"
+            onSubmitEditing={() => void submit()}
           />
 
           {mode === 'register' ? (
-            <AppText kind="muted" tokens={tokens} style={styles.hint}>
-              At least 12 characters, with upper and lower case, a number, and a symbol.
-            </AppText>
+            <>
+              <AppText kind="muted" tokens={tokens} style={styles.hint}>
+                At least 12 characters, with upper and lower case, a number, and a symbol.
+              </AppText>
+              <View style={styles.policyLinks}>
+                <AppButton
+                  variant="quiet"
+                  label="Read Terms"
+                  tokens={tokens}
+                  onPress={() => navigation.navigate('LegalDocument', { document: 'terms' })}
+                />
+                <AppButton
+                  variant="quiet"
+                  label="Read Privacy Policy"
+                  tokens={tokens}
+                  onPress={() => navigation.navigate('LegalDocument', { document: 'privacy' })}
+                />
+              </View>
+              <Pressable
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: legalAccepted }}
+                accessibilityLabel="I agree to the Terms and acknowledge the Privacy Policy"
+                onPress={() => setLegalAccepted((accepted) => !accepted)}
+                style={({ pressed }) => [
+                  styles.consent,
+                  {
+                    backgroundColor: pressed ? tokens.surfaceMuted : tokens.surface,
+                    borderColor: tokens.border,
+                  },
+                ]}
+              >
+                <View
+                  accessibilityElementsHidden
+                  style={[
+                    styles.checkbox,
+                    {
+                      backgroundColor: legalAccepted ? tokens.primary : tokens.surface,
+                      borderColor: legalAccepted ? tokens.primaryStrong : tokens.border,
+                    },
+                  ]}
+                >
+                  <AppText kind="body" tokens={tokens}>
+                    {legalAccepted ? '✓' : ''}
+                  </AppText>
+                </View>
+                <AppText kind="body" tokens={tokens} style={styles.consentCopy}>
+                  I agree to the Terms and acknowledge the Privacy Policy.
+                </AppText>
+              </Pressable>
+            </>
           ) : null}
 
           {error !== null ? (
-            <AppText kind="error" tokens={tokens} style={styles.banner}>
+            <AppText
+              kind="error"
+              tokens={tokens}
+              style={styles.banner}
+              accessibilityLiveRegion="assertive"
+              accessibilityRole="alert"
+            >
               {error}
             </AppText>
           ) : null}
           {notice !== null ? (
-            <AppText kind="muted" tokens={tokens} style={styles.banner}>
+            <AppText
+              kind="muted"
+              tokens={tokens}
+              style={styles.banner}
+              accessibilityLiveRegion="polite"
+            >
               {notice}
             </AppText>
           ) : null}
@@ -105,7 +184,7 @@ export function SignInScreen() {
           <AppButton
             label={mode === 'signIn' ? 'Sign in' : 'Create account'}
             tokens={tokens}
-            disabled={busy}
+            disabled={!canSubmit}
             onPress={() => {
               void submit();
             }}
@@ -118,9 +197,18 @@ export function SignInScreen() {
               label={mode === 'signIn' ? 'Need an account?' : 'Already have an account?'}
               onPress={() => {
                 setMode(mode === 'signIn' ? 'register' : 'signIn');
+                setLegalAccepted(false);
                 setError(null);
                 setNotice(null);
               }}
+            />
+          </View>
+          <View style={styles.legalRow}>
+            <AppButton
+              variant="quiet"
+              tokens={tokens}
+              label="Legal and privacy"
+              onPress={() => navigation.navigate('Legal')}
             />
           </View>
         </ScrollView>
@@ -136,4 +224,24 @@ const styles = StyleSheet.create({
   hint: { marginBottom: 16 },
   banner: { marginBottom: 16 },
   switchRow: { marginTop: 16 },
+  legalRow: { marginTop: 12 },
+  policyLinks: { gap: 8, marginBottom: 12 },
+  consent: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 16,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 7,
+    borderWidth: 1,
+  },
+  consentCopy: { flex: 1, marginLeft: 12 },
 });

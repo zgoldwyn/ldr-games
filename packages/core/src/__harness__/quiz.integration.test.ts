@@ -39,7 +39,11 @@ interface QuizSessionView {
 
 interface QuizResponse {
   readonly session: QuizSessionView;
-  readonly selfAnswers?: readonly { readonly accountId: string; readonly questionId: string }[];
+  readonly selfAnswers?: readonly {
+    readonly accountId: string;
+    readonly questionId: string;
+    readonly answer: { readonly kind: 'choice' | 'text'; readonly value: string };
+  }[];
   readonly guesses?: readonly { readonly accountId: string; readonly questionId: string }[];
   readonly results?: {
     readonly scores: Record<string, number>;
@@ -237,12 +241,29 @@ describe.skipIf(cfg === null)('Quiz Edge Function (integration)', () => {
       .single();
     expect(phaseAfterReject.data?.phase).toBe('self_answer');
 
+    // Use a unique canary value so the response assertion below proves that the
+    // answer payload itself is absent, not merely that its owner id was omitted.
+    const privateAnswerCanary = `private-${crypto.randomUUID()}`;
     expect(
-      (await selfAnswer(f.aToken, sessionId, f.q2, { kind: 'text', value: 'Pizza' })).status,
+      (
+        await selfAnswer(f.aToken, sessionId, f.q2, {
+          kind: 'text',
+          value: privateAnswerCanary,
+        })
+      ).status,
     ).toBe(200);
+    const partnerResponseDuringSelfAnswer = await selfAnswer(f.bToken, sessionId, f.q1, {
+      kind: 'choice',
+      value: 'blue',
+    });
+    expect(partnerResponseDuringSelfAnswer.status).toBe(200);
+    expect(partnerResponseDuringSelfAnswer.body.session.phase).toBe('self_answer');
     expect(
-      (await selfAnswer(f.bToken, sessionId, f.q1, { kind: 'choice', value: 'blue' })).status,
-    ).toBe(200);
+      partnerResponseDuringSelfAnswer.body.selfAnswers?.every(
+        (answer) => answer.accountId === f.b.id,
+      ),
+    ).toBe(true);
+    expect(JSON.stringify(partnerResponseDuringSelfAnswer.body)).not.toContain(privateAnswerCanary);
     const revealed = await selfAnswer(f.bToken, sessionId, f.q2, { kind: 'text', value: 'tacos' });
     expect(revealed.status).toBe(200);
     expect(revealed.body.session.phase).toBe('guessing');

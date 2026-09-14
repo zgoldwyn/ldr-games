@@ -61,6 +61,8 @@ function harness(
     start?: AsyncGamePorts['start'];
     takeTurn?: AsyncGamePorts['takeTurn'];
     fetchSessions?: AsyncGamePorts['fetchSessions'];
+    placeFleet?: AsyncGamePorts['placeFleet'];
+    fetchOwnFleet?: AsyncGamePorts['fetchOwnFleet'];
   } = {},
 ) {
   const store = createLocalStore();
@@ -73,6 +75,10 @@ function harness(
         session: payload({ activeTurnHolder: BOB, gameState: gameState(1) }),
       })),
     fetchSessions: options.fetchSessions ?? (async () => [payload()]),
+    placeFleet:
+      options.placeFleet ??
+      (async (_sessionId, fleet) => ({ ok: true, session: payload(), fleet })),
+    fetchOwnFleet: options.fetchOwnFleet ?? (async () => null),
   };
   return { module: createAsyncGameModule(ports, store), store };
 }
@@ -117,6 +123,29 @@ describe('async payload and row mapping', () => {
       }),
     );
     expect(session.outcome).toMatchObject({ kind: 'completed', winner: ALICE });
+  });
+});
+
+describe('AsyncGameModule Battleship placement', () => {
+  const fleet = [
+    Array.from({ length: 5 }, (_, col) => ({ row: 0, col })),
+    Array.from({ length: 4 }, (_, col) => ({ row: 2, col })),
+    Array.from({ length: 3 }, (_, col) => ({ row: 4, col })),
+    Array.from({ length: 3 }, (_, col) => ({ row: 6, col })),
+    Array.from({ length: 2 }, (_, col) => ({ row: 8, col })),
+  ];
+
+  it('caches only the caller’s own accepted fleet', async () => {
+    const h = harness();
+    const result = await h.module.placeBattleshipFleet(SESSION, fleet);
+    expect(isOk(result)).toBe(true);
+    expect(h.module.ownBattleshipFleet(SESSION)).toEqual(fleet);
+  });
+
+  it('loads an own-row-only fleet after a cold start', async () => {
+    const h = harness({ fetchOwnFleet: async () => fleet });
+    await expect(h.module.loadOwnBattleshipFleet(SESSION)).resolves.toEqual(fleet);
+    expect(h.module.ownBattleshipFleet(SESSION)).toEqual(fleet);
   });
 });
 

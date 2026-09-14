@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -7,20 +7,26 @@ import { invitationCode, isErr, isOk } from '@ldr/core';
 import { useApp } from '../app-context';
 import { messageForError } from '../copy/error-copy';
 import type { RootStackParamList } from '../navigation';
-import { themeTokens } from '../theme';
+import { startPairingRefreshWatcher } from '../pairing/pairing-refresh-watcher';
 import { AppButton } from '../ui/AppButton';
 import { AppField } from '../ui/AppField';
 import { AppText } from '../ui/AppText';
 import { Screen } from '../ui/Screen';
 
 export function PairingScreen() {
-  const tokens = themeTokens();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { runtime, identity, reload } = useApp();
+  const { runtime, identity, reload, tokens } = useApp();
   const [code, setCode] = useState('');
   const [issued, setIssued] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    return startPairingRefreshWatcher({
+      isPaired: async () => (await runtime.pairing.getPairing()) !== null,
+      onPaired: reload,
+    });
+  }, [reload, runtime.pairing]);
 
   async function create() {
     setBusy(true);

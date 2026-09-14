@@ -25,6 +25,7 @@
  * Storage wiring already exist and are tested, so adding it later is UI-only.
  */
 import { ASYNC_GAME_DEFS } from '../domain/async-engine.js';
+import type { BattleshipFleet } from '../domain/async-battleship.js';
 import type { AccountId, GameId, PairingId, SessionId } from '../domain/common.js';
 import type {
   AsyncGameDef,
@@ -118,38 +119,37 @@ export type AsyncSessionOutcome =
   | { readonly ok: true; readonly session: AsyncSessionPayload }
   | { readonly ok: false; readonly error: AsyncError };
 
+export type FleetPlacementOutcome =
+  | { readonly ok: true; readonly session: AsyncSessionPayload; readonly fleet: BattleshipFleet }
+  | { readonly ok: false; readonly error: AsyncError };
+
 /** Game-specific start options, e.g. battleship's `ships`, `size`, `firstHolder`. */
 export type AsyncStartOptions = Record<string, unknown>;
 
 /** Injected collaborators. */
 export interface AsyncGamePorts {
   /** `async-start` — create a session and designate a holder (Req 7.2, 7.9). */
-  readonly start: (
-    gameId: string,
-    options: AsyncStartOptions,
-  ) => Promise<AsyncSessionOutcome>;
+  readonly start: (gameId: string, options: AsyncStartOptions) => Promise<AsyncSessionOutcome>;
   /** `async-take-turn` — apply one turn (Req 7.5, 7.7, 7.8). */
-  readonly takeTurn: (
-    sessionId: string,
-    action: TurnAction,
-  ) => Promise<AsyncSessionOutcome>;
+  readonly takeTurn: (sessionId: string, action: TurnAction) => Promise<AsyncSessionOutcome>;
   /** Every async session for the caller's pairing, read through RLS. */
   readonly fetchSessions: () => Promise<readonly AsyncSessionPayload[]>;
+  /** Save the caller's private Battleship fleet. */
+  readonly placeFleet: (
+    sessionId: string,
+    fleet: BattleshipFleet,
+  ) => Promise<FleetPlacementOutcome>;
+  /** Read only the caller's own fleet through RLS. */
+  readonly fetchOwnFleet: (sessionId: string) => Promise<BattleshipFleet | null>;
 }
 
 export interface AsyncGameModule {
   /** The available asynchronous games (Req 7.1). */
   listGames(): readonly AsyncGameDef[];
   /** Start a session (Req 7.2). */
-  start(
-    gameId: string,
-    options: AsyncStartOptions,
-  ): Promise<Result<AsyncSession, AsyncError>>;
+  start(gameId: string, options: AsyncStartOptions): Promise<Result<AsyncSession, AsyncError>>;
   /** Take one turn as the Active_Turn_Holder (Req 7.5, 7.7, 7.8). */
-  takeTurn(
-    sessionId: SessionId,
-    action: TurnAction,
-  ): Promise<Result<AsyncSession, AsyncError>>;
+  takeTurn(sessionId: SessionId, action: TurnAction): Promise<Result<AsyncSession, AsyncError>>;
   /** Reload every session from the server (Req 7.3). */
   refresh(): Promise<readonly AsyncSession[]>;
   /** Apply a replicated row; called by the Connection Manager (task 21.3). */
@@ -160,15 +160,19 @@ export interface AsyncGameModule {
   list(): readonly AsyncSession[];
   /** Whether `accountId` may take the next turn (Req 7.4). */
   isMyTurn(sessionId: SessionId, accountId: AccountId): boolean;
+  placeBattleshipFleet(
+    sessionId: SessionId,
+    fleet: BattleshipFleet,
+  ): Promise<Result<AsyncSession, AsyncError>>;
+  ownBattleshipFleet(sessionId: SessionId): BattleshipFleet | undefined;
+  loadOwnBattleshipFleet(sessionId: SessionId): Promise<BattleshipFleet | undefined>;
   /** Observe cache changes so a board re-renders. */
   subscribe(listener: StoreListener): () => void;
 }
 
 /** Build an asynchronous game module over the given ports and cache. */
-export function createAsyncGameModule(
-  ports: AsyncGamePorts,
-  store: LocalStore,
-): AsyncGameModule {
+export function createAsyncGameModule(ports: AsyncGamePorts, store: LocalStore): AsyncGameModule {
+  const ownFleets = new Map<string, BattleshipFleet>();
   function cache(session: AsyncSession): AsyncSession {
     store.put('async_session', session.id, session, turnCount(session));
     return session;
@@ -187,9 +191,7 @@ export function createAsyncGameModule(
       options: AsyncStartOptions,
     ): Promise<Result<AsyncSession, AsyncError>> {
       const outcome = await ports.start(gameId, options);
-      return outcome.ok
-        ? ok(cache(asyncSessionFromPayload(outcome.session)))
-        : err(outcome.error);
+      return outcome.ok ? ok(cache(asyncSessionFromPayload(outcome.session))) : err(outcome.error);
     },
 
     async takeTurn(
@@ -200,9 +202,7 @@ export function createAsyncGameModule(
       // A refusal writes nothing. `async-take-turn` echoes no state (unlike
       // `rt-move`), so there is nothing to resynchronise from, and the contract
       // guarantees the server-side row is unchanged anyway (Req 7.7, 7.8).
-      return outcome.ok
-        ? ok(cache(asyncSessionFromPayload(outcome.session)))
-        : err(outcome.error);
+      return outcome.ok ? ok(cache(asyncSessionFromPayload(outcome.session))) : err(outcome.error);
     },
 
     async refresh(): Promise<readonly AsyncSession[]> {
@@ -227,6 +227,26 @@ export function createAsyncGameModule(
       // A finished game has no next turn, so a terminal session is never "mine".
       if (session === undefined || session.state !== 'active') return false;
       return session.activeTurnHolder === accountId;
+    },
+
+    async placeBattleshipFleet(
+      sessionId: SessionId,
+      fleet: BattleshipFleet,
+    ): Promise<Result<AsyncSession, AsyncError>> {
+      const outcome = await ports.placeFleet(sessionId, fleet);
+      if (!outcome.ok) return err(outcome.error);
+      ownFleets.set(sessionId, outcome.fleet);
+      return ok(cache(asyncSessionFromPayload(outcome.session)));
+    },
+
+    ownBattleshipFleet(sessionId: SessionId): BattleshipFleet | undefined {
+      return ownFleets.get(sessionId);
+    },
+
+    async loadOwnBattleshipFleet(sessionId: SessionId): Promise<BattleshipFleet | undefined> {
+      const fleet = await ports.fetchOwnFleet(sessionId);
+      if (fleet !== null) ownFleets.set(sessionId, fleet);
+      return fleet ?? undefined;
     },
 
     subscribe(listener: StoreListener): () => void {

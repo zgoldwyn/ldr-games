@@ -8,25 +8,18 @@ import {
   isErr,
   isOk,
   sessionId,
-  type AccountId,
   type Notification,
-  type Pairing,
 } from '@ldr/core';
 
 import { useApp } from '../app-context';
 import { messageForError } from '../copy/error-copy';
-import { classicFleet } from '../games/battleship-fleet';
+import { sessionStateLabel, unfinishedGames } from '../games/game-list-view';
 import type { RootStackParamList } from '../navigation';
-import { themeTokens } from '../theme';
 import { AppButton } from '../ui/AppButton';
 import { AppText } from '../ui/AppText';
 import { Screen } from '../ui/Screen';
 
 const MAX_OPEN_SESSIONS_PER_GAME = 3;
-
-function partnerId(pairing: Pairing, self: AccountId): AccountId {
-  return pairing.memberA === self ? pairing.memberB : pairing.memberA;
-}
 
 type IncomingInvite =
   | { readonly kind: 'rt'; readonly sessionId: string }
@@ -53,9 +46,8 @@ function incomingInvite(notification: Notification): IncomingInvite | null {
 }
 
 export function GameListScreen() {
-  const tokens = themeTokens();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { runtime, identity, reload } = useApp();
+  const { runtime, identity, tokens } = useApp();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [rtNames, setRtNames] = useState<string>('Tic-Tac-Toe');
@@ -88,7 +80,6 @@ export function GameListScreen() {
   if (pairing === null || session === null) return null;
 
   const self = session.accountId;
-  const activePairing = pairing;
   const asyncCatalog = runtime.asyncGames
     .listGames()
     .filter((game) => game.id === BATTLESHIP_GAME_ID);
@@ -109,6 +100,12 @@ export function GameListScreen() {
         readonly invite: IncomingInvite;
       } => item.invite !== null,
     );
+  const ticTacToeSessions = unfinishedGames(
+    runtime.rt.list().filter((item) => item.gameId === TIC_TAC_TOE),
+  );
+  const battleshipSessions = unfinishedGames(
+    runtime.asyncGames.list().filter((item) => item.gameId === BATTLESHIP_GAME_ID),
+  );
 
   async function inviteTicTacToe() {
     setBusy(true);
@@ -129,10 +126,7 @@ export function GameListScreen() {
     setBusy(true);
     setError(null);
     try {
-      const partner = partnerId(activePairing, self);
-      const result = await runtime.asyncGames.start(BATTLESHIP_GAME_ID, {
-        ships: { [self]: classicFleet(), [partner]: classicFleet() },
-      });
+      const result = await runtime.asyncGames.start(BATTLESHIP_GAME_ID, {});
       if (isErr(result)) {
         setError(messageForError(result.error));
         return;
@@ -231,58 +225,50 @@ export function GameListScreen() {
         <AppText kind="label" tokens={tokens} style={styles.section}>
           Your games
         </AppText>
-        {runtime.rt.list().map((item) => (
+        {ticTacToeSessions.map((item) => (
           <Pressable
             key={item.id}
             onPress={() => navigation.navigate('TicTacToe', { sessionId: item.id })}
             style={[styles.row, { backgroundColor: tokens.surface, borderColor: tokens.border }]}
           >
             <AppText kind="body" tokens={tokens}>
-              Tic-tac-toe · {item.state}
+              Tic-tac-toe
             </AppText>
-            <AppText kind="muted" tokens={tokens} selectable>
-              {item.id}
+            <AppText kind="muted" tokens={tokens}>
+              {sessionStateLabel(item.state)}
             </AppText>
           </Pressable>
         ))}
-        {runtime.asyncGames.list().map((item) => (
+        {battleshipSessions.map((item) => (
           <Pressable
             key={item.id}
             onPress={() => navigation.navigate('Battleship', { sessionId: item.id })}
             style={[styles.row, { backgroundColor: tokens.surface, borderColor: tokens.border }]}
           >
             <AppText kind="body" tokens={tokens}>
-              Battleship · {item.state}
+              Battleship
             </AppText>
             <AppText kind="muted" tokens={tokens}>
               {runtime.asyncGames.isMyTurn(item.id, self) ? 'Your turn' : "Partner's turn"}
             </AppText>
           </Pressable>
         ))}
+        {ticTacToeSessions.length === 0 && battleshipSessions.length === 0 ? (
+          <View style={[styles.empty, { backgroundColor: tokens.surfaceMuted }]}>
+            <AppText kind="body" tokens={tokens} style={styles.emptyTitle}>
+              No games in progress
+            </AppText>
+            <AppText kind="muted" tokens={tokens}>
+              Start one above when you’re ready to play together.
+            </AppText>
+          </View>
+        ) : null}
 
         {error !== null ? (
           <AppText kind="error" tokens={tokens} style={styles.banner}>
             {error}
           </AppText>
         ) : null}
-
-        <View style={styles.signOut}>
-          <AppButton
-            variant="quiet"
-            label="Settings"
-            tokens={tokens}
-            onPress={() => navigation.navigate('Settings')}
-          />
-          <View style={styles.spacer} />
-          <AppButton
-            variant="quiet"
-            label="Sign out"
-            tokens={tokens}
-            onPress={() => {
-              void runtime.auth.signOut().then(() => reload());
-            }}
-          />
-        </View>
       </ScrollView>
     </Screen>
   );
@@ -300,6 +286,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   rowTitle: { marginBottom: 12 },
+  empty: { borderRadius: 16, padding: 16 },
+  emptyTitle: { fontWeight: '600', marginBottom: 4 },
   banner: { marginTop: 16 },
-  signOut: { marginTop: 24 },
 });

@@ -220,17 +220,14 @@ describe.skipIf(cfg === null)('RLS + Storage policies (integration)', () => {
     }
 
     // Even a direct, filtered fetch of the specific row returns nothing.
-    const targeted = await clientB1
-      .from('relationship_dates')
-      .select('id')
-      .eq('id', dateP1Id);
+    const targeted = await clientB1.from('relationship_dates').select('id').eq('id', dateP1Id);
     expect(targeted.error).toBeNull();
     expect(targeted.data ?? []).toHaveLength(0);
   });
 
   // Req 4.4 — a former partner loses access to pairing-owned data on dissolution.
   it('a former partner loses pairing-data access after dissolution', async () => {
-    // Before dissolution: c1 can read pairing 3's date.
+    // Before dissolution: c1 can read pairing 3's child data.
     const before = await clientC1.from('relationship_dates').select('id').eq('id', dateP3Id);
     expect(before.error).toBeNull();
     expect((before.data ?? []).map((r) => r.id as string)).toContain(dateP3Id);
@@ -248,6 +245,40 @@ describe.skipIf(cfg === null)('RLS + Storage policies (integration)', () => {
     expect(self.error).toBeNull();
     expect(self.data?.id).toBe(c1.id);
     expect(self.data?.pairing_id).toBeNull();
+  });
+
+  // Task 23.2 — a caller who targets a known row outside their RLS scope must
+  // receive exactly the same response as one who targets a nonexistent id.
+  // This prevents both sensitive row disclosure and existence probing.
+  it('RLS responses do not reveal whether a targeted pairing row exists', async () => {
+    const missingId = crypto.randomUUID();
+    const [forbidden, missing] = await Promise.all([
+      clientB1
+        .from('relationship_dates')
+        .select('id, pairing_id, title, date')
+        .eq('id', dateP1Id)
+        .single(),
+      clientB1
+        .from('relationship_dates')
+        .select('id, pairing_id, title, date')
+        .eq('id', missingId)
+        .single(),
+    ]);
+
+    expect(forbidden.data).toBeNull();
+    expect(missing.data).toBeNull();
+    expect(forbidden.status).toBe(missing.status);
+    expect(forbidden.error).toEqual(missing.error);
+
+    const forbiddenResponse = JSON.stringify({
+      status: forbidden.status,
+      data: forbidden.data,
+      error: forbidden.error,
+    });
+    expect(forbiddenResponse).not.toContain(pairing1);
+    expect(forbiddenResponse).not.toContain(dateP1Id);
+    expect(forbiddenResponse).not.toContain('Anniversary');
+    expect(forbiddenResponse).not.toContain('2020-06-15');
   });
 
   // Req 8.4 — self-answers are withheld from the partner during the self-answer

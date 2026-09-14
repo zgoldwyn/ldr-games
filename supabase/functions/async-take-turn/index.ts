@@ -29,6 +29,10 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 import { applyTurn, type AsyncEngineState } from "@ldr/core/async-engine";
+import {
+  type BattleshipFleet,
+  validateBattleshipFleet,
+} from "@ldr/core/async-battleship";
 import { deriveTurnHandoffNotification } from "@ldr/core/async-lifecycle";
 // Aliased because `sessionId` / `gameId` are also used as local request-scoped
 // variable names below; these are the pure brand casts.
@@ -48,10 +52,7 @@ import {
   jsonResponse,
   statusForErrorCode,
 } from "../_shared/http.ts";
-import {
-  authenticatedAccountId,
-  serviceClient,
-} from "../_shared/supabase.ts";
+import { authenticatedAccountId, serviceClient } from "../_shared/supabase.ts";
 
 /**
  * The engine state persisted in `async_sessions.game_state`.
@@ -213,12 +214,52 @@ Deno.serve(async (req: Request) => {
   // The row columns are the authoritative holder/lifecycle record (they are what
   // RLS and the 48h nudge job read), so they win over the embedded copy.
   const stored = row.game_state as EngineState;
-  const engine: EngineState = {
+  let engine: EngineState = {
     ...stored,
     activeTurnHolder: asAccountId(row.active_turn_holder),
     status: row.state === "terminal" ? "terminal" : "active",
   };
-  const expectedTurnCount = Array.isArray(engine.turns) ? engine.turns.length : 0;
+
+  // Fleets are stored in an own-row-only table, never in the shared session
+  // JSON. Load both through service_role only while evaluating a shot.
+  if (engine.ruleset.kind === "battleship") {
+    if (engine.ruleset.phase !== "playing") {
+      return errorResponse(
+        "INVALID_SESSION_STATE",
+        "Both partners must place their fleets before firing.",
+        statusForErrorCode("INVALID_SESSION_STATE"),
+      );
+    }
+    const { data: placements, error: placementError } = await db
+      .from("battleship_placements")
+      .select("account_id, fleet")
+      .eq("session_id", row.id);
+    if (placementError || placements === null || placements.length !== 2) {
+      return errorResponse(
+        "INVALID_SESSION_STATE",
+        "Both fleets are required.",
+        409,
+      );
+    }
+    const ships: Record<string, readonly { row: number; col: number }[]> = {};
+    for (const placement of placements) {
+      const checked = validateBattleshipFleet(
+        placement.fleet as BattleshipFleet,
+      );
+      if (!checked.ok || checked.cells === undefined) {
+        return errorResponse(
+          "INTERNAL_ERROR",
+          "A stored fleet is invalid.",
+          500,
+        );
+      }
+      ships[placement.account_id] = checked.cells;
+    }
+    engine = { ...engine, ruleset: { ...engine.ruleset, ships } };
+  }
+  const expectedTurnCount = Array.isArray(engine.turns)
+    ? engine.turns.length
+    : 0;
 
   // `applyTurn` speaks the opaque `AsyncGameState`; the structured
   // `AsyncEngineState` is the same object viewed concretely, which is exactly the
@@ -239,6 +280,9 @@ Deno.serve(async (req: Request) => {
   }
 
   const next = applied.value as unknown as EngineState;
+  const persistedNext: EngineState = next.ruleset.kind === "battleship"
+    ? { ...next, ruleset: { ...next.ruleset, ships: {} } }
+    : next;
   const terminal = next.status === "terminal";
   const nowMs = Date.now();
   const nowIso = new Date(nowMs).toISOString();
@@ -296,7 +340,7 @@ Deno.serve(async (req: Request) => {
     p_actor: actor,
     p_expected_holder: row.active_turn_holder,
     p_expected_turn_count: expectedTurnCount,
-    p_game_state: next,
+    p_game_state: persistedNext,
     p_next_holder: next.activeTurnHolder,
     p_next_state: terminal ? "terminal" : "active",
     p_outcome: outcome,

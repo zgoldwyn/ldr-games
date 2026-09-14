@@ -1,15 +1,45 @@
-import type { Cell } from '@ldr/core';
+import {
+  BATTLESHIP_FLEET_LENGTHS,
+  validateBattleshipFleet,
+  type BattleshipFleet,
+  type Cell,
+  type ShipPlacement,
+} from '@ldr/core';
 
-/**
- * Classic Battleship fleet on a 10×10 grid: 5, 4, 3, 3, 2.
- *
- * `async-start` requires a non-empty fleet for BOTH partners in one request —
- * there is no placement endpoint — so the shell auto-places this layout for
- * each player rather than inventing a placement UI in this task.
- */
-export function classicFleet(): readonly Cell[] {
-  const ship = (row: number, col: number, length: number): Cell[] =>
-    Array.from({ length }, (_, i) => ({ row, col: col + i }));
+export type ShipOrientation = 'horizontal' | 'vertical';
 
-  return [...ship(0, 0, 5), ...ship(2, 0, 4), ...ship(4, 0, 3), ...ship(6, 0, 3), ...ship(8, 0, 2)];
+export function shipAt(
+  row: number,
+  col: number,
+  length: number,
+  orientation: ShipOrientation,
+): ShipPlacement {
+  return Array.from({ length }, (_, offset) => ({
+    row: row + (orientation === 'vertical' ? offset : 0),
+    col: col + (orientation === 'horizontal' ? offset : 0),
+  }));
+}
+
+export function placementOverlaps(fleet: BattleshipFleet, ship: ShipPlacement): boolean {
+  const occupied = new Set(fleet.flat().map((cell) => `${cell.row},${cell.col}`));
+  return ship.some((cell) => occupied.has(`${cell.row},${cell.col}`));
+}
+
+export function canAddShip(fleet: BattleshipFleet, ship: ShipPlacement, size = 10): boolean {
+  return (
+    ship.every((cell) => cell.row >= 0 && cell.row < size && cell.col >= 0 && cell.col < size) &&
+    !placementOverlaps(fleet, ship)
+  );
+}
+
+export function nextShipLength(fleet: BattleshipFleet): number | undefined {
+  return BATTLESHIP_FLEET_LENGTHS[fleet.length];
+}
+
+export function fleetCells(fleet: BattleshipFleet | undefined): readonly Cell[] {
+  return fleet?.flat() ?? [];
+}
+
+export function isCompleteFleet(fleet: BattleshipFleet): boolean {
+  return validateBattleshipFleet(fleet).ok;
 }

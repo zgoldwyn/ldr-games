@@ -109,10 +109,7 @@ describe.skipIf(cfg === null)('Authentication Edge Functions (integration)', () 
     expect(duplicate.body.error?.code).toBe('EMAIL_ALREADY_REGISTERED');
 
     // The rejection must not have produced a second `accounts` row.
-    const { data, error } = await admin
-      .from('accounts')
-      .select('id')
-      .eq('id', accountId);
+    const { data, error } = await admin.from('accounts').select('id').eq('id', accountId);
     expect(error).toBeNull();
     expect(data ?? []).toHaveLength(1);
 
@@ -140,11 +137,10 @@ describe.skipIf(cfg === null)('Authentication Edge Functions (integration)', () 
     expect(ok.body.session.access_token.length).toBeGreaterThan(0);
 
     // Wrong password -> refused, no session issued.
-    const wrong = await callFunction<FunctionErrorBody & Partial<LoginOk>>(
-      config,
-      'auth-login',
-      { email: credentials.email, password: `${credentials.password}x` },
-    );
+    const wrong = await callFunction<FunctionErrorBody & Partial<LoginOk>>(config, 'auth-login', {
+      email: credentials.email,
+      password: `${credentials.password}x`,
+    });
     expect(wrong.status).toBe(401);
     expect(wrong.body.error?.code).toBe('AUTH_FAILED');
     expect(wrong.body.session).toBeUndefined();
@@ -174,16 +170,26 @@ describe.skipIf(cfg === null)('Authentication Edge Functions (integration)', () 
       password: 'DefinitelyWrong1!',
     });
 
-    // Status, code and message must all match, so neither response reveals
-    // whether the account exists.
+    // The complete public responses must match, so no optional field can become
+    // an account-existence side channel even when status/code/message match.
     expect(wrongPassword.status).toBe(401);
     expect(unknownEmail.status).toBe(wrongPassword.status);
-    expect(unknownEmail.body.error?.code).toBe(wrongPassword.body.error?.code);
-    expect(unknownEmail.body.error?.message).toBe(wrongPassword.body.error?.message);
+    expect(unknownEmail.body).toEqual(wrongPassword.body);
 
     // And the message must not name the field that was wrong.
     const message = wrongPassword.body.error?.message ?? '';
     expect(message).not.toMatch(/not found|no such|unknown|does not exist|incorrect password/i);
+
+    // Failed authentication responses must never echo credentials or expose a
+    // session/token-shaped secret. Password hashes are server-only as well, so
+    // any hash-related field is a failure even if the raw password is absent.
+    const serialized = JSON.stringify(wrongPassword.body);
+    expect(serialized).not.toContain(credentials.email);
+    expect(serialized).not.toContain('DefinitelyWrong1!');
+    expect(serialized).not.toMatch(
+      /"(?:password|password_hash|encrypted_password|access_token|refresh_token)"\s*:/i,
+    );
+    expect(serialized).not.toMatch(/\$2[aby]\$\d{2}\$/);
   });
 
   // -------------------------------------------------------------------------

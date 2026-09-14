@@ -9,12 +9,18 @@ Built on [Supabase](https://supabase.com) (Postgres + RLS, Auth, Realtime,
 Storage, Edge Functions, pg_cron) with a shared TypeScript core wrapped by an
 Expo mobile shell and an Electron/web desktop shell.
 
+Pre-release legal and trust work is tracked in the
+[Legal, Privacy, Accessibility, and Trust Action Plan](docs/legal-accessibility-action-plan.md).
+Current policy drafts are available in `docs/` and in the mobile app's Legal &
+privacy screen. Operator identity and launch-territory details must be completed
+and reviewed by qualified counsel before public release.
+
 ## Status
 
-**The backend is implemented and verified against a live stack. The client is not
-built yet.** Concretely, that means there is a well-tested API and no app you can
-run on a phone — `apps/mobile` is still a stub with no `expo` or `react-native`
-dependency.
+**The backend is implemented and verified against local and hosted Supabase
+stacks, and the iOS MVP shell is wired end to end.** The mobile app supports
+account creation/sign-in, pairing, tic-tac-toe, Battleship, notification reads,
+settings, account deletion, and the first UI/legal-accessibility pass.
 
 | Area                                                                                        | State                                     |
 | ------------------------------------------------------------------------------------------- | ----------------------------------------- |
@@ -23,9 +29,9 @@ dependency.
 | Auth, pairing, sync, real-time games, async games, Storage wiring                           | Done — Edge Functions + integration tests |
 | Game scheduler (join expiry, pause termination, turn nudge)                                 | Done — pg_cron                            |
 | In-app notification reads                                                                   | Done                                      |
-| Client service modules, Connection Manager                                                  | Not started                               |
-| Expo mobile shell                                                                           | Not started (stub only)                   |
-| Quizzes, calendar, reminders, push notifications, desktop shell                             | Deferred — see MVP scope below            |
+| Client service modules, Connection Manager                                                  | Done for MVP                              |
+| Expo mobile shell                                                                           | Done for MVP; UI polish in progress       |
+| Quizzes, calendar, reminders, and desktop shell                                             | Deferred — see MVP scope below            |
 
 The spec lives in [`.kiro/specs/ldr-companion-app/`](.kiro/specs/ldr-companion-app/)
 (`requirements.md`, `design.md`, `tasks.md`). `tasks.md` is the source of truth

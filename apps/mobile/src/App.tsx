@@ -6,36 +6,117 @@
  * channels so partner game invites and turns arrive without manual ids.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { DEFAULT_COLOR_OPTION, type ColorOptionName } from '@ldr/core';
 
 import { AppProvider } from './app-context';
-import type { RootStackParamList } from './navigation';
+import type { MainTabParamList, RootStackParamList } from './navigation';
+import { primaryTab } from './primary-tabs';
 import { bootRuntime, loadIdentity, type AppRuntime, type Identity } from './runtime';
 import { BattleshipScreen } from './screens/BattleshipScreen';
 import { GameListScreen } from './screens/GameListScreen';
+import { LeaderboardScreen } from './screens/LeaderboardScreen';
+import { LegalDocumentScreen } from './screens/LegalDocumentScreen';
+import { LegalScreen } from './screens/LegalScreen';
 import { PairingScreen } from './screens/PairingScreen';
 import { SignInScreen } from './screens/SignInScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { TicTacToeScreen } from './screens/TicTacToeScreen';
 import { registerApnsToken, subscribeApnsTokenRotation } from './notifications/apns-registration';
 import { navigationTheme, themeTokens } from './theme';
+import { loadThemePreference, saveThemePreference } from './theme-preference';
+import { bulkKv } from './session/expo-kv';
 import { AppText } from './ui/AppText';
 import { Screen } from './ui/Screen';
+import { SkeletonLoader } from './ui/SkeletonLoader';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+const Tabs = createBottomTabNavigator<MainTabParamList>();
+
+function MainTabs({ tokens }: { readonly tokens: ReturnType<typeof themeTokens> }) {
+  return (
+    <Tabs.Navigator
+      screenOptions={({ route }) => {
+        const tab = primaryTab(route.name);
+        return {
+          headerStyle: { backgroundColor: tokens.surface },
+          headerTitleStyle: { color: tokens.textPrimary },
+          headerTintColor: tokens.textPrimary,
+          sceneStyle: { backgroundColor: tokens.background },
+          tabBarActiveTintColor: tokens.textPrimary,
+          tabBarInactiveTintColor: tokens.textMuted,
+          tabBarLabel: tab.label,
+          tabBarIcon: ({ color, focused }) => (
+            <Text
+              accessibilityElementsHidden
+              style={[styles.tabIcon, { color, opacity: focused ? 1 : 0.72 }]}
+            >
+              {tab.icon}
+            </Text>
+          ),
+          tabBarStyle: {
+            backgroundColor: tokens.surface,
+            borderTopColor: tokens.border,
+            height: 84,
+            paddingTop: 8,
+            paddingBottom: 8,
+          },
+          tabBarLabelStyle: styles.tabLabel,
+        };
+      }}
+    >
+      <Tabs.Screen name="GameList" component={GameListScreen} options={{ title: 'Play' }} />
+      <Tabs.Screen
+        name="Leaderboard"
+        component={LeaderboardScreen}
+        options={{ title: 'Leaderboard' }}
+      />
+      <Tabs.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
+    </Tabs.Navigator>
+  );
+}
+
+function LegalRoutes() {
+  return (
+    <>
+      <Stack.Screen name="Legal" component={LegalScreen} options={{ title: 'Legal & privacy' }} />
+      <Stack.Screen
+        name="LegalDocument"
+        component={LegalDocumentScreen}
+        options={({ route }) => ({
+          title:
+            route.params.document === 'privacy'
+              ? 'Privacy Policy'
+              : route.params.document === 'terms'
+                ? 'Terms and Conditions'
+                : route.params.document === 'cookies'
+                  ? 'Cookie Policy'
+                  : 'Refund Policy',
+        })}
+      />
+    </>
+  );
+}
 
 export type { RootStackParamList };
 
 export function App() {
-  const tokens = themeTokens();
+  const [colorOption, setColorOptionState] = useState<ColorOptionName>(DEFAULT_COLOR_OPTION);
+  const tokens = themeTokens(colorOption);
   const [runtime, setRuntime] = useState<AppRuntime | null>(null);
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
   const runtimeRef = useRef<AppRuntime | null>(null);
+
+  const setColorOption = useCallback((option: ColorOptionName) => {
+    setColorOptionState(option);
+    void saveThemePreference(bulkKv, option);
+  }, []);
 
   const reload = useCallback(async () => {
     if (runtime === null) return;
@@ -43,6 +124,7 @@ export function App() {
   }, [runtime]);
 
   useEffect(() => {
+    void loadThemePreference(bulkKv).then(setColorOptionState);
     void bootRuntime({
       onRevoked: () => {
         const current = runtimeRef.current;
@@ -130,10 +212,7 @@ export function App() {
     return (
       <SafeAreaProvider>
         <View style={[styles.boot, { backgroundColor: tokens.background }]}>
-          <ActivityIndicator color={tokens.primaryStrong} />
-          <AppText kind="muted" tokens={tokens} style={styles.lead}>
-            Restoring your session
-          </AppText>
+          <SkeletonLoader tokens={tokens} />
         </View>
         <StatusBar style="dark" />
       </SafeAreaProvider>
@@ -143,13 +222,13 @@ export function App() {
   const header = {
     headerStyle: { backgroundColor: tokens.surface },
     headerTitleStyle: { color: tokens.textPrimary },
-    headerTintColor: tokens.primaryStrong,
+    headerTintColor: tokens.onPrimary,
     contentStyle: { backgroundColor: tokens.background },
   };
 
   return (
     <SafeAreaProvider>
-      <AppProvider value={{ runtime, identity, reload }}>
+      <AppProvider value={{ runtime, identity, reload, tokens, colorOption, setColorOption }}>
         <NavigationContainer theme={navigationTheme(tokens)}>
           {identity.gate === 'signedOut' ? (
             <Stack.Navigator screenOptions={header}>
@@ -158,6 +237,7 @@ export function App() {
                 component={SignInScreen}
                 options={{ title: 'LDR Companion', headerShown: false }}
               />
+              {LegalRoutes()}
             </Stack.Navigator>
           ) : identity.gate === 'unpaired' ? (
             <Stack.Navigator screenOptions={header}>
@@ -171,19 +251,16 @@ export function App() {
                 component={SettingsScreen}
                 options={{ title: 'Settings' }}
               />
+              {LegalRoutes()}
             </Stack.Navigator>
           ) : (
             <Stack.Navigator screenOptions={header}>
               <Stack.Screen
-                name="GameList"
-                component={GameListScreen}
-                options={{ title: 'Play' }}
+                name="MainTabs"
+                options={{ headerShown: false }}
+                children={() => <MainTabs tokens={tokens} />}
               />
-              <Stack.Screen
-                name="Settings"
-                component={SettingsScreen}
-                options={{ title: 'Settings' }}
-              />
+              {LegalRoutes()}
               <Stack.Screen
                 name="TicTacToe"
                 component={TicTacToeScreen}
@@ -206,4 +283,6 @@ export function App() {
 const styles = StyleSheet.create({
   boot: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   lead: { marginTop: 16 },
+  tabIcon: { fontSize: 21, lineHeight: 24, fontWeight: '600' },
+  tabLabel: { fontSize: 11, fontWeight: '600' },
 });

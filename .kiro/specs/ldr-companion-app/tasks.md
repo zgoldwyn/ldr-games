@@ -541,7 +541,7 @@ The game-related cron jobs (20.1) were initially deferred and then pulled back I
     - Screens: sign in / register, pairing (create + accept an invitation), a game list, a tic-tac-toe board, and a battleship board, over `AuthenticationModule`, `PairingModule`, `RealTimeGameModule`, and `AsyncGameModule` from 21.1/21.2.
     - Expo SecureStore holds the domain `Session` and the supabase **refresh token** (peeled out of the supabase-js session blob; access token + user stay in AsyncStorage). Local Store snapshots hydrate from AsyncStorage so a cold start can render cached games (Req 5.1).
     - Identity gate: no session → sign in (Req 2.5); signed in but unpaired → pairing; active pairing → game list + boards. All colours come from `@ldr/core` tokens via the 22.1a navigation bridge; no component hex.
-    - Game list is tic-tac-toe + battleship only (drawing is filtered out). Battleship start auto-places a classic fleet for both partners because `async-start` has no placement endpoint and a zero-cell fleet can never end (Req 7.10). Join-by-session-id is a temporary bridge until 23.1 delivers invites live.
+    - Game list is tic-tac-toe + battleship only (drawing is filtered out). Battleship now has a private per-partner placement phase: each player places the classic 5/4/3/3/2 fleet, and shared validation rejects overlap, bends, gaps, or off-board ships before play. Join-by-session-id is a temporary bridge until 23.1 delivers invites live.
     - Connection Manager, sync, and notification reads are **not** wired — that is 23.1. 16 unit tests cover the gate, codecs, storage split, error copy, and board helpers.
     - Verified: typecheck, lint, unit tests, simulator launch (1090 modules, no runtime errors) against the local stack. `register` returns 201 on `127.0.0.1:54321`.
     - _Requirements: 5.1, 6.1, 7.1_
@@ -574,8 +574,10 @@ The game-related cron jobs (20.1) were initially deferred and then pulled back I
     - Verified: `npm run typecheck`, `npm run lint`, `npm run test:unit` (349 tests), `npm run test:property` (73 tests), `npm run edge:check`, `npm run edge:test` (22 tests), `npm --workspace @ldr/mobile run bundle:check`, `npm run test:integration:local` (57 tests), plus Xcode simulator build/install/launch on iPhone 17 Pro and iPhone 17 Pro Max.
     - _Requirements: 5.1, 6.1, 7.1_
 
-  - [ ] 23.2 Write security and privacy tests
+  - [x] 23.2 Write security and privacy tests
     - Assert self-answers never appear in a partner's response during the self-answer phase, a former partner cannot read pairing-owned data after dissolution, and error/RLS responses contain no sensitive data or existence leaks
+    - Consolidated the existing live-stack RLS/quiz/auth coverage into explicit privacy evidence: a unique self-answer canary is absent from the partner's Edge Function response while the session remains in `self_answer`; a dissolved member loses access to a previously readable pairing-owned row while retaining their individual account; forbidden targeted RLS reads are structurally identical to missing-row reads and expose none of the protected row's identifiers or values; wrong-password and unknown-email failures return identical bodies without echoed credentials, token fields, or password hashes.
+    - Verified locally with `npm run typecheck`, focused ESLint and Prettier checks, and all 11 focused integration tests passing against the live local Supabase stack.
     - _Requirements: 4.4, 8.4, 1.6_
 
 - [ ] 24. Final checkpoint
@@ -596,11 +598,11 @@ These are accepted as out of scope for the current MVP, but should be preserved 
 
 - Games need explicit removal/cancel controls. Users currently cannot cancel pending games or remove stale/finished games from the visible list.
 - Terminal game sessions are recorded correctly but remain visible indefinitely. Decide whether completed sessions should be hidden by default, archived, or moved into history before changing the session lifecycle.
-- Battleship is playable and syncs, but the rules need a product pass; the current MVP auto-placement and turn loop are intentionally minimal.
+- Battleship placement received its first product pass: each partner now places a private classic fleet, with overlap/off-board/shape validation shared by client and server. Further polish can add drag-to-place and ship-sunk labels.
 - Game icons are placeholder-quality and should be replaced with theme-consistent, recognizable icons.
-- The theme architecture already supports multiple named color options, but the mobile shell has no theme changer/settings UI yet.
-- Add a wins screen showing each partner's win count across games.
-- Longer-term navigation may split the app into category screens, for example Games, leaderboards/history, relationship tools, settings, and future quiz/calendar areas.
+- Theme settings now expose and persist all five named color options on-device.
+- The mobile Leaderboard ranks both partners by completed-game wins and shows per-game wins and draws.
+- Primary navigation now links Play, Leaderboard, and Settings consistently; relationship tools can join it when those screens are added.
 
 ## Task Dependency Graph
 

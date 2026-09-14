@@ -10,16 +10,14 @@ import type { AsyncGameState, TurnAction } from './game.js';
 import { isErr, isOk } from '../result.js';
 import { applyTurn } from './async-engine.js';
 import type { AsyncEngineState } from './async-engine.js';
-import { createBattleshipGame } from './async-battleship.js';
+import { createBattleshipGame, validateBattleshipFleet } from './async-battleship.js';
 import { createDrawingGame } from './async-drawing.js';
 
 const alice = accountId('alice');
 const bob = accountId('bob');
 
-const asGame = (s: AsyncEngineState): AsyncGameState =>
-  s as unknown as AsyncGameState;
-const asEngine = (s: AsyncGameState): AsyncEngineState =>
-  s as unknown as AsyncEngineState;
+const asGame = (s: AsyncEngineState): AsyncGameState => s as unknown as AsyncGameState;
+const asEngine = (s: AsyncGameState): AsyncEngineState => s as unknown as AsyncEngineState;
 
 const fire = (row: number, col: number): TurnAction =>
   ({ kind: 'battleship.fire', row, col }) as unknown as TurnAction;
@@ -111,6 +109,63 @@ describe('applyTurn — battleship rules', () => {
 
     expect(next.status).toBe('terminal');
     expect(next.winner).toBe(alice);
+  });
+});
+
+describe('battleship fleet placement', () => {
+  const valid = [
+    Array.from({ length: 5 }, (_, col) => ({ row: 0, col })),
+    Array.from({ length: 4 }, (_, col) => ({ row: 2, col })),
+    Array.from({ length: 3 }, (_, col) => ({ row: 4, col })),
+    Array.from({ length: 3 }, (_, col) => ({ row: 6, col })),
+    Array.from({ length: 2 }, (_, col) => ({ row: 8, col })),
+  ];
+
+  it('accepts the complete classic fleet and flattens its 17 cells', () => {
+    expect(validateBattleshipFleet(valid)).toMatchObject({ ok: true });
+    expect(validateBattleshipFleet(valid).cells).toHaveLength(17);
+  });
+
+  it('rejects overlapping ships', () => {
+    const overlap = valid.map((ship) => ship.map((cell) => ({ ...cell })));
+    overlap[4] = [
+      { row: 0, col: 0 },
+      { row: 0, col: 1 },
+    ];
+    expect(validateBattleshipFleet(overlap)).toEqual({ ok: false, error: 'overlap' });
+  });
+
+  it('rejects bent, gapped, off-grid, or incomplete fleets', () => {
+    const changed = (index: number, ship: { row: number; col: number }[]) =>
+      valid.map((current, at) => (at === index ? ship : current));
+    expect(
+      validateBattleshipFleet(
+        changed(4, [
+          { row: 8, col: 0 },
+          { row: 9, col: 1 },
+        ]),
+      ),
+    ).toMatchObject({ ok: false, error: 'not-straight' });
+    expect(
+      validateBattleshipFleet(
+        changed(4, [
+          { row: 8, col: 0 },
+          { row: 8, col: 2 },
+        ]),
+      ),
+    ).toMatchObject({ ok: false, error: 'not-contiguous' });
+    expect(
+      validateBattleshipFleet(
+        changed(4, [
+          { row: 8, col: 9 },
+          { row: 8, col: 10 },
+        ]),
+      ),
+    ).toMatchObject({ ok: false, error: 'off-grid' });
+    expect(validateBattleshipFleet(valid.slice(1))).toMatchObject({
+      ok: false,
+      error: 'wrong-fleet',
+    });
   });
 });
 

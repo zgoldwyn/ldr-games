@@ -1,21 +1,46 @@
 import { describe, expect, it } from 'vitest';
 
-import { classicFleet } from './battleship-fleet';
+import {
+  canAddShip,
+  fleetCells,
+  isCompleteFleet,
+  nextShipLength,
+  placementOverlaps,
+  shipAt,
+} from './battleship-fleet';
 
-describe('classicFleet', () => {
-  it('places a non-empty classic fleet inside a 10×10 grid', () => {
-    const cells = classicFleet();
-    expect(cells.length).toBeGreaterThan(0);
-    for (const cell of cells) {
-      expect(cell.row).toBeGreaterThanOrEqual(0);
-      expect(cell.row).toBeLessThan(10);
-      expect(cell.col).toBeGreaterThanOrEqual(0);
-      expect(cell.col).toBeLessThan(10);
-    }
+describe('battleship placement', () => {
+  it('builds horizontal and vertical ships from a tapped bow cell', () => {
+    expect(shipAt(2, 3, 3, 'horizontal')).toEqual([
+      { row: 2, col: 3 },
+      { row: 2, col: 4 },
+      { row: 2, col: 5 },
+    ]);
+    expect(shipAt(2, 3, 2, 'vertical')).toEqual([
+      { row: 2, col: 3 },
+      { row: 3, col: 3 },
+    ]);
   });
 
-  it('does not overlap its own ships', () => {
-    const keys = classicFleet().map((c) => `${c.row},${c.col}`);
-    expect(new Set(keys).size).toBe(keys.length);
+  it('refuses overlap and placements extending off the board', () => {
+    const fleet = [shipAt(0, 0, 5, 'horizontal')];
+    expect(placementOverlaps(fleet, shipAt(0, 3, 4, 'vertical'))).toBe(true);
+    expect(canAddShip(fleet, shipAt(0, 3, 4, 'vertical'))).toBe(false);
+    expect(canAddShip(fleet, shipAt(8, 0, 3, 'vertical'))).toBe(false);
+    expect(canAddShip(fleet, shipAt(2, 0, 4, 'horizontal'))).toBe(true);
+  });
+
+  it('tracks the classic fleet order and recognizes completion', () => {
+    const fleet = [
+      shipAt(0, 0, 5, 'horizontal'),
+      shipAt(2, 0, 4, 'horizontal'),
+      shipAt(4, 0, 3, 'horizontal'),
+      shipAt(6, 0, 3, 'horizontal'),
+      shipAt(8, 0, 2, 'horizontal'),
+    ];
+    expect(nextShipLength([])).toBe(5);
+    expect(nextShipLength(fleet)).toBeUndefined();
+    expect(fleetCells(fleet)).toHaveLength(17);
+    expect(isCompleteFleet(fleet)).toBe(true);
   });
 });

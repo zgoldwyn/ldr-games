@@ -9,6 +9,8 @@ or third-party services change.
 - Data used to track users: **No**
 - Third-party advertising: **No**
 - Data sold to data brokers or other parties: **No**
+- Cookie or similar-technology consent banner: **Not applicable to the current
+  native build; it uses no non-essential tracking storage**
 
 ## Data linked to the user
 
@@ -39,6 +41,8 @@ analytics, crash reporting, customer support tooling, or another SDK is added.
 
 - Confirm these answers still match the shipped binary and production backend.
 - Use the public URL for `docs/privacy-policy.md` as the Privacy Policy URL.
+- Publish and link the Terms, Cookie, and Refund policies from the in-app legal
+  center; complete operator identity and private contact details first.
 - State in review notes that two pre-paired demo accounts are available and that
   their passwords are stored in the developer's macOS Keychain.
 - Verify **Settings → Delete account** works in the review build.
