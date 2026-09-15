@@ -34,6 +34,7 @@ import { bulkKv } from './session/expo-kv';
 import { AppText } from './ui/AppText';
 import { Screen } from './ui/Screen';
 import { SkeletonLoader } from './ui/SkeletonLoader';
+import { clayRaisedStyle } from './ui/clay';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tabs = createBottomTabNavigator<MainTabParamList>();
@@ -60,9 +61,13 @@ function MainTabs({ tokens }: { readonly tokens: ReturnType<typeof themeTokens> 
             </Text>
           ),
           tabBarStyle: {
+            ...clayRaisedStyle(tokens),
             backgroundColor: tokens.surface,
-            borderTopColor: tokens.border,
-            height: 84,
+            borderTopColor: tokens.primary,
+            borderRadius: 28,
+            height: 80,
+            marginHorizontal: 12,
+            marginBottom: 8,
             paddingTop: 8,
             paddingBottom: 8,
           },
@@ -223,6 +228,7 @@ export function App() {
     headerStyle: { backgroundColor: tokens.surface },
     headerTitleStyle: { color: tokens.textPrimary },
     headerTintColor: tokens.onPrimary,
+    headerShadowVisible: false,
     contentStyle: { backgroundColor: tokens.background },
   };
 

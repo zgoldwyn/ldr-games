@@ -4,6 +4,7 @@ import type { ThemeTokens } from '@ldr/core';
 
 import { themeTokens } from '../theme';
 import { AppText } from './AppText';
+import { clayRaisedStyle } from './clay';
 
 /** Labelled field. Placeholder colour comes from `textMuted`. */
 export const AppField = forwardRef<
@@ -23,9 +24,10 @@ export const AppField = forwardRef<
         placeholderTextColor={theme.textMuted}
         style={[
           styles.input,
+          clayRaisedStyle(theme, true),
           {
             backgroundColor: theme.surface,
-            borderColor: theme.border,
+            borderColor: theme.primary,
             color: theme.textPrimary,
           },
           rest.style,
@@ -40,8 +42,7 @@ const styles = StyleSheet.create({
   label: { marginBottom: 8 },
   input: {
     minHeight: 48,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 16,

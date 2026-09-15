@@ -11,6 +11,7 @@ import type { RootStackParamList } from '../navigation';
 import { AppButton } from '../ui/AppButton';
 import { AppText } from '../ui/AppText';
 import { Screen } from '../ui/Screen';
+import { clayRaisedStyle } from '../ui/clay';
 
 type DeleteStep = 'idle' | 'review';
 
@@ -89,6 +90,7 @@ export function SettingsScreen() {
               onPress={() => setColorOption(option.name)}
               style={[
                 styles.palette,
+                clayRaisedStyle(option.light, true),
                 {
                   backgroundColor: option.light.primary,
                   borderColor:
@@ -164,7 +166,11 @@ export function SettingsScreen() {
           </>
         ) : (
           <View
-            style={[styles.warning, { backgroundColor: tokens.surface, borderColor: tokens.error }]}
+            style={[
+              styles.warning,
+              clayRaisedStyle(tokens),
+              { backgroundColor: tokens.surface, borderColor: tokens.error },
+            ]}
           >
             <AppText kind="body" tokens={tokens} style={styles.warningTitle}>
               Permanently delete your account?
@@ -210,7 +216,7 @@ const styles = StyleSheet.create({
   copy: { marginBottom: 16 },
   feedback: { marginTop: 12 },
   warning: {
-    borderRadius: 16,
+    borderRadius: 24,
     borderWidth: StyleSheet.hairlineWidth,
     padding: 16,
   },

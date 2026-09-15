@@ -12,7 +12,13 @@
 // accepts the extensionless form, so both tools agree.
 import 'react-native-url-polyfill/auto';
 import { registerRootComponent } from 'expo';
+import { createElement } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { App } from './App';
 
-registerRootComponent(App);
+function NativeRoot() {
+  return createElement(GestureHandlerRootView, { style: { flex: 1 } }, createElement(App));
+}
+
+registerRootComponent(NativeRoot);

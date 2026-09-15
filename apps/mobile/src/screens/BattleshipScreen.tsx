@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   isErr,
   sessionId,
   type AccountId,
-  type BattleshipFleet,
   type BattleshipState,
   type Cell,
   type Shot,
@@ -13,21 +13,25 @@ import {
 
 import { useApp } from '../app-context';
 import { messageForError } from '../copy/error-copy';
+import { fleetCells, isCompleteFleet } from '../games/battleship-fleet';
 import {
-  canAddShip,
-  fleetCells,
-  isCompleteFleet,
-  nextShipLength,
-  shipAt,
-  type ShipOrientation,
-} from '../games/battleship-fleet';
+  createDraftShips,
+  fleetFromDraft,
+  placeDraftShipNearest,
+  placedShipCount,
+  rotateDraftShipNearest,
+  shipForCell,
+  type DraftShipId,
+} from '../games/battleship-placement';
 import { battleshipStatus, battleshipTurnError } from '../games/battleship-view';
 import type { RootStackParamList } from '../navigation';
 import { AppText } from '../ui/AppText';
 import { AppButton } from '../ui/AppButton';
 import { Screen } from '../ui/Screen';
+import { DraggableShip } from '../ui/DraggableShip';
+import { clayRaisedStyle } from '../ui/clay';
 
-const CELL_SIZE = 44;
+const MAX_BOARD_SIZE = 360;
 
 function asBattleship(state: unknown): BattleshipState | null {
   if (state === null || typeof state !== 'object') return null;
@@ -55,8 +59,10 @@ export function BattleshipScreen({ route }: Props) {
   const [, setTick] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [draftFleet, setDraftFleet] = useState<BattleshipFleet>([]);
-  const [orientation, setOrientation] = useState<ShipOrientation>('horizontal');
+  const [draggingShip, setDraggingShip] = useState(false);
+  const [draftShips, setDraftShips] = useState(createDraftShips);
+  const placementBoardRef = useRef<View>(null);
+  const { width: viewportWidth } = useWindowDimensions();
 
   useEffect(() => runtime.asyncGames.subscribe(() => setTick((n) => n + 1)), [runtime.asyncGames]);
 
@@ -77,6 +83,9 @@ export function BattleshipScreen({ route }: Props) {
     board?.phase ??
     (board !== null && Object.keys(board.ships ?? {}).length > 0 ? 'playing' : 'placement');
   const fleetSubmitted = self !== undefined && board?.readyPlayers?.includes(self) === true;
+  const boardSize = Math.min(MAX_BOARD_SIZE, viewportWidth - 48);
+  const cellSize = boardSize / size;
+  const draftFleet = fleetFromDraft(draftShips);
   const status = battleshipStatus({
     sessionState: cached?.state,
     phase,
@@ -89,22 +98,70 @@ export function BattleshipScreen({ route }: Props) {
   useEffect(() => {
     if (self === undefined) return;
     void runtime.asyncGames.loadOwnBattleshipFleet(id).then((fleet) => {
-      if (fleet !== undefined) setDraftFleet(fleet);
+      if (fleet !== undefined) setDraftShips(createDraftShips(fleet));
     });
   }, [id, runtime.asyncGames, self]);
 
-  function placeNextShip(row: number, col: number) {
-    if (fleetSubmitted || busy) return;
-    const length = nextShipLength(draftFleet);
-    if (length === undefined) return;
-    const ship = shipAt(row, col, length, orientation);
-    if (!canAddShip(draftFleet, ship, size)) {
-      setError('That ship would overlap another ship or extend beyond the board.');
-      return;
-    }
-    setError(null);
-    setDraftFleet([...draftFleet, ship]);
-  }
+  const rotateShip = useCallback(
+    (shipId: DraftShipId) => {
+      if (fleetSubmitted || busy) return;
+      const result = rotateDraftShipNearest(draftShips, shipId, size);
+      if (result.ships === draftShips) {
+        setError('That ship cannot rotate on this board.');
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        return;
+      }
+      setDraftShips(result.ships);
+      setError(null);
+      void Haptics.selectionAsync();
+    },
+    [busy, draftShips, fleetSubmitted, size],
+  );
+
+  const dropShip = useCallback(
+    (shipId: DraftShipId, absoluteX: number, absoluteY: number, grabbedSegment: number) => {
+      if (fleetSubmitted || busy) return;
+      placementBoardRef.current?.measureInWindow((boardX, boardY, width, height) => {
+        if (
+          absoluteX < boardX ||
+          absoluteX >= boardX + width ||
+          absoluteY < boardY ||
+          absoluteY >= boardY + height
+        ) {
+          setError('Drag the ship onto your ocean grid.');
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          return;
+        }
+        const ship = draftShips.find((item) => item.id === shipId);
+        if (ship === undefined) return;
+        const targetRow = Math.floor((absoluteY - boardY) / (height / size));
+        const targetCol = Math.floor((absoluteX - boardX) / (width / size));
+        const requestedRow =
+          ship.orientation === 'vertical' ? targetRow - grabbedSegment : targetRow;
+        const requestedCol =
+          ship.orientation === 'horizontal' ? targetCol - grabbedSegment : targetCol;
+        const result = placeDraftShipNearest(
+          draftShips,
+          shipId,
+          requestedRow,
+          requestedCol,
+          ship.orientation,
+          size,
+        );
+        if (result.placement === null) {
+          setError('There is no open space for that ship. Move another ship and try again.');
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          return;
+        }
+        setDraftShips(result.ships);
+        setError(null);
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      });
+    },
+    [busy, draftShips, fleetSubmitted, size],
+  );
+  const beginShipDrag = useCallback(() => setDraggingShip(true), []);
+  const endShipDrag = useCallback(() => setDraggingShip(false), []);
 
   async function submitFleet() {
     if (!isCompleteFleet(draftFleet)) return;
@@ -151,7 +208,7 @@ export function BattleshipScreen({ route }: Props) {
 
   const privateFleet = runtime.asyncGames.ownBattleshipFleet(id);
   const ownShips =
-    privateFleet !== undefined || draftFleet.length > 0
+    privateFleet !== undefined || placedShipCount(draftShips) > 0
       ? fleetCells(privateFleet ?? draftFleet)
       : self === undefined
         ? []
@@ -161,12 +218,16 @@ export function BattleshipScreen({ route }: Props) {
 
   return (
     <Screen tokens={tokens}>
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView scrollEnabled={!draggingShip} contentContainerStyle={styles.scroll}>
         <View
           accessible
           accessibilityRole="summary"
           accessibilityLiveRegion="polite"
-          style={[styles.statusCard, { backgroundColor: tokens.surfaceMuted }]}
+          style={[
+            styles.statusCard,
+            clayRaisedStyle(tokens),
+            { backgroundColor: tokens.surfaceMuted },
+          ]}
         >
           <AppText kind="title" tokens={tokens} style={styles.statusTitle}>
             {status.title}
@@ -184,65 +245,128 @@ export function BattleshipScreen({ route }: Props) {
             <AppText kind="muted" tokens={tokens} style={styles.instructions}>
               {fleetSubmitted
                 ? 'Fleet locked in. Waiting for your partner to finish placing theirs.'
-                : nextShipLength(draftFleet) === undefined
-                  ? 'All five ships are placed. Lock in your fleet when ready.'
-                  : `Tap the starting square for your ${nextShipLength(draftFleet)}-cell ship. Ships cannot overlap.`}
+                : placedShipCount(draftShips) === draftShips.length
+                  ? 'All five ships are placed. Tap one to rotate it, or drag it again to move it.'
+                  : 'Drag each ship from the dock onto the grid. Tap a ship to rotate it.'}
             </AppText>
             {!fleetSubmitted ? (
-              <View style={styles.controls}>
-                <AppButton
-                  variant="quiet"
-                  label={orientation === 'horizontal' ? 'Horizontal ↔' : 'Vertical ↕'}
-                  tokens={tokens}
-                  onPress={() =>
-                    setOrientation((current) =>
-                      current === 'horizontal' ? 'vertical' : 'horizontal',
-                    )
-                  }
-                />
-                <View style={styles.spacer} />
-                <AppButton
-                  variant="quiet"
-                  label="Undo last"
-                  tokens={tokens}
-                  disabled={draftFleet.length === 0}
-                  onPress={() => setDraftFleet(draftFleet.slice(0, -1))}
-                />
-              </View>
+              <>
+                <View style={styles.shipDock} accessibilityLabel="Your ship dock">
+                  {draftShips.map((ship) => (
+                    <DraggableShip
+                      key={ship.id}
+                      ship={ship}
+                      tokens={tokens}
+                      disabled={busy}
+                      onDrop={dropShip}
+                      onDragStart={beginShipDrag}
+                      onDragEnd={endShipDrag}
+                      onRotate={rotateShip}
+                    />
+                  ))}
+                </View>
+                <View style={styles.resetRow}>
+                  <AppText kind="muted" tokens={tokens}>
+                    {placedShipCount(draftShips)} of {draftShips.length} placed
+                  </AppText>
+                  <View style={styles.resetButton}>
+                    <AppButton
+                      variant="quiet"
+                      label="Reset fleet"
+                      tokens={tokens}
+                      disabled={placedShipCount(draftShips) === 0}
+                      onPress={() => {
+                        setDraftShips(createDraftShips());
+                        setError(null);
+                      }}
+                    />
+                  </View>
+                </View>
+              </>
             ) : null}
-            <ScrollView horizontal showsHorizontalScrollIndicator>
-              <View style={[styles.grid, { width: size * CELL_SIZE }]}>
-                {Array.from({ length: size * size }, (_, index) => {
-                  const row = Math.floor(index / size);
-                  const col = index % size;
-                  const occupied = hasShip(ownShips, row, col);
-                  return (
-                    <Pressable
-                      key={`p-${index}`}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Your waters, row ${row + 1}, column ${col + 1}, ${occupied ? 'ship' : 'empty'}`}
-                      accessibilityHint={
-                        fleetSubmitted ? undefined : `Places the next ${orientation} ship here`
-                      }
-                      accessibilityState={{ disabled: fleetSubmitted }}
-                      disabled={fleetSubmitted}
-                      onPress={() => placeNextShip(row, col)}
-                      style={[
-                        styles.cell,
-                        {
-                          backgroundColor: occupied ? tokens.primary : tokens.surface,
-                          borderColor: tokens.border,
-                        },
-                      ]}
-                    >
-                      <AppText kind="label" tokens={tokens} style={styles.marker}>
-                        {occupied ? 'S' : ''}
-                      </AppText>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </ScrollView>
+            <View
+              ref={placementBoardRef}
+              collapsable={false}
+              style={[
+                styles.grid,
+                styles.placementGrid,
+                { width: boardSize, height: boardSize, borderColor: tokens.border },
+              ]}
+            >
+              {Array.from({ length: size * size }, (_, index) => {
+                const row = Math.floor(index / size);
+                const col = index % size;
+                const placedShip = shipForCell(draftShips, row, col);
+                const segmentIndex =
+                  placedShip?.placement?.findIndex(
+                    (cell) => cell.row === row && cell.col === col,
+                  ) ?? -1;
+                const isFirstSegment = segmentIndex === 0;
+                const isLastSegment =
+                  placedShip !== undefined && segmentIndex === placedShip.length - 1;
+                const isHorizontal = placedShip?.orientation === 'horizontal';
+                return (
+                  <Pressable
+                    key={`p-${index}`}
+                    accessibilityRole={placedShip === undefined ? 'none' : 'button'}
+                    accessibilityLabel={`Your waters, row ${row + 1}, column ${col + 1}, ${placedShip?.name ?? 'empty'}`}
+                    accessibilityHint={
+                      placedShip === undefined
+                        ? undefined
+                        : 'Rotates this ship to the nearest open spot'
+                    }
+                    disabled={fleetSubmitted || placedShip === undefined}
+                    onPress={() => {
+                      if (placedShip !== undefined) rotateShip(placedShip.id);
+                    }}
+                    style={[
+                      styles.cell,
+                      {
+                        width: cellSize,
+                        height: cellSize,
+                        backgroundColor:
+                          placedShip === undefined ? tokens.surface : tokens.surfaceMuted,
+                        borderColor: tokens.border,
+                      },
+                    ]}
+                  >
+                    {placedShip !== undefined ? (
+                      <View
+                        style={[
+                          styles.shipCell,
+                          {
+                            backgroundColor: tokens.primaryStrong,
+                            borderColor: tokens.onPrimary,
+                            width: isHorizontal ? '100%' : '62%',
+                            height: isHorizontal ? '62%' : '100%',
+                            borderTopLeftRadius: isFirstSegment ? 999 : 0,
+                            borderTopRightRadius:
+                              isHorizontal === true
+                                ? isLastSegment
+                                  ? 999
+                                  : 0
+                                : isFirstSegment
+                                  ? 999
+                                  : 0,
+                            borderBottomLeftRadius:
+                              isHorizontal === true
+                                ? isFirstSegment
+                                  ? 999
+                                  : 0
+                                : isLastSegment
+                                  ? 999
+                                  : 0,
+                            borderBottomRightRadius: isLastSegment ? 999 : 0,
+                          },
+                        ]}
+                      >
+                        <View style={[styles.shipWindow, { backgroundColor: tokens.surface }]} />
+                      </View>
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+            </View>
             {!fleetSubmitted && isCompleteFleet(draftFleet) ? (
               <View style={styles.submit}>
                 <AppButton
@@ -260,7 +384,7 @@ export function BattleshipScreen({ route }: Props) {
               Their waters
             </AppText>
             <ScrollView horizontal showsHorizontalScrollIndicator>
-              <View style={[styles.grid, { width: size * CELL_SIZE }]}>
+              <View style={[styles.grid, { width: size * 44 }]}>
                 {Array.from({ length: size * size }, (_, index) => {
                   const row = Math.floor(index / size);
                   const col = index % size;
@@ -312,7 +436,7 @@ export function BattleshipScreen({ route }: Props) {
               Your waters
             </AppText>
             <ScrollView horizontal showsHorizontalScrollIndicator>
-              <View style={[styles.grid, { width: size * CELL_SIZE }]}>
+              <View style={[styles.grid, { width: size * 44 }]}>
                 {Array.from({ length: size * size }, (_, index) => {
                   const row = Math.floor(index / size);
                   const col = index % size;
@@ -370,21 +494,40 @@ export function BattleshipScreen({ route }: Props) {
 
 const styles = StyleSheet.create({
   scroll: { paddingBottom: 32 },
-  statusCard: { borderRadius: 20, padding: 18, marginBottom: 8 },
+  statusCard: { borderRadius: 28, padding: 20, marginBottom: 8 },
   statusTitle: { marginBottom: 4 },
   instructions: { marginBottom: 12 },
-  controls: { marginBottom: 12 },
-  spacer: { height: 8 },
+  shipDock: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    overflow: 'visible',
+    paddingVertical: 4,
+  },
+  resetRow: {
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginVertical: 8,
+  },
+  resetButton: { minWidth: 132 },
   submit: { marginTop: 16 },
   section: { marginTop: 20, marginBottom: 8 },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
+  placementGrid: { alignSelf: 'center', borderWidth: 1, overflow: 'hidden' },
   cell: {
-    width: CELL_SIZE,
-    height: CELL_SIZE,
+    width: 44,
+    height: 44,
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
   },
   marker: { fontWeight: '700' },
+  shipCell: {
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shipWindow: { width: 4, height: 4, borderRadius: 2 },
   banner: { marginTop: 16 },
 });

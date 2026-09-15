@@ -17,6 +17,7 @@ import { AppButton } from '../ui/AppButton';
 import { AppText } from '../ui/AppText';
 import { Screen } from '../ui/Screen';
 import { TicTacToeMark } from '../ui/TicTacToeMark';
+import { clayRaisedStyle } from '../ui/clay';
 
 function asBoard(state: unknown): TicTacToeState | null {
   if (state === null || typeof state !== 'object') return null;
@@ -91,7 +92,11 @@ export function TicTacToeScreen({ route }: Props) {
         accessible
         accessibilityRole="summary"
         accessibilityLiveRegion="polite"
-        style={[styles.statusCard, { backgroundColor: tokens.surfaceMuted }]}
+        style={[
+          styles.statusCard,
+          clayRaisedStyle(tokens),
+          { backgroundColor: tokens.surfaceMuted },
+        ]}
       >
         <AppText kind="title" tokens={tokens} style={styles.statusTitle}>
           {status.title}
@@ -170,7 +175,7 @@ export function TicTacToeScreen({ route }: Props) {
 }
 
 const styles = StyleSheet.create({
-  statusCard: { borderRadius: 20, padding: 18, marginBottom: 20 },
+  statusCard: { borderRadius: 28, padding: 20, marginBottom: 20 },
   statusTitle: { marginBottom: 4 },
   identity: { marginTop: 12 },
   grid: {

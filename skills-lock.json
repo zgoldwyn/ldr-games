@@ -31,6 +31,13 @@
       "skillPath": "skills/ask-sonner/SKILL.md",
       "computedHash": "23f724e97247b2003ccc479f3a9b3af8e4191a0e133b94ee6b73f8405349687f"
     },
+    "claymorphism": {
+      "source": "sickn33/agentic-awesome-skills",
+      "ref": "main",
+      "sourceType": "github",
+      "skillPath": "plugins/agentic-awesome-skills-claude/skills/design-it/claymorphism/SKILL.md",
+      "computedHash": "a82129d5e46fb63fdf3c3a79389df6d735f0dda6a7b36f14781f997a7267f53b"
+    },
     "emil-design-eng": {
       "source": "emilkowalski/skills",
       "sourceType": "github",

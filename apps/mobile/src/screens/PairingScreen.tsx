@@ -12,6 +12,7 @@ import { AppButton } from '../ui/AppButton';
 import { AppField } from '../ui/AppField';
 import { AppText } from '../ui/AppText';
 import { Screen } from '../ui/Screen';
+import { clayRaisedStyle } from '../ui/clay';
 
 export function PairingScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -71,7 +72,11 @@ export function PairingScreen() {
         </AppText>
 
         <View
-          style={[styles.card, { backgroundColor: tokens.surface, borderColor: tokens.border }]}
+          style={[
+            styles.card,
+            clayRaisedStyle(tokens),
+            { backgroundColor: tokens.surface, borderColor: tokens.primary },
+          ]}
         >
           <AppText kind="label" tokens={tokens}>
             Your invitation
@@ -141,7 +146,7 @@ const styles = StyleSheet.create({
   scroll: { paddingBottom: 32 },
   lead: { marginTop: 8, marginBottom: 24 },
   card: {
-    borderRadius: 16,
+    borderRadius: 28,
     borderWidth: StyleSheet.hairlineWidth,
     padding: 20,
     marginBottom: 32,

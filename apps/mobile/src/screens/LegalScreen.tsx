@@ -7,6 +7,7 @@ import { LEGAL_DOCUMENT_ORDER, LEGAL_DOCUMENTS } from '../legal/legal-content';
 import type { RootStackParamList } from '../navigation';
 import { AppText } from '../ui/AppText';
 import { Screen } from '../ui/Screen';
+import { clayRaisedStyle } from '../ui/clay';
 
 export function LegalScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -32,6 +33,7 @@ export function LegalScreen() {
               onPress={() => navigation.navigate('LegalDocument', { document: id })}
               style={({ pressed }) => [
                 styles.row,
+                clayRaisedStyle(tokens),
                 {
                   backgroundColor: pressed ? tokens.surfaceMuted : tokens.surface,
                   borderColor: tokens.border,
@@ -69,7 +71,7 @@ const styles = StyleSheet.create({
     minHeight: 72,
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 16,
+    borderRadius: 24,
     borderWidth: 1,
     padding: 16,
     marginBottom: 12,

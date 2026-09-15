@@ -15,7 +15,10 @@ export function Screen({
 }) {
   const theme = tokens ?? themeTokens();
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: theme.background }]}
+      edges={['top', 'bottom']}
+    >
       <View style={styles.inner}>{children}</View>
     </SafeAreaView>
   );

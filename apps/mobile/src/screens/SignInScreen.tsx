@@ -19,6 +19,7 @@ import { AppButton } from '../ui/AppButton';
 import { AppField } from '../ui/AppField';
 import { AppText } from '../ui/AppText';
 import { Screen } from '../ui/Screen';
+import { clayRaisedStyle } from '../ui/clay';
 
 type Mode = 'signIn' | 'register';
 
@@ -132,6 +133,7 @@ export function SignInScreen() {
                 onPress={() => setLegalAccepted((accepted) => !accepted)}
                 style={({ pressed }) => [
                   styles.consent,
+                  clayRaisedStyle(tokens, true),
                   {
                     backgroundColor: pressed ? tokens.surfaceMuted : tokens.surface,
                     borderColor: tokens.border,
@@ -230,7 +232,7 @@ const styles = StyleSheet.create({
     minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 12,
+    borderRadius: 20,
     borderWidth: 1,
     padding: 12,
     marginBottom: 16,

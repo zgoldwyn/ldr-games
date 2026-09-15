@@ -18,6 +18,7 @@ import type { RootStackParamList } from '../navigation';
 import { AppButton } from '../ui/AppButton';
 import { AppText } from '../ui/AppText';
 import { Screen } from '../ui/Screen';
+import { clayRaisedStyle } from '../ui/clay';
 
 const MAX_OPEN_SESSIONS_PER_GAME = 3;
 
@@ -202,6 +203,7 @@ export function GameListScreen() {
                 key={notification.id}
                 style={[
                   styles.row,
+                  clayRaisedStyle(tokens),
                   { backgroundColor: tokens.surface, borderColor: tokens.border },
                 ]}
               >
@@ -229,7 +231,11 @@ export function GameListScreen() {
           <Pressable
             key={item.id}
             onPress={() => navigation.navigate('TicTacToe', { sessionId: item.id })}
-            style={[styles.row, { backgroundColor: tokens.surface, borderColor: tokens.border }]}
+            style={[
+              styles.row,
+              clayRaisedStyle(tokens),
+              { backgroundColor: tokens.surface, borderColor: tokens.primary },
+            ]}
           >
             <AppText kind="body" tokens={tokens}>
               Tic-tac-toe
@@ -243,7 +249,11 @@ export function GameListScreen() {
           <Pressable
             key={item.id}
             onPress={() => navigation.navigate('Battleship', { sessionId: item.id })}
-            style={[styles.row, { backgroundColor: tokens.surface, borderColor: tokens.border }]}
+            style={[
+              styles.row,
+              clayRaisedStyle(tokens),
+              { backgroundColor: tokens.surface, borderColor: tokens.primary },
+            ]}
           >
             <AppText kind="body" tokens={tokens}>
               Battleship
@@ -254,7 +264,13 @@ export function GameListScreen() {
           </Pressable>
         ))}
         {ticTacToeSessions.length === 0 && battleshipSessions.length === 0 ? (
-          <View style={[styles.empty, { backgroundColor: tokens.surfaceMuted }]}>
+          <View
+            style={[
+              styles.empty,
+              clayRaisedStyle(tokens),
+              { backgroundColor: tokens.surfaceMuted },
+            ]}
+          >
             <AppText kind="body" tokens={tokens} style={styles.emptyTitle}>
               No games in progress
             </AppText>
@@ -280,13 +296,13 @@ const styles = StyleSheet.create({
   spacer: { height: 12 },
   section: { marginTop: 32, marginBottom: 12 },
   row: {
-    borderRadius: 16,
+    borderRadius: 24,
     borderWidth: StyleSheet.hairlineWidth,
     padding: 16,
     marginBottom: 12,
   },
   rowTitle: { marginBottom: 12 },
-  empty: { borderRadius: 16, padding: 16 },
+  empty: { borderRadius: 24, padding: 18 },
   emptyTitle: { fontWeight: '600', marginBottom: 4 },
   banner: { marginTop: 16 },
 });

@@ -5,6 +5,7 @@ import { useApp } from '../app-context';
 import { buildPairLeaderboard } from '../games/leaderboard';
 import { AppText } from '../ui/AppText';
 import { Screen } from '../ui/Screen';
+import { clayRaisedStyle } from '../ui/clay';
 
 const gameName = (id: string) =>
   id === 'tic-tac-toe' ? 'Tic-tac-toe' : id === 'battleship' ? 'Battleship' : id;
@@ -39,7 +40,11 @@ export function LeaderboardScreen() {
         {leaderboard.standings.map((standing) => (
           <View
             key={standing.accountId}
-            style={[styles.card, { backgroundColor: tokens.surface, borderColor: tokens.border }]}
+            style={[
+              styles.card,
+              clayRaisedStyle(tokens),
+              { backgroundColor: tokens.surface, borderColor: tokens.primary },
+            ]}
           >
             <AppText kind="title" tokens={tokens}>
               #{standing.rank}
@@ -90,7 +95,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 16,
+    borderRadius: 24,
     padding: 16,
     marginBottom: 12,
   },

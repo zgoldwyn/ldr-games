@@ -25,7 +25,7 @@ export function AppText({
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: 24, fontWeight: '600' },
+  title: { fontSize: 26, lineHeight: 32, fontWeight: '700', letterSpacing: -0.4 },
   body: { fontSize: 16, lineHeight: 22 },
   muted: { fontSize: 14, lineHeight: 20 },
   label: {
