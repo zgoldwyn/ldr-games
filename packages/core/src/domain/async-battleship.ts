@@ -45,6 +45,8 @@ export interface Shot {
   readonly row: number;
   readonly col: number;
   readonly hit: boolean;
+  /** Included only on the finishing hit, so a ship stays visually hidden until sunk. */
+  readonly sunkShip?: ShipPlacement;
 }
 
 /**
@@ -58,6 +60,10 @@ export interface BattleshipState {
   readonly phase?: 'placement' | 'playing';
   readonly readyPlayers?: readonly AccountId[];
   readonly ships: Readonly<Record<AccountId, readonly Cell[]>>;
+  /** Server-only grouped fleets used to identify a sunk ship; stripped before persistence. */
+  readonly fleets?: Readonly<Record<AccountId, BattleshipFleet>>;
+  /** Public geometry for ships that are completely sunk, keyed by the player who fired. */
+  readonly sunkShips?: Readonly<Record<AccountId, BattleshipFleet>>;
   readonly shots: Readonly<Record<AccountId, readonly Shot[]>>;
 }
 
@@ -78,6 +84,14 @@ export const BATTLESHIP_GAME_DEF: AsyncGameDef = {
 };
 
 const cellKey = (row: number, col: number): string => `${row},${col}`;
+
+/** Return only ships whose every cell has a recorded hit. Safe to expose publicly. */
+export function sunkFleetForShots(fleet: BattleshipFleet, shots: readonly Shot[]): BattleshipFleet {
+  const hitKeys = new Set(
+    shots.filter((shot) => shot.hit).map((shot) => cellKey(shot.row, shot.col)),
+  );
+  return fleet.filter((ship) => ship.every((cell) => hitKeys.has(cellKey(cell.row, cell.col))));
+}
 
 const isIntInRange = (value: unknown, size: number): value is number =>
   typeof value === 'number' && Number.isInteger(value) && value >= 0 && value < size;
@@ -158,16 +172,27 @@ export const battleshipRuleset: AsyncRuleset<BattleshipState, BattleshipAction> 
 
     const shipKeys = new Set(opponentShips.map((c) => cellKey(c.row, c.col)));
     const hit = shipKeys.has(cellKey(action.row, action.col));
-    const shot: Shot = { row: action.row, col: action.col, hit };
+    const baseShot: Shot = { row: action.row, col: action.col, hit };
+    const shotsWithHit = [...priorShots, baseShot];
+    const hitKeys = new Set(shotsWithHit.filter((s) => s.hit).map((s) => cellKey(s.row, s.col)));
+    const sunkShip = state.fleets?.[opponent]?.find(
+      (ship) =>
+        ship.some((cell) => cell.row === action.row && cell.col === action.col) &&
+        ship.every((cell) => hitKeys.has(cellKey(cell.row, cell.col))),
+    );
+    const shot: Shot = sunkShip === undefined ? baseShot : { ...baseShot, sunkShip };
     const nextShots = [...priorShots, shot];
+    const opponentFleet = state.fleets?.[opponent];
+    const sunkShips =
+      opponentFleet === undefined ? undefined : sunkFleetForShots(opponentFleet, nextShots);
 
     const nextState: BattleshipState = {
       ...state,
       shots: { ...state.shots, [actor]: nextShots },
+      ...(sunkShips === undefined ? {} : { sunkShips: { ...state.sunkShips, [actor]: sunkShips } }),
     };
 
     // The actor wins once every opponent ship cell has been hit.
-    const hitKeys = new Set(nextShots.filter((s) => s.hit).map((s) => cellKey(s.row, s.col)));
     const allSunk = shipKeys.size > 0 && [...shipKeys].every((k) => hitKeys.has(k));
 
     return {

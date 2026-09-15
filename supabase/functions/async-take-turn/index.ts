@@ -31,6 +31,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { applyTurn, type AsyncEngineState } from "@ldr/core/async-engine";
 import {
   type BattleshipFleet,
+  sunkFleetForShots,
   validateBattleshipFleet,
 } from "@ldr/core/async-battleship";
 import { deriveTurnHandoffNotification } from "@ldr/core/async-lifecycle";
@@ -219,6 +220,7 @@ Deno.serve(async (req: Request) => {
     activeTurnHolder: asAccountId(row.active_turn_holder),
     status: row.state === "terminal" ? "terminal" : "active",
   };
+  let loadedFleets: Record<string, BattleshipFleet> | undefined;
 
   // Fleets are stored in an own-row-only table, never in the shared session
   // JSON. Load both through service_role only while evaluating a shot.
@@ -242,6 +244,7 @@ Deno.serve(async (req: Request) => {
       );
     }
     const ships: Record<string, readonly { row: number; col: number }[]> = {};
+    const fleets: Record<string, BattleshipFleet> = {};
     for (const placement of placements) {
       const checked = validateBattleshipFleet(
         placement.fleet as BattleshipFleet,
@@ -254,8 +257,10 @@ Deno.serve(async (req: Request) => {
         );
       }
       ships[placement.account_id] = checked.cells;
+      fleets[placement.account_id] = placement.fleet as BattleshipFleet;
     }
-    engine = { ...engine, ruleset: { ...engine.ruleset, ships } };
+    loadedFleets = fleets;
+    engine = { ...engine, ruleset: { ...engine.ruleset, ships, fleets } };
   }
   const expectedTurnCount = Array.isArray(engine.turns)
     ? engine.turns.length
@@ -280,9 +285,34 @@ Deno.serve(async (req: Request) => {
   }
 
   const next = applied.value as unknown as EngineState;
-  const persistedNext: EngineState = next.ruleset.kind === "battleship"
-    ? { ...next, ruleset: { ...next.ruleset, ships: {} } }
-    : next;
+  let nextWithSunkShips = next;
+  if (next.ruleset.kind === "battleship" && loadedFleets !== undefined) {
+    const sunkShips: Record<string, BattleshipFleet> = {};
+    for (const shooter of next.players) {
+      const opponent = next.players.find((player) => player !== shooter);
+      const opponentFleet = opponent === undefined
+        ? undefined
+        : loadedFleets[opponent];
+      if (opponentFleet !== undefined) {
+        sunkShips[shooter] = sunkFleetForShots(
+          opponentFleet,
+          next.ruleset.shots[shooter] ?? [],
+        );
+      }
+    }
+    nextWithSunkShips = { ...next, ruleset: { ...next.ruleset, sunkShips } };
+  }
+  const persistedNext: EngineState =
+    nextWithSunkShips.ruleset.kind === "battleship"
+      ? {
+        ...nextWithSunkShips,
+        ruleset: {
+          ...nextWithSunkShips.ruleset,
+          ships: {},
+          fleets: undefined,
+        },
+      }
+      : nextWithSunkShips;
   const terminal = next.status === "terminal";
   const nowMs = Date.now();
   const nowIso = new Date(nowMs).toISOString();

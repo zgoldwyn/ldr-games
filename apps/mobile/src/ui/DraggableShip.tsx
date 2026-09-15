@@ -21,6 +21,7 @@ export function DraggableShip({
   disabled,
   cellSize,
   dragScale = 1,
+  dimmed = false,
   showDetails = false,
   onDrop,
   onDragStart,
@@ -32,6 +33,7 @@ export function DraggableShip({
   readonly disabled: boolean;
   readonly cellSize: number;
   readonly dragScale?: number;
+  readonly dimmed?: boolean;
   readonly showDetails?: boolean;
   readonly onDragStart: () => void;
   readonly onDragEnd: () => void;
@@ -113,11 +115,16 @@ export function DraggableShip({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`${ship.name}, ${ship.length} cells, ${ship.orientation}${ship.placement === null ? ', not placed' : ', placed'}`}
-          accessibilityHint="Drag the ship onto the grid. Tap to rotate it."
+          accessibilityHint={
+            showDetails && ship.placement !== null
+              ? 'Placed on the grid. Drag the ship on the board to reposition it.'
+              : 'Drag the ship onto the grid. Tap to rotate it.'
+          }
+          accessibilityState={{ disabled }}
           disabled={disabled}
           hitSlop={8}
           onPress={() => onRotate(ship.id)}
-          style={({ pressed }) => ({ opacity: disabled ? 0.5 : pressed ? 0.72 : 1 })}
+          style={({ pressed }) => ({ opacity: pressed ? 0.72 : 1 })}
         >
           <BattleshipShipArt
             length={ship.length}
@@ -131,7 +138,7 @@ export function DraggableShip({
   );
 
   return (
-    <View style={showDetails ? styles.dockSlot : styles.boardSlot}>
+    <View style={[showDetails ? styles.dockSlot : styles.boardSlot, dimmed && styles.dimmed]}>
       {showDetails ? <View style={styles.dockStage}>{shipControl}</View> : shipControl}
       {showDetails ? (
         <View pointerEvents="none" style={styles.copy}>
@@ -164,6 +171,7 @@ const styles = StyleSheet.create({
     overflow: 'visible',
   },
   boardSlot: { overflow: 'visible' },
+  dimmed: { opacity: 0.38 },
   dragLayer: { alignSelf: 'center' },
   copy: { height: 34, alignItems: 'center', justifyContent: 'flex-end' },
   name: { fontWeight: '700', fontSize: 14, lineHeight: 17 },

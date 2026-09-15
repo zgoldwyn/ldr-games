@@ -263,19 +263,19 @@ export function App() {
             <Stack.Navigator screenOptions={header}>
               <Stack.Screen
                 name="MainTabs"
-                options={{ headerShown: false }}
+                options={{ headerShown: false, title: 'Play' }}
                 children={() => <MainTabs tokens={tokens} />}
               />
               {LegalRoutes()}
               <Stack.Screen
                 name="TicTacToe"
                 component={TicTacToeScreen}
-                options={{ title: 'Tic-tac-toe' }}
+                options={{ title: 'Tic-tac-toe', headerBackTitle: 'Play' }}
               />
               <Stack.Screen
                 name="Battleship"
                 component={BattleshipScreen}
-                options={{ title: 'Battleship' }}
+                options={{ title: 'Battleship', headerBackTitle: 'Play' }}
               />
             </Stack.Navigator>
           )}

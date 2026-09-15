@@ -47,6 +47,31 @@ export function placedShipCount(ships: readonly DraftShip[]): number {
   return ships.filter((ship) => ship.placement !== null).length;
 }
 
+function randomBoardIndex(random: () => number, size: number): number {
+  const value = random();
+  return Math.floor(Math.max(0, Math.min(0.999999, Number.isFinite(value) ? value : 0)) * size);
+}
+
+/** Build a complete fleet while reusing the same nearest-valid collision handling as dragging. */
+export function randomizeDraftFleet(
+  random: () => number = Math.random,
+  size = 10,
+): readonly DraftShip[] {
+  let ships = createDraftShips();
+  for (const ship of ships) {
+    const orientation: ShipOrientation = random() < 0.5 ? 'horizontal' : 'vertical';
+    ships = placeDraftShipNearest(
+      ships,
+      ship.id,
+      randomBoardIndex(random, size),
+      randomBoardIndex(random, size),
+      orientation,
+      size,
+    ).ships;
+  }
+  return ships;
+}
+
 /** Explicit rows prevent flex-wrap rounding from turning a 10×10 board into 9 columns. */
 export function battleshipGridRows(size = 10): readonly (readonly Cell[])[] {
   return Array.from({ length: size }, (_, row) =>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
@@ -8,6 +8,7 @@ import {
   type AccountId,
   type BattleshipState,
   type Cell,
+  type ShipPlacement,
   type Shot,
 } from '@ldr/core';
 
@@ -20,6 +21,7 @@ import {
   fleetFromDraft,
   placeDraftShipNearest,
   placedShipCount,
+  randomizeDraftFleet,
   rotateDraftShipNearest,
   type DraftShipId,
 } from '../games/battleship-placement';
@@ -28,8 +30,11 @@ import type { RootStackParamList } from '../navigation';
 import { AppText } from '../ui/AppText';
 import { AppButton } from '../ui/AppButton';
 import { Screen } from '../ui/Screen';
+import { BattleshipResultCard } from '../ui/BattleshipResultCard';
+import { BattleshipShipArt } from '../ui/BattleshipShipArt';
 import { DraggableShip } from '../ui/DraggableShip';
 import { clayRaisedStyle } from '../ui/clay';
+import hitMarker from '../../assets/battleship-hit.png';
 
 const MAX_BOARD_SIZE = 360;
 
@@ -49,6 +54,46 @@ function shotAt(shots: readonly Shot[] | undefined, row: number, col: number): S
 
 function hasShip(ships: readonly Cell[] | undefined, row: number, col: number): boolean {
   return ships?.some((c) => c.row === row && c.col === col) ?? false;
+}
+
+function placementLayout(placement: ShipPlacement): {
+  readonly row: number;
+  readonly col: number;
+  readonly orientation: 'horizontal' | 'vertical';
+} | null {
+  const anchor = placement[0];
+  if (anchor === undefined) return null;
+  return {
+    row: Math.min(...placement.map((cell) => cell.row)),
+    col: Math.min(...placement.map((cell) => cell.col)),
+    orientation:
+      placement.length > 1 && placement.every((cell) => cell.col === anchor.col)
+        ? 'vertical'
+        : 'horizontal',
+  };
+}
+
+function ShotMarker({ shot, cellSize }: { readonly shot: Shot; readonly cellSize: number }) {
+  return shot.hit ? (
+    <Image
+      accessible={false}
+      resizeMode="contain"
+      source={hitMarker}
+      style={{ width: cellSize * 0.82, height: cellSize * 0.82 }}
+    />
+  ) : (
+    <View
+      accessible={false}
+      style={[
+        styles.missDot,
+        {
+          width: Math.max(5, cellSize * 0.18),
+          height: Math.max(5, cellSize * 0.18),
+          borderRadius: cellSize,
+        },
+      ]}
+    />
+  );
 }
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Battleship'>;
@@ -216,6 +261,14 @@ export function BattleshipScreen({ route }: Props) {
         : (board?.ships[self] ?? []);
   const shotsFired = self !== undefined ? board?.shots[self] : undefined;
   const incoming = partner !== undefined ? board?.shots[partner] : undefined;
+  const ownDisplayShips = privateFleet === undefined ? draftShips : createDraftShips(privateFleet);
+  const sunkOpponentShips =
+    self === undefined
+      ? []
+      : (board?.sunkShips?.[self] ??
+        (shotsFired ?? []).flatMap((shot) => (shot.sunkShip === undefined ? [] : [shot.sunkShip])));
+  const terminal = cached?.state === 'terminal';
+  const won = terminal && cached?.outcome?.winner === self;
 
   return (
     <Screen tokens={tokens}>
@@ -237,6 +290,8 @@ export function BattleshipScreen({ route }: Props) {
             {status.detail}
           </AppText>
         </View>
+
+        {terminal ? <BattleshipResultCard won={won} tokens={tokens} /> : null}
 
         {phase === 'placement' ? (
           <>
@@ -269,9 +324,10 @@ export function BattleshipScreen({ route }: Props) {
                         key={ship.id}
                         ship={ship}
                         tokens={tokens}
-                        disabled={busy}
+                        disabled={busy || ship.placement !== null}
                         cellSize={18}
                         dragScale={cellSize / 18}
+                        dimmed={ship.placement !== null}
                         showDetails
                         onDrop={dropShip}
                         onDragStart={beginShipDrag}
@@ -285,17 +341,32 @@ export function BattleshipScreen({ route }: Props) {
                   <AppText kind="muted" tokens={tokens}>
                     {placedShipCount(draftShips)} of {draftShips.length} placed
                   </AppText>
-                  <View style={styles.resetButton}>
-                    <AppButton
-                      variant="quiet"
-                      label="Reset fleet"
-                      tokens={tokens}
-                      disabled={placedShipCount(draftShips) === 0}
-                      onPress={() => {
-                        setDraftShips(createDraftShips());
-                        setError(null);
-                      }}
-                    />
+                  <View style={styles.fleetActions}>
+                    <View style={styles.resetButton}>
+                      <AppButton
+                        variant="quiet"
+                        label="Reset fleet"
+                        tokens={tokens}
+                        disabled={placedShipCount(draftShips) === 0}
+                        onPress={() => {
+                          setDraftShips(createDraftShips());
+                          setError(null);
+                        }}
+                      />
+                    </View>
+                    <View style={styles.resetButton}>
+                      <AppButton
+                        variant="quiet"
+                        label="Random fleet"
+                        tokens={tokens}
+                        disabled={busy}
+                        onPress={() => {
+                          setDraftShips(randomizeDraftFleet());
+                          setError(null);
+                          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        }}
+                      />
+                    </View>
                   </View>
                 </View>
               </>
@@ -365,99 +436,187 @@ export function BattleshipScreen({ route }: Props) {
           </>
         ) : (
           <>
-            <AppText kind="label" tokens={tokens} style={styles.section}>
+            <AppText
+              kind="label"
+              tokens={tokens}
+              style={[styles.section, terminal && styles.finishedGame]}
+            >
               Their waters
             </AppText>
-            <ScrollView horizontal showsHorizontalScrollIndicator>
-              <View style={[styles.grid, { width: size * 44 }]}>
-                {Array.from({ length: size * size }, (_, index) => {
-                  const row = Math.floor(index / size);
-                  const col = index % size;
-                  const shot = shotAt(shotsFired, row, col);
+            <View
+              style={[
+                styles.gameplayFrame,
+                terminal && styles.finishedGame,
+                clayRaisedStyle(tokens),
+                { backgroundColor: tokens.surfaceMuted },
+              ]}
+            >
+              <View
+                style={[
+                  styles.gameplayGrid,
+                  { width: boardSize, height: boardSize, backgroundColor: tokens.surface },
+                ]}
+              >
+                {placementRows.map((rowCells, row) => (
+                  <View key={`their-row-${row}`} style={styles.placementRow}>
+                    {rowCells.map(({ col }) => {
+                      const shot = shotAt(shotsFired, row, col);
+                      const partOfSunkShip = sunkOpponentShips.some((ship) =>
+                        hasShip(ship, row, col),
+                      );
+                      return (
+                        <Pressable
+                          key={`their-${row}-${col}`}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Their waters, row ${row + 1}, column ${col + 1}, ${shot === undefined ? 'not targeted' : shot.hit ? (partOfSunkShip ? 'hit, ship sunk' : 'hit') : 'miss'}`}
+                          accessibilityHint={
+                            myTurn && shot === undefined ? 'Fires at this square' : undefined
+                          }
+                          accessibilityState={{ disabled: !myTurn || shot !== undefined }}
+                          disabled={!myTurn || shot !== undefined}
+                          onPress={() => void fire(row, col)}
+                          style={[
+                            styles.gameplayCell,
+                            {
+                              width: cellSize,
+                              height: cellSize,
+                              borderColor: tokens.border,
+                            },
+                          ]}
+                        />
+                      );
+                    })}
+                  </View>
+                ))}
+                {sunkOpponentShips.map((ship, index) => {
+                  const layout = placementLayout(ship);
+                  if (layout === null) return null;
                   return (
-                    <Pressable
-                      key={`r-${index}`}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Their waters, row ${row + 1}, column ${col + 1}, ${shot === undefined ? 'not targeted' : shot.hit ? 'hit' : 'miss'}`}
-                      accessibilityHint={
-                        myTurn && shot === undefined ? 'Fires at this square' : undefined
-                      }
-                      accessibilityState={{ disabled: !myTurn || shot !== undefined }}
-                      disabled={!myTurn || shot !== undefined}
-                      onPress={() => {
-                        void fire(row, col);
-                      }}
+                    <View
+                      key={`sunk-${index}-${layout.row}-${layout.col}`}
+                      pointerEvents="none"
                       style={[
-                        styles.cell,
-                        {
-                          backgroundColor:
-                            shot === undefined
-                              ? tokens.surface
-                              : shot.hit
-                                ? tokens.error
-                                : tokens.surfaceMuted,
-                          borderColor: tokens.border,
-                        },
+                        styles.gameplayShip,
+                        { left: layout.col * cellSize, top: layout.row * cellSize },
                       ]}
                     >
-                      <AppText
-                        kind="label"
+                      <BattleshipShipArt
+                        length={ship.length}
+                        orientation={layout.orientation}
                         tokens={tokens}
-                        style={[styles.marker, shot?.hit ? { color: tokens.surface } : undefined]}
-                      >
-                        {shot === undefined ? '' : shot.hit ? 'H' : 'M'}
-                      </AppText>
-                    </Pressable>
+                        cellSize={cellSize}
+                      />
+                    </View>
                   );
                 })}
+                {(shotsFired ?? []).map((shot) => (
+                  <View
+                    key={`their-shot-${shot.row}-${shot.col}`}
+                    pointerEvents="none"
+                    style={[
+                      styles.shotMarker,
+                      {
+                        left: shot.col * cellSize,
+                        top: shot.row * cellSize,
+                        width: cellSize,
+                        height: cellSize,
+                      },
+                    ]}
+                  >
+                    <ShotMarker shot={shot} cellSize={cellSize} />
+                  </View>
+                ))}
               </View>
-            </ScrollView>
+            </View>
           </>
         )}
 
         {phase === 'playing' ? (
           <>
-            <AppText kind="label" tokens={tokens} style={styles.section}>
+            <AppText
+              kind="label"
+              tokens={tokens}
+              style={[styles.section, terminal && styles.finishedGame]}
+            >
               Your waters
             </AppText>
-            <ScrollView horizontal showsHorizontalScrollIndicator>
-              <View style={[styles.grid, { width: size * 44 }]}>
-                {Array.from({ length: size * size }, (_, index) => {
-                  const row = Math.floor(index / size);
-                  const col = index % size;
-                  const ship = hasShip(ownShips, row, col);
-                  const hit = shotAt(incoming, row, col);
+            <View
+              style={[
+                styles.gameplayFrame,
+                terminal && styles.finishedGame,
+                clayRaisedStyle(tokens),
+                { backgroundColor: tokens.surfaceMuted },
+              ]}
+            >
+              <View
+                style={[
+                  styles.gameplayGrid,
+                  { width: boardSize, height: boardSize, backgroundColor: tokens.surface },
+                ]}
+              >
+                {placementRows.map((rowCells, row) => (
+                  <View key={`own-row-${row}`} style={styles.placementRow}>
+                    {rowCells.map(({ col }) => {
+                      const ship = hasShip(ownShips, row, col);
+                      const shot = shotAt(incoming, row, col);
+                      return (
+                        <View
+                          key={`own-${row}-${col}`}
+                          accessible
+                          accessibilityLabel={`Your waters, row ${row + 1}, column ${col + 1}, ${shot?.hit ? 'ship hit' : shot !== undefined ? 'miss' : ship ? 'ship' : 'empty'}`}
+                          style={[
+                            styles.gameplayCell,
+                            {
+                              width: cellSize,
+                              height: cellSize,
+                              borderColor: tokens.border,
+                            },
+                          ]}
+                        />
+                      );
+                    })}
+                  </View>
+                ))}
+                {ownDisplayShips.map((ship) => {
+                  const anchor = ship.placement?.[0];
+                  if (anchor === undefined) return null;
                   return (
                     <View
-                      key={`h-${index}`}
-                      accessible
-                      accessibilityLabel={`Your waters, row ${row + 1}, column ${col + 1}, ${hit?.hit ? 'ship hit' : hit !== undefined ? 'miss' : ship ? 'ship' : 'empty'}`}
+                      key={`own-ship-${ship.id}`}
+                      pointerEvents="none"
                       style={[
-                        styles.cell,
-                        {
-                          backgroundColor: hit?.hit
-                            ? tokens.error
-                            : ship
-                              ? tokens.primary
-                              : hit !== undefined
-                                ? tokens.surfaceMuted
-                                : tokens.surface,
-                          borderColor: tokens.border,
-                        },
+                        styles.gameplayShip,
+                        { left: anchor.col * cellSize, top: anchor.row * cellSize },
                       ]}
                     >
-                      <AppText
-                        kind="label"
+                      <BattleshipShipArt
+                        length={ship.length}
+                        orientation={ship.orientation}
                         tokens={tokens}
-                        style={[styles.marker, hit?.hit ? { color: tokens.surface } : undefined]}
-                      >
-                        {hit?.hit ? 'H' : hit !== undefined ? 'M' : ship ? 'S' : ''}
-                      </AppText>
+                        cellSize={cellSize}
+                      />
                     </View>
                   );
                 })}
+                {(incoming ?? []).map((shot) => (
+                  <View
+                    key={`incoming-${shot.row}-${shot.col}`}
+                    pointerEvents="none"
+                    style={[
+                      styles.shotMarker,
+                      {
+                        left: shot.col * cellSize,
+                        top: shot.row * cellSize,
+                        width: cellSize,
+                        height: cellSize,
+                      },
+                    ]}
+                  >
+                    <ShotMarker shot={shot} cellSize={cellSize} />
+                  </View>
+                ))}
               </View>
-            </ScrollView>
+            </View>
           </>
         ) : null}
 
@@ -501,21 +660,35 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginVertical: 8,
   },
-  resetButton: { minWidth: 132 },
+  fleetActions: { flexDirection: 'row', gap: 6 },
+  resetButton: { minWidth: 112 },
   submit: { marginTop: 16 },
   section: { marginTop: 20, marginBottom: 8 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap' },
   placementGrid: { alignSelf: 'center', position: 'relative', overflow: 'visible', zIndex: 1 },
   placementRow: { flexDirection: 'row' },
   placementCell: { borderWidth: StyleSheet.hairlineWidth },
   placedShip: { position: 'absolute', zIndex: 5 },
-  cell: {
-    width: 44,
-    height: 44,
+  gameplayFrame: {
+    alignSelf: 'center',
+    borderRadius: 24,
+    padding: 6,
+  },
+  gameplayGrid: {
+    borderRadius: 18,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  gameplayCell: {
     borderWidth: StyleSheet.hairlineWidth,
+  },
+  gameplayShip: { position: 'absolute', zIndex: 2 },
+  shotMarker: {
+    position: 'absolute',
+    zIndex: 3,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  marker: { fontWeight: '700' },
+  missDot: { backgroundColor: '#111111' },
+  finishedGame: { opacity: 0.32 },
   banner: { marginTop: 16 },
 });

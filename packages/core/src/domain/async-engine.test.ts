@@ -110,6 +110,74 @@ describe('applyTurn — battleship rules', () => {
     expect(next.status).toBe('terminal');
     expect(next.winner).toBe(alice);
   });
+
+  it('reveals a ship only on the hit that sinks every one of its cells', () => {
+    const ship = [
+      { row: 0, col: 0 },
+      { row: 0, col: 1 },
+    ];
+    const start = battleship(alice);
+    const state: AsyncEngineState = {
+      ...start,
+      ruleset: {
+        ...start.ruleset,
+        ships: { [alice]: [{ row: 2, col: 2 }], [bob]: ship },
+        fleets: { [alice]: [[{ row: 2, col: 2 }]], [bob]: [ship] },
+      },
+    };
+
+    const first = applyTurn(asGame(state), alice, fire(0, 0));
+    expect(isOk(first)).toBe(true);
+    if (!isOk(first)) return;
+    const firstBoard = asEngine(first.value).ruleset;
+    if (firstBoard.kind !== 'battleship') return;
+    expect(firstBoard.shots[alice]?.[0]?.sunkShip).toBeUndefined();
+    expect(firstBoard.sunkShips?.[alice]).toEqual([]);
+
+    const second = applyTurn(
+      asGame({ ...asEngine(first.value), activeTurnHolder: alice }),
+      alice,
+      fire(0, 1),
+    );
+    expect(isOk(second)).toBe(true);
+    if (!isOk(second)) return;
+    const secondBoard = asEngine(second.value).ruleset;
+    if (secondBoard.kind !== 'battleship') return;
+    expect(secondBoard.shots[alice]?.[1]?.sunkShip).toEqual(ship);
+    expect(secondBoard.sunkShips?.[alice]).toEqual([ship]);
+  });
+
+  it('backfills a previously sunk ship from hit history without exposing an intact ship', () => {
+    const sunkShip = [
+      { row: 0, col: 0 },
+      { row: 0, col: 1 },
+    ];
+    const intactShip = [{ row: 2, col: 2 }];
+    const start = battleship(alice);
+    const state: AsyncEngineState = {
+      ...start,
+      ruleset: {
+        ...start.ruleset,
+        ships: { [alice]: [{ row: 2, col: 0 }], [bob]: [...sunkShip, ...intactShip] },
+        fleets: { [alice]: [[{ row: 2, col: 0 }]], [bob]: [sunkShip, intactShip] },
+        shots: {
+          [alice]: [
+            { row: 0, col: 0, hit: true },
+            { row: 0, col: 1, hit: true },
+          ],
+          [bob]: [],
+        },
+      },
+    };
+
+    const result = applyTurn(asGame(state), alice, fire(1, 1));
+    expect(isOk(result)).toBe(true);
+    if (!isOk(result)) return;
+    const board = asEngine(result.value).ruleset;
+    if (board.kind !== 'battleship') return;
+    expect(board.sunkShips?.[alice]).toEqual([sunkShip]);
+    expect(board.sunkShips?.[alice]).not.toContainEqual(intactShip);
+  });
 });
 
 describe('battleship fleet placement', () => {

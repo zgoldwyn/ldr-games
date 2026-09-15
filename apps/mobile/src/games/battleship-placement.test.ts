@@ -6,6 +6,7 @@ import {
   fleetFromDraft,
   placeDraftShipNearest,
   placedShipCount,
+  randomizeDraftFleet,
   rotateDraftShipNearest,
   shipForCell,
 } from './battleship-placement';
@@ -57,6 +58,17 @@ describe('Battleship drag placement', () => {
     ]);
     expect(placedShipCount(moved.ships)).toBe(1);
     expect(fleetFromDraft(moved.ships)).toHaveLength(1);
+  });
+
+  it('builds a complete non-overlapping random fleet', () => {
+    const values = [0.02, 0.91, 0.17, 0.68, 0.34, 0.83, 0.49, 0.76, 0.11, 0.57];
+    let index = 0;
+    const ships = randomizeDraftFleet(() => values[index++ % values.length]!);
+    const occupied = fleetFromDraft(ships).flat();
+
+    expect(placedShipCount(ships)).toBe(5);
+    expect(occupied).toHaveLength(17);
+    expect(new Set(occupied.map((cell) => `${cell.row},${cell.col}`)).size).toBe(17);
   });
 
   it('rotates in place when legal and finds the nearest legal spot when blocked', () => {
