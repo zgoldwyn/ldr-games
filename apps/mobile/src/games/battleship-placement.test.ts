@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  battleshipGridRows,
   createDraftShips,
   fleetFromDraft,
   placeDraftShipNearest,
@@ -10,6 +11,13 @@ import {
 } from './battleship-placement';
 
 describe('Battleship drag placement', () => {
+  it('builds explicit square rows without relying on flex wrapping', () => {
+    const rows = battleshipGridRows(10);
+    expect(rows).toHaveLength(10);
+    expect(rows.every((row) => row.length === 10)).toBe(true);
+    expect(rows[4]).toEqual(Array.from({ length: 10 }, (_, col) => ({ row: 4, col })));
+  });
+
   it('starts with a five-ship bank and accepts ships in any order', () => {
     const bank = createDraftShips();
     expect(bank.map((ship) => ship.length)).toEqual([5, 4, 3, 3, 2]);
@@ -38,6 +46,17 @@ describe('Battleship drag placement', () => {
           .map((cell) => `${cell.row},${cell.col}`),
       ).size,
     ).toBe(9);
+  });
+
+  it('moves an already placed ship again without duplicating it', () => {
+    const first = placeDraftShipNearest(createDraftShips(), 'destroyer', 0, 0, 'horizontal');
+    const moved = placeDraftShipNearest(first.ships, 'destroyer', 6, 7, 'vertical');
+    expect(moved.placement).toEqual([
+      { row: 6, col: 7 },
+      { row: 7, col: 7 },
+    ]);
+    expect(placedShipCount(moved.ships)).toBe(1);
+    expect(fleetFromDraft(moved.ships)).toHaveLength(1);
   });
 
   it('rotates in place when legal and finds the nearest legal spot when blocked', () => {

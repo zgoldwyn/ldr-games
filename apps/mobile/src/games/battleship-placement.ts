@@ -1,4 +1,4 @@
-import type { BattleshipFleet, ShipPlacement } from '@ldr/core';
+import type { BattleshipFleet, Cell, ShipPlacement } from '@ldr/core';
 
 import { canAddShip, shipAt, type ShipOrientation } from './battleship-fleet';
 
@@ -45,6 +45,13 @@ export function fleetFromDraft(ships: readonly DraftShip[]): BattleshipFleet {
 
 export function placedShipCount(ships: readonly DraftShip[]): number {
   return ships.filter((ship) => ship.placement !== null).length;
+}
+
+/** Explicit rows prevent flex-wrap rounding from turning a 10×10 board into 9 columns. */
+export function battleshipGridRows(size = 10): readonly (readonly Cell[])[] {
+  return Array.from({ length: size }, (_, row) =>
+    Array.from({ length: size }, (_, col) => ({ row, col })),
+  );
 }
 
 function candidateAnchors(

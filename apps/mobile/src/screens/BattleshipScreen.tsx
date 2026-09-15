@@ -15,12 +15,12 @@ import { useApp } from '../app-context';
 import { messageForError } from '../copy/error-copy';
 import { fleetCells, isCompleteFleet } from '../games/battleship-fleet';
 import {
+  battleshipGridRows,
   createDraftShips,
   fleetFromDraft,
   placeDraftShipNearest,
   placedShipCount,
   rotateDraftShipNearest,
-  shipForCell,
   type DraftShipId,
 } from '../games/battleship-placement';
 import { battleshipStatus, battleshipTurnError } from '../games/battleship-view';
@@ -85,6 +85,7 @@ export function BattleshipScreen({ route }: Props) {
   const fleetSubmitted = self !== undefined && board?.readyPlayers?.includes(self) === true;
   const boardSize = Math.min(MAX_BOARD_SIZE, viewportWidth - 48);
   const cellSize = boardSize / size;
+  const placementRows = battleshipGridRows(size);
   const draftFleet = fleetFromDraft(draftShips);
   const status = battleshipStatus({
     sessionState: cached?.state,
@@ -251,19 +252,33 @@ export function BattleshipScreen({ route }: Props) {
             </AppText>
             {!fleetSubmitted ? (
               <>
-                <View style={styles.shipDock} accessibilityLabel="Your ship dock">
-                  {draftShips.map((ship) => (
-                    <DraggableShip
-                      key={ship.id}
-                      ship={ship}
-                      tokens={tokens}
-                      disabled={busy}
-                      onDrop={dropShip}
-                      onDragStart={beginShipDrag}
-                      onDragEnd={endShipDrag}
-                      onRotate={rotateShip}
-                    />
-                  ))}
+                <View
+                  style={[
+                    styles.shipDock,
+                    clayRaisedStyle(tokens),
+                    { backgroundColor: tokens.surface, borderColor: tokens.primary },
+                  ]}
+                  accessibilityLabel="Your shipyard"
+                >
+                  <AppText kind="label" tokens={tokens} style={styles.shipDockTitle}>
+                    Shipyard · tap a hull to rotate
+                  </AppText>
+                  <View style={styles.shipRack}>
+                    {draftShips.map((ship) => (
+                      <DraggableShip
+                        key={ship.id}
+                        ship={ship}
+                        tokens={tokens}
+                        disabled={busy}
+                        cellSize={22}
+                        showDetails
+                        onDrop={dropShip}
+                        onDragStart={beginShipDrag}
+                        onDragEnd={endShipDrag}
+                        onRotate={rotateShip}
+                      />
+                    ))}
+                  </View>
                 </View>
                 <View style={styles.resetRow}>
                   <AppText kind="muted" tokens={tokens}>
@@ -288,82 +303,51 @@ export function BattleshipScreen({ route }: Props) {
               ref={placementBoardRef}
               collapsable={false}
               style={[
-                styles.grid,
                 styles.placementGrid,
-                { width: boardSize, height: boardSize, borderColor: tokens.border },
+                { width: boardSize, height: boardSize, backgroundColor: tokens.surface },
               ]}
             >
-              {Array.from({ length: size * size }, (_, index) => {
-                const row = Math.floor(index / size);
-                const col = index % size;
-                const placedShip = shipForCell(draftShips, row, col);
-                const segmentIndex =
-                  placedShip?.placement?.findIndex(
-                    (cell) => cell.row === row && cell.col === col,
-                  ) ?? -1;
-                const isFirstSegment = segmentIndex === 0;
-                const isLastSegment =
-                  placedShip !== undefined && segmentIndex === placedShip.length - 1;
-                const isHorizontal = placedShip?.orientation === 'horizontal';
+              {placementRows.map((rowCells, row) => (
+                <View key={`row-${row}`} style={styles.placementRow}>
+                  {rowCells.map(({ col }) => (
+                    <View
+                      key={`p-${row}-${col}`}
+                      accessible
+                      accessibilityLabel={`Your waters, row ${row + 1}, column ${col + 1}`}
+                      style={[
+                        styles.placementCell,
+                        {
+                          width: cellSize,
+                          height: cellSize,
+                          borderColor: tokens.border,
+                        },
+                      ]}
+                    />
+                  ))}
+                </View>
+              ))}
+              {draftShips.map((ship) => {
+                const anchor = ship.placement?.[0];
+                if (anchor === undefined) return null;
                 return (
-                  <Pressable
-                    key={`p-${index}`}
-                    accessibilityRole={placedShip === undefined ? 'none' : 'button'}
-                    accessibilityLabel={`Your waters, row ${row + 1}, column ${col + 1}, ${placedShip?.name ?? 'empty'}`}
-                    accessibilityHint={
-                      placedShip === undefined
-                        ? undefined
-                        : 'Rotates this ship to the nearest open spot'
-                    }
-                    disabled={fleetSubmitted || placedShip === undefined}
-                    onPress={() => {
-                      if (placedShip !== undefined) rotateShip(placedShip.id);
-                    }}
+                  <View
+                    key={`placed-${ship.id}`}
                     style={[
-                      styles.cell,
-                      {
-                        width: cellSize,
-                        height: cellSize,
-                        backgroundColor:
-                          placedShip === undefined ? tokens.surface : tokens.surfaceMuted,
-                        borderColor: tokens.border,
-                      },
+                      styles.placedShip,
+                      { left: anchor.col * cellSize, top: anchor.row * cellSize },
                     ]}
                   >
-                    {placedShip !== undefined ? (
-                      <View
-                        style={[
-                          styles.shipCell,
-                          {
-                            backgroundColor: tokens.primaryStrong,
-                            borderColor: tokens.onPrimary,
-                            width: isHorizontal ? '100%' : '62%',
-                            height: isHorizontal ? '62%' : '100%',
-                            borderTopLeftRadius: isFirstSegment ? 999 : 0,
-                            borderTopRightRadius:
-                              isHorizontal === true
-                                ? isLastSegment
-                                  ? 999
-                                  : 0
-                                : isFirstSegment
-                                  ? 999
-                                  : 0,
-                            borderBottomLeftRadius:
-                              isHorizontal === true
-                                ? isFirstSegment
-                                  ? 999
-                                  : 0
-                                : isLastSegment
-                                  ? 999
-                                  : 0,
-                            borderBottomRightRadius: isLastSegment ? 999 : 0,
-                          },
-                        ]}
-                      >
-                        <View style={[styles.shipWindow, { backgroundColor: tokens.surface }]} />
-                      </View>
-                    ) : null}
-                  </Pressable>
+                    <DraggableShip
+                      ship={ship}
+                      tokens={tokens}
+                      disabled={busy || fleetSubmitted}
+                      cellSize={cellSize}
+                      onDrop={dropShip}
+                      onDragStart={beginShipDrag}
+                      onDragEnd={endShipDrag}
+                      onRotate={rotateShip}
+                    />
+                  </View>
                 );
               })}
             </View>
@@ -498,10 +482,15 @@ const styles = StyleSheet.create({
   statusTitle: { marginBottom: 4 },
   instructions: { marginBottom: 12 },
   shipDock: {
+    overflow: 'visible',
+    borderRadius: 28,
+    padding: 12,
+  },
+  shipDockTitle: { marginBottom: 4 },
+  shipRack: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     overflow: 'visible',
-    paddingVertical: 4,
   },
   resetRow: {
     minHeight: 56,
@@ -514,7 +503,10 @@ const styles = StyleSheet.create({
   submit: { marginTop: 16 },
   section: { marginTop: 20, marginBottom: 8 },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
-  placementGrid: { alignSelf: 'center', borderWidth: 1, overflow: 'hidden' },
+  placementGrid: { alignSelf: 'center', position: 'relative', overflow: 'visible' },
+  placementRow: { flexDirection: 'row' },
+  placementCell: { borderWidth: StyleSheet.hairlineWidth },
+  placedShip: { position: 'absolute', zIndex: 5 },
   cell: {
     width: 44,
     height: 44,
@@ -523,11 +515,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   marker: { fontWeight: '700' },
-  shipCell: {
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  shipWindow: { width: 4, height: 4, borderRadius: 2 },
   banner: { marginTop: 16 },
 });
