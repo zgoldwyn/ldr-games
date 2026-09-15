@@ -62,6 +62,8 @@ export const ACCOUNT_EVENTS = {
   pairingEnded: 'pairing_ended',
   /** The partner invited us to a real-time game (Req 6.2). */
   gameInvite: 'game_invite',
+  /** Either partner permanently removed a game session. */
+  gameDeleted: 'game_deleted',
 } as const;
 
 /** Cancels a scheduled callback. */
@@ -199,6 +201,10 @@ export function createConnectionManager(deps: ConnectionManagerDeps): Connection
   function routeRemoteChange(change: RemoteChange): void {
     if (change.table !== 'async_sessions') return;
     if (typeof change.row.id !== 'string') return;
+    if (change.event === 'DELETE') {
+      asyncGames.applyRemoteDeletion(change.row.id as SessionId);
+      return;
+    }
     asyncGames.applyRemoteRow(change.row as unknown as AsyncSessionRow);
   }
 
@@ -297,6 +303,13 @@ export function createConnectionManager(deps: ConnectionManagerDeps): Connection
 
     if (event === ACCOUNT_EVENTS.gameInvite) {
       listeners.onGameInvite?.(payload);
+      return;
+    }
+
+    if (event === ACCOUNT_EVENTS.gameDeleted && typeof payload.sessionId === 'string') {
+      const deletedId = payload.sessionId as SessionId;
+      if (payload.kind === 'rt') realTime.applyRemoteDeletion(deletedId);
+      if (payload.kind === 'async') asyncGames.applyRemoteDeletion(deletedId);
     }
   }
 

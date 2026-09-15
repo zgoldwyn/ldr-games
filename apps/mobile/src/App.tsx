@@ -63,8 +63,7 @@ function MainTabs({ tokens }: { readonly tokens: ReturnType<typeof themeTokens> 
           ),
           tabBarStyle: {
             backgroundColor: tokens.surface,
-            borderTopColor: tokens.primary,
-            borderTopWidth: 1.5,
+            borderTopWidth: 0,
             borderTopLeftRadius: 28,
             borderTopRightRadius: 28,
             height: 58 + insets.bottom,
@@ -73,11 +72,8 @@ function MainTabs({ tokens }: { readonly tokens: ReturnType<typeof themeTokens> 
             overflow: 'hidden',
             paddingTop: 9,
             paddingBottom: Math.max(insets.bottom, 10),
-            shadowColor: tokens.shadow,
-            shadowOffset: { width: 0, height: -5 },
-            shadowOpacity: 1,
-            shadowRadius: 14,
-            elevation: 8,
+            shadowOpacity: 0,
+            elevation: 0,
           },
           tabBarLabelStyle: styles.tabLabel,
         };

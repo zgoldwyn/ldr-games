@@ -63,6 +63,7 @@ function harness(
     fetchSessions?: AsyncGamePorts['fetchSessions'];
     placeFleet?: AsyncGamePorts['placeFleet'];
     fetchOwnFleet?: AsyncGamePorts['fetchOwnFleet'];
+    deleteSession?: AsyncGamePorts['deleteSession'];
   } = {},
 ) {
   const store = createLocalStore();
@@ -79,6 +80,7 @@ function harness(
       options.placeFleet ??
       (async (_sessionId, fleet) => ({ ok: true, session: payload(), fleet })),
     fetchOwnFleet: options.fetchOwnFleet ?? (async () => null),
+    deleteSession: options.deleteSession ?? (async () => ({ ok: true })),
   };
   return { module: createAsyncGameModule(ports, store), store };
 }
@@ -277,6 +279,20 @@ describe('AsyncGameModule.refresh and cached reads', () => {
     expect(h.module.list()).toHaveLength(1);
   });
 
+  it('removes a locally cached session that no longer exists remotely', async () => {
+    const h = harness({ fetchSessions: async () => [] });
+    await h.module.start('battleship', {});
+    await h.module.refresh();
+    expect(h.module.cached(SESSION)).toBeUndefined();
+  });
+
+  it('keeps offline cache data when the authoritative read fails', async () => {
+    const h = harness({ fetchSessions: async () => null });
+    await h.module.start('battleship', {});
+    await h.module.refresh();
+    expect(h.module.cached(SESSION)).toBeDefined();
+  });
+
   it('reads the last-known board without the network (Req 5.1)', async () => {
     const h = harness({
       fetchSessions: async () => {
@@ -296,5 +312,24 @@ describe('AsyncGameModule.refresh and cached reads', () => {
 
   it('reports no turn for an unknown session rather than throwing', () => {
     expect(harness().module.isMyTurn(toSessionId('unknown'), ALICE)).toBe(false);
+  });
+});
+
+describe('AsyncGameModule.deleteSession', () => {
+  it('removes a confirmed server deletion from the session and private-fleet caches', async () => {
+    const h = harness();
+    await h.module.start('battleship', {});
+    expect(isOk(await h.module.deleteSession(SESSION))).toBe(true);
+    expect(h.module.cached(SESSION)).toBeUndefined();
+    expect(h.module.ownBattleshipFleet(SESSION)).toBeUndefined();
+  });
+
+  it('keeps the cached game when the server refuses deletion', async () => {
+    const h = harness({
+      deleteSession: async () => refusal(ERROR_CODES.SESSION_NOT_FOUND),
+    });
+    await h.module.start('battleship', {});
+    expect(isErr(await h.module.deleteSession(SESSION))).toBe(true);
+    expect(h.module.cached(SESSION)).toBeDefined();
   });
 });

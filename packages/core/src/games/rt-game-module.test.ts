@@ -53,10 +53,12 @@ function refusal(code: RTError['code']) {
 function harness(
   options: {
     listGames?: RTGamePorts['listGames'];
+    fetchSessions?: RTGamePorts['fetchSessions'];
     invite?: RTGamePorts['invite'];
     join?: RTGamePorts['join'];
     move?: RTGamePorts['move'];
     rejoin?: RTGamePorts['rejoin'];
+    deleteSession?: RTGamePorts['deleteSession'];
   } = {},
 ) {
   let moveCalls = 0;
@@ -66,15 +68,20 @@ function harness(
     listGames:
       options.listGames ??
       (async () => ({ ok: true, games: [{ id: 'tic-tac-toe', name: 'Tic-Tac-Toe' }] })),
+    fetchSessions: options.fetchSessions ?? (async () => [payload()]),
     invite: options.invite ?? (async () => ({ ok: true, session: payload({ state: 'pending' }) })),
     join: options.join ?? (async () => ({ ok: true, session: payload() })),
     move:
       options.move ??
       (async () => {
         moveCalls += 1;
-        return { ok: true, session: payload({ gameState: board([ALICE, ...Array(8).fill(null)]) }) };
+        return {
+          ok: true,
+          session: payload({ gameState: board([ALICE, ...Array(8).fill(null)]) }),
+        };
       }),
     rejoin: options.rejoin ?? (async () => ({ ok: true, session: payload() })),
+    deleteSession: options.deleteSession ?? (async () => ({ ok: true })),
   };
 
   return {
@@ -371,5 +378,39 @@ describe('RealTimeGameModule.cached', () => {
 
   it('is empty for an unknown session', () => {
     expect(harness().module.cached(toSessionId('unknown'))).toBeUndefined();
+  });
+});
+
+describe('RealTimeGameModule.refresh', () => {
+  it('removes a locally cached session that no longer exists remotely', async () => {
+    const h = harness({ fetchSessions: async () => [] });
+    await h.module.join(SESSION);
+    await h.module.refresh();
+    expect(h.module.cached(SESSION)).toBeUndefined();
+  });
+
+  it('keeps offline cache data when the authoritative read fails', async () => {
+    const h = harness({ fetchSessions: async () => null });
+    await h.module.join(SESSION);
+    await h.module.refresh();
+    expect(h.module.cached(SESSION)).toBeDefined();
+  });
+});
+
+describe('RealTimeGameModule.deleteSession', () => {
+  it('removes a confirmed server deletion from the local cache', async () => {
+    const h = harness();
+    await h.module.join(SESSION);
+    expect(isOk(await h.module.deleteSession(SESSION))).toBe(true);
+    expect(h.module.cached(SESSION)).toBeUndefined();
+  });
+
+  it('keeps the cached game when the server refuses deletion', async () => {
+    const h = harness({
+      deleteSession: async () => refusal(ERROR_CODES.SESSION_NOT_FOUND),
+    });
+    await h.module.join(SESSION);
+    expect(isErr(await h.module.deleteSession(SESSION))).toBe(true);
+    expect(h.module.cached(SESSION)).toBeDefined();
   });
 });

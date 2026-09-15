@@ -106,10 +106,12 @@ function harness() {
   const realTime = createRealTimeGameModule(
     {
       listGames: async () => ({ ok: true, games: [] }),
+      fetchSessions: async () => [],
       invite: async () => ({ ok: true, session: sessionPayload() as never }),
       join: async () => ({ ok: true, session: sessionPayload() as never }),
       move: async () => ({ ok: true, session: sessionPayload() as never }),
       rejoin: async () => ({ ok: true, session: sessionPayload() as never }),
+      deleteSession: async () => ({ ok: true }),
     },
     store,
   );
@@ -119,6 +121,9 @@ function harness() {
       start: async () => ({ ok: true, session: {} as never }),
       takeTurn: async () => ({ ok: true, session: {} as never }),
       fetchSessions: async () => [],
+      placeFleet: async (_sessionId, fleet) => ({ ok: true, session: {} as never, fleet }),
+      fetchOwnFleet: async () => null,
+      deleteSession: async () => ({ ok: true }),
     },
     store,
   );
@@ -157,10 +162,12 @@ function harness() {
     presenceSync: (ids: string[]) => gameHandlers?.onPresenceSync(ids as never),
     presenceLeave: (id: string) => gameHandlers?.onPresenceLeave(id as never),
     presenceJoin: (id: string) => gameHandlers?.onPresenceJoin(id as never),
-    remoteChange: (table: string, row: Record<string, unknown>) =>
-      syncHandlers?.onChange({ event: 'UPDATE', table, row }),
-    channelStatus: (status: 'SUBSCRIBED' | 'CHANNEL_ERROR') =>
-      syncHandlers?.onStatus(status),
+    remoteChange: (
+      table: string,
+      row: Record<string, unknown>,
+      event: 'INSERT' | 'UPDATE' | 'DELETE' = 'UPDATE',
+    ) => syncHandlers?.onChange({ event, table, row }),
+    channelStatus: (status: 'SUBSCRIBED' | 'CHANNEL_ERROR') => syncHandlers?.onStatus(status),
     advance: (ms: number) => {
       clock += ms;
       for (const [id, timer] of [...timers]) {
@@ -316,6 +323,22 @@ describe('game channel routing', () => {
   });
 });
 
+describe('game deletion routing', () => {
+  it('removes a real-time game when either partner broadcasts its deletion', async () => {
+    const h = connected();
+    await h.realTime.join(SESSION);
+    h.account('game_deleted', { sessionId: SESSION, kind: 'rt' });
+    expect(h.realTime.cached(SESSION)).toBeUndefined();
+  });
+
+  it('ignores a malformed deletion signal', async () => {
+    const h = connected();
+    await h.realTime.join(SESSION);
+    h.account('game_deleted', { kind: 'rt' });
+    expect(h.realTime.cached(SESSION)).toBeDefined();
+  });
+});
+
 describe('presence reporting (Req 6.6)', () => {
   it('does not report while both partners are present', () => {
     const h = connected();
@@ -426,6 +449,22 @@ describe('Postgres Changes routing (Req 5.3, 7.3)', () => {
     const h = connected();
     expect(() => h.remoteChange('relationship_dates', { id: 'd1' })).not.toThrow();
     expect(h.store.list('async_session')).toHaveLength(0);
+  });
+
+  it('removes an async game when its DELETE event arrives', () => {
+    const h = connected();
+    h.remoteChange('async_sessions', {
+      id: SESSION,
+      pairing_id: PAIRING,
+      game_id: 'battleship',
+      state: 'active',
+      active_turn_holder: PARTNER,
+      turn_pending_since: new Date(T0).toISOString(),
+      game_state: { turns: [] },
+      outcome: null,
+    });
+    h.remoteChange('async_sessions', { id: SESSION }, 'DELETE');
+    expect(h.asyncGames.cached(SESSION)).toBeUndefined();
   });
 
   it('surfaces connectivity from the pairing channel (Req 5.4)', () => {

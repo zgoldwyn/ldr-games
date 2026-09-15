@@ -113,10 +113,39 @@ export function createSupabaseRTGamePorts(client: SupabaseClient): RTGamePorts {
       return { ok: true, games: data?.games ?? [] };
     },
 
+    async fetchSessions(): Promise<readonly RTSessionPayload[] | null> {
+      const { data, error } = await client
+        .from('rt_sessions')
+        .select('id, pairing_id, game_id, state, game_state, outcome');
+      if (error || data === null) return null;
+      return data.map((row) => ({
+        id: row.id as string,
+        pairingId: row.pairing_id as string,
+        gameId: row.game_id as string,
+        state: row.state as RTSessionPayload['state'],
+        gameState: row.game_state as RTSessionPayload['gameState'],
+        outcome: row.outcome as RTSessionPayload['outcome'],
+      }));
+    },
+
     invite: (gameId) => session('rt-move', { action: 'invite', gameId }),
     join: (sessionId) => session('rt-move', { action: 'join', sessionId }),
     move: (sessionId, move: Move) => session('rt-move', { action: 'move', sessionId, move }),
     rejoin: (sessionId) => session('rt-rejoin', { sessionId }),
+    async deleteSession(sessionId) {
+      const { error } = await client.functions.invoke('delete-game', {
+        body: { sessionId, kind: 'rt', confirmed: true },
+      });
+      if (!error) return { ok: true };
+      const envelope = await readErrorEnvelope(error);
+      return {
+        ok: false,
+        error: {
+          code: narrowCode<RTErrorCode>(envelope?.code, RT_CODES, ERROR_CODES.SESSION_NOT_FOUND),
+          message: envelope?.message ?? 'The game could not be deleted.',
+        },
+      };
+    },
   };
 }
 
@@ -199,14 +228,33 @@ export function createSupabaseAsyncGamePorts(client: SupabaseClient): AsyncGameP
       return error || data === null ? null : (data.fleet as BattleshipFleet);
     },
 
-    async fetchSessions(): Promise<readonly AsyncSessionPayload[]> {
+    async deleteSession(sessionId) {
+      const { error } = await client.functions.invoke('delete-game', {
+        body: { sessionId, kind: 'async', confirmed: true },
+      });
+      if (!error) return { ok: true };
+      const envelope = await readErrorEnvelope(error);
+      return {
+        ok: false,
+        error: {
+          code: narrowCode<AsyncErrorCode>(
+            envelope?.code,
+            ASYNC_CODES,
+            ERROR_CODES.SESSION_NOT_FOUND,
+          ),
+          message: envelope?.message ?? 'The game could not be deleted.',
+        },
+      };
+    },
+
+    async fetchSessions(): Promise<readonly AsyncSessionPayload[] | null> {
       const { data, error } = await client
         .from('async_sessions')
         .select(
           'id, pairing_id, game_id, state, active_turn_holder, turn_pending_since, game_state, outcome',
         );
 
-      if (error || data === null) return [];
+      if (error || data === null) return null;
 
       // Normalized to the camelCase payload the module's mapper expects, so both
       // read paths converge on one shape before reaching the cache.

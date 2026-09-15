@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useNavigation } from '@react-navigation/native';
 import {
@@ -18,6 +18,7 @@ import type { RootStackParamList } from '../navigation';
 import { AppButton } from '../ui/AppButton';
 import { AppText } from '../ui/AppText';
 import { Screen } from '../ui/Screen';
+import { SwipeableGameRow } from '../ui/SwipeableGameRow';
 import { clayRaisedStyle } from '../ui/clay';
 
 const MAX_OPEN_SESSIONS_PER_GAME = 3;
@@ -51,6 +52,7 @@ export function GameListScreen() {
   const { runtime, identity, tokens } = useApp();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [rtNames, setRtNames] = useState<string>('Tic-Tac-Toe');
   const [, setTick] = useState(0);
   const pairing = identity.pairing;
@@ -74,6 +76,7 @@ export function GameListScreen() {
         setRtNames(result.value.map((game) => game.name).join(', '));
       }
     });
+    void runtime.rt.refresh();
     if (session !== null) void runtime.notifications.list(session.accountId);
     void runtime.asyncGames.refresh();
   }, [runtime, session]);
@@ -165,6 +168,38 @@ export function GameListScreen() {
     }
   }
 
+  async function deleteGame(kind: 'rt' | 'async', rawId: string) {
+    setDeletingId(rawId);
+    setError(null);
+    try {
+      const id = sessionId(rawId);
+      if (kind === 'rt') {
+        const result = await runtime.rt.deleteSession(id);
+        if (isErr(result)) setError(messageForError(result.error));
+      } else {
+        const result = await runtime.asyncGames.deleteSession(id);
+        if (isErr(result)) setError(messageForError(result.error));
+      }
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  function confirmDelete(kind: 'rt' | 'async', rawId: string, name: string) {
+    Alert.alert(
+      `Delete ${name}?`,
+      'This permanently removes the game and its data for both you and your partner. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete game',
+          style: 'destructive',
+          onPress: () => void deleteGame(kind, rawId),
+        },
+      ],
+    );
+  }
+
   return (
     <Screen tokens={tokens}>
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -228,40 +263,56 @@ export function GameListScreen() {
           Your games
         </AppText>
         {ticTacToeSessions.map((item) => (
-          <Pressable
+          <SwipeableGameRow
             key={item.id}
-            onPress={() => navigation.navigate('TicTacToe', { sessionId: item.id })}
-            style={[
-              styles.row,
-              clayRaisedStyle(tokens),
-              { backgroundColor: tokens.surface, borderColor: tokens.primary },
-            ]}
+            tokens={tokens}
+            disabled={deletingId === item.id}
+            accessibilityLabel={`Tic-tac-toe, ${sessionStateLabel(item.state)}`}
+            onOpen={() => navigation.navigate('TicTacToe', { sessionId: item.id })}
+            onDelete={() => confirmDelete('rt', item.id, 'tic-tac-toe')}
           >
-            <AppText kind="body" tokens={tokens}>
-              Tic-tac-toe
-            </AppText>
-            <AppText kind="muted" tokens={tokens}>
-              {sessionStateLabel(item.state)}
-            </AppText>
-          </Pressable>
+            <View
+              style={[
+                styles.row,
+                styles.swipeRow,
+                clayRaisedStyle(tokens),
+                { backgroundColor: tokens.surface, borderColor: tokens.primary },
+              ]}
+            >
+              <AppText kind="body" tokens={tokens}>
+                Tic-tac-toe
+              </AppText>
+              <AppText kind="muted" tokens={tokens}>
+                {sessionStateLabel(item.state)}
+              </AppText>
+            </View>
+          </SwipeableGameRow>
         ))}
         {battleshipSessions.map((item) => (
-          <Pressable
+          <SwipeableGameRow
             key={item.id}
-            onPress={() => navigation.navigate('Battleship', { sessionId: item.id })}
-            style={[
-              styles.row,
-              clayRaisedStyle(tokens),
-              { backgroundColor: tokens.surface, borderColor: tokens.primary },
-            ]}
+            tokens={tokens}
+            disabled={deletingId === item.id}
+            accessibilityLabel={`Battleship, ${runtime.asyncGames.isMyTurn(item.id, self) ? 'your turn' : "partner's turn"}`}
+            onOpen={() => navigation.navigate('Battleship', { sessionId: item.id })}
+            onDelete={() => confirmDelete('async', item.id, 'Battleship')}
           >
-            <AppText kind="body" tokens={tokens}>
-              Battleship
-            </AppText>
-            <AppText kind="muted" tokens={tokens}>
-              {runtime.asyncGames.isMyTurn(item.id, self) ? 'Your turn' : "Partner's turn"}
-            </AppText>
-          </Pressable>
+            <View
+              style={[
+                styles.row,
+                styles.swipeRow,
+                clayRaisedStyle(tokens),
+                { backgroundColor: tokens.surface, borderColor: tokens.primary },
+              ]}
+            >
+              <AppText kind="body" tokens={tokens}>
+                Battleship
+              </AppText>
+              <AppText kind="muted" tokens={tokens}>
+                {runtime.asyncGames.isMyTurn(item.id, self) ? 'Your turn' : "Partner's turn"}
+              </AppText>
+            </View>
+          </SwipeableGameRow>
         ))}
         {ticTacToeSessions.length === 0 && battleshipSessions.length === 0 ? (
           <View
@@ -302,6 +353,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   rowTitle: { marginBottom: 12 },
+  swipeRow: { marginBottom: 0 },
   empty: { borderRadius: 24, padding: 18 },
   emptyTitle: { fontWeight: '600', marginBottom: 4 },
   banner: { marginTop: 16 },

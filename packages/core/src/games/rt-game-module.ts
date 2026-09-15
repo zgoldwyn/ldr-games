@@ -101,6 +101,8 @@ export type RTCatalogOutcome =
 export interface RTGamePorts {
   /** `{ action: 'games' }` — the catalog (Req 6.1). */
   readonly listGames: () => Promise<RTCatalogOutcome>;
+  /** Current pairing sessions, or null when the network read failed. */
+  readonly fetchSessions: () => Promise<readonly RTSessionPayload[] | null>;
   /** `{ action: 'invite', gameId }` — create a pending session (Req 6.2). */
   readonly invite: (gameId: string) => Promise<RTSessionOutcome>;
   /** `{ action: 'join', sessionId }` — join within the 60s window (Req 6.3). */
@@ -109,11 +111,15 @@ export interface RTGamePorts {
   readonly move: (sessionId: string, move: Move) => Promise<RTSessionOutcome>;
   /** `rt-rejoin` — resume a paused session within 5 minutes (Req 6.7). */
   readonly rejoin: (sessionId: string) => Promise<RTSessionOutcome>;
+  readonly deleteSession: (
+    sessionId: SessionId,
+  ) => Promise<{ readonly ok: true } | { readonly ok: false; readonly error: RTError }>;
 }
 
 export interface RealTimeGameModule {
   /** The available real-time games (Req 6.1). */
   listGames(): Promise<Result<readonly RealTimeGameDef[], RTError>>;
+  refresh(): Promise<readonly RTSession[]>;
   /** Invite the partner to a new session (Req 6.2). */
   invite(gameId: string): Promise<Result<RTSession, RTError>>;
   /** Join a pending session (Req 6.3). */
@@ -122,6 +128,8 @@ export interface RealTimeGameModule {
   move(sessionId: SessionId, move: Move): Promise<Result<RTSession, RTError>>;
   /** Resume a paused session (Req 6.7). */
   rejoin(sessionId: SessionId): Promise<Result<RTSession, RTError>>;
+  deleteSession(sessionId: SessionId): Promise<Result<void, RTError>>;
+  applyRemoteDeletion(sessionId: SessionId): void;
   /** Apply a state delivered over Broadcast; called by the Connection Manager. */
   applyRemoteState(payload: RTSessionPayload): void;
   /**
@@ -215,11 +223,32 @@ export function createRealTimeGameModule(
       return outcome.ok ? ok(outcome.games) : err(outcome.error);
     },
 
+    async refresh(): Promise<readonly RTSession[]> {
+      const payloads = await ports.fetchSessions();
+      if (payloads === null) return store.list<RTSession>('rt_session');
+      const liveIds = new Set(payloads.map((payload) => payload.id));
+      for (const existing of store.list<RTSession>('rt_session')) {
+        if (!liveIds.has(existing.id)) store.remove('rt_session', existing.id);
+      }
+      return payloads.map(cache);
+    },
+
     invite: (gameId: string) => request(null, () => ports.invite(gameId)),
     join: (sessionId: SessionId) => request(sessionId, () => ports.join(sessionId)),
     move: (sessionId: SessionId, move: Move) =>
       request(sessionId, () => ports.move(sessionId, move)),
     rejoin: (sessionId: SessionId) => request(sessionId, () => ports.rejoin(sessionId)),
+
+    async deleteSession(sessionId: SessionId): Promise<Result<void, RTError>> {
+      const outcome = await ports.deleteSession(sessionId);
+      if (!outcome.ok) return err(outcome.error);
+      store.remove('rt_session', sessionId);
+      return ok(undefined);
+    },
+
+    applyRemoteDeletion(sessionId: SessionId): void {
+      store.remove('rt_session', sessionId);
+    },
 
     applyRemoteState(payload: RTSessionPayload): void {
       cache(payload);
@@ -249,9 +278,7 @@ export function createRealTimeGameModule(
       cache({
         id: sessionId,
         state: transition,
-        ...(payload.gameState === undefined
-          ? {}
-          : { gameState: payload.gameState as GameState }),
+        ...(payload.gameState === undefined ? {} : { gameState: payload.gameState as GameState }),
         ...(event === RT_BROADCAST_EVENTS.outcome
           ? { outcome: (payload.outcome ?? null) as GameOutcome | null }
           : {}),

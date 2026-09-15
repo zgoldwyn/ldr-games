@@ -133,7 +133,8 @@ export interface AsyncGamePorts {
   /** `async-take-turn` — apply one turn (Req 7.5, 7.7, 7.8). */
   readonly takeTurn: (sessionId: string, action: TurnAction) => Promise<AsyncSessionOutcome>;
   /** Every async session for the caller's pairing, read through RLS. */
-  readonly fetchSessions: () => Promise<readonly AsyncSessionPayload[]>;
+  /** Current pairing sessions, or null when the network read failed. */
+  readonly fetchSessions: () => Promise<readonly AsyncSessionPayload[] | null>;
   /** Save the caller's private Battleship fleet. */
   readonly placeFleet: (
     sessionId: string,
@@ -141,6 +142,9 @@ export interface AsyncGamePorts {
   ) => Promise<FleetPlacementOutcome>;
   /** Read only the caller's own fleet through RLS. */
   readonly fetchOwnFleet: (sessionId: string) => Promise<BattleshipFleet | null>;
+  readonly deleteSession: (
+    sessionId: SessionId,
+  ) => Promise<{ readonly ok: true } | { readonly ok: false; readonly error: AsyncError }>;
 }
 
 export interface AsyncGameModule {
@@ -166,6 +170,8 @@ export interface AsyncGameModule {
   ): Promise<Result<AsyncSession, AsyncError>>;
   ownBattleshipFleet(sessionId: SessionId): BattleshipFleet | undefined;
   loadOwnBattleshipFleet(sessionId: SessionId): Promise<BattleshipFleet | undefined>;
+  deleteSession(sessionId: SessionId): Promise<Result<void, AsyncError>>;
+  applyRemoteDeletion(sessionId: SessionId): void;
   /** Observe cache changes so a board re-renders. */
   subscribe(listener: StoreListener): () => void;
 }
@@ -207,6 +213,14 @@ export function createAsyncGameModule(ports: AsyncGamePorts, store: LocalStore):
 
     async refresh(): Promise<readonly AsyncSession[]> {
       const payloads = await ports.fetchSessions();
+      if (payloads === null) return store.list<AsyncSession>('async_session');
+      const liveIds = new Set(payloads.map((payload) => payload.id));
+      for (const existing of store.list<AsyncSession>('async_session')) {
+        if (!liveIds.has(existing.id)) {
+          ownFleets.delete(existing.id);
+          store.remove('async_session', existing.id);
+        }
+      }
       return payloads.map((p) => cache(asyncSessionFromPayload(p)));
     },
 
@@ -247,6 +261,19 @@ export function createAsyncGameModule(ports: AsyncGamePorts, store: LocalStore):
       const fleet = await ports.fetchOwnFleet(sessionId);
       if (fleet !== null) ownFleets.set(sessionId, fleet);
       return fleet ?? undefined;
+    },
+
+    async deleteSession(sessionId: SessionId): Promise<Result<void, AsyncError>> {
+      const outcome = await ports.deleteSession(sessionId);
+      if (!outcome.ok) return err(outcome.error);
+      ownFleets.delete(sessionId);
+      store.remove('async_session', sessionId);
+      return ok(undefined);
+    },
+
+    applyRemoteDeletion(sessionId: SessionId): void {
+      ownFleets.delete(sessionId);
+      store.remove('async_session', sessionId);
     },
 
     subscribe(listener: StoreListener): () => void {
