@@ -20,6 +20,7 @@ export function DraggableShip({
   tokens,
   disabled,
   cellSize,
+  dragScale = 1,
   showDetails = false,
   onDrop,
   onDragStart,
@@ -30,6 +31,7 @@ export function DraggableShip({
   readonly tokens: ThemeTokens;
   readonly disabled: boolean;
   readonly cellSize: number;
+  readonly dragScale?: number;
   readonly showDetails?: boolean;
   readonly onDragStart: () => void;
   readonly onDragEnd: () => void;
@@ -52,7 +54,7 @@ export function DraggableShip({
         .enabled(!disabled)
         .minDistance(6)
         .onStart(() => {
-          scale.set(1.05);
+          scale.set(dragScale * 1.03);
           scheduleOnRN(onDragStart);
         })
         .onUpdate((event) => {
@@ -82,6 +84,7 @@ export function DraggableShip({
     [
       cellSize,
       disabled,
+      dragScale,
       onDragEnd,
       onDragStart,
       onDrop,

@@ -271,6 +271,7 @@ export function BattleshipScreen({ route }: Props) {
                         tokens={tokens}
                         disabled={busy}
                         cellSize={22}
+                        dragScale={cellSize / 22}
                         showDetails
                         onDrop={dropShip}
                         onDragStart={beginShipDrag}
@@ -483,6 +484,7 @@ const styles = StyleSheet.create({
   instructions: { marginBottom: 12 },
   shipDock: {
     overflow: 'visible',
+    zIndex: 20,
     borderRadius: 28,
     padding: 12,
   },
@@ -503,7 +505,7 @@ const styles = StyleSheet.create({
   submit: { marginTop: 16 },
   section: { marginTop: 20, marginBottom: 8 },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
-  placementGrid: { alignSelf: 'center', position: 'relative', overflow: 'visible' },
+  placementGrid: { alignSelf: 'center', position: 'relative', overflow: 'visible', zIndex: 1 },
   placementRow: { flexDirection: 'row' },
   placementCell: { borderWidth: StyleSheet.hairlineWidth },
   placedShip: { position: 'absolute', zIndex: 5 },
