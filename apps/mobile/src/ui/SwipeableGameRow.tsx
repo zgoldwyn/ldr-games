@@ -105,7 +105,7 @@ export function SwipeableGameRow({
 }
 
 const styles = StyleSheet.create({
-  clip: { borderRadius: 24, marginBottom: 12, overflow: 'hidden', position: 'relative' },
+  clip: { borderRadius: 24, marginBottom: 16, overflow: 'hidden', position: 'relative' },
   action: {
     position: 'absolute',
     inset: 0,

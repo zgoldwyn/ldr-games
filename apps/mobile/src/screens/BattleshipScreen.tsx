@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useReducedMotion } from 'react-native-reanimated';
 import {
   isErr,
   sessionId,
@@ -15,6 +16,7 @@ import {
 import { useApp } from '../app-context';
 import { messageForError } from '../copy/error-copy';
 import { fleetCells, isCompleteFleet } from '../games/battleship-fleet';
+import { battleshipResultAction } from '../games/battleship-result-flow';
 import {
   battleshipGridRows,
   createDraftShips,
@@ -106,7 +108,12 @@ export function BattleshipScreen({ route }: Props) {
   const [busy, setBusy] = useState(false);
   const [draggingShip, setDraggingShip] = useState(false);
   const [draftShips, setDraftShips] = useState(createDraftShips);
+  const [resultReady, setResultReady] = useState(false);
   const placementBoardRef = useRef<View>(null);
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollYRef = useRef(0);
+  const awaitingResultScrollRef = useRef(false);
+  const reducedMotion = useReducedMotion();
   const { width: viewportWidth } = useWindowDimensions();
 
   useEffect(() => runtime.asyncGames.subscribe(() => setTick((n) => n + 1)), [runtime.asyncGames]);
@@ -128,6 +135,43 @@ export function BattleshipScreen({ route }: Props) {
     board?.phase ??
     (board !== null && Object.keys(board.ships ?? {}).length > 0 ? 'playing' : 'placement');
   const fleetSubmitted = self !== undefined && board?.readyPlayers?.includes(self) === true;
+  const terminal = cached?.state === 'terminal';
+  const won = terminal && cached?.outcome?.winner === self;
+
+  const revealResultAfterScroll = useCallback(() => {
+    if (!awaitingResultScrollRef.current) return;
+    awaitingResultScrollRef.current = false;
+    setResultReady(true);
+  }, []);
+
+  useEffect(() => {
+    const action = battleshipResultAction({
+      terminal,
+      scrollY: scrollYRef.current,
+      reducedMotion,
+    });
+
+    awaitingResultScrollRef.current = false;
+    if (action === 'hide') {
+      setResultReady(false);
+      return;
+    }
+    if (action === 'reveal') {
+      setResultReady(true);
+      return;
+    }
+
+    setResultReady(false);
+    if (action === 'jump') {
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+      scrollYRef.current = 0;
+      requestAnimationFrame(() => setResultReady(true));
+      return;
+    }
+
+    awaitingResultScrollRef.current = true;
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+  }, [reducedMotion, terminal]);
   const boardSize = Math.min(MAX_BOARD_SIZE, viewportWidth - 48);
   const cellSize = boardSize / size;
   const placementRows = battleshipGridRows(size);
@@ -267,21 +311,25 @@ export function BattleshipScreen({ route }: Props) {
       ? []
       : (board?.sunkShips?.[self] ??
         (shotsFired ?? []).flatMap((shot) => (shot.sunkShip === undefined ? [] : [shot.sunkShip])));
-  const terminal = cached?.state === 'terminal';
-  const won = terminal && cached?.outcome?.winner === self;
-
   return (
-    <Screen tokens={tokens}>
-      <ScrollView scrollEnabled={!draggingShip} contentContainerStyle={styles.scroll}>
+    <Screen tokens={tokens} topInset={false} horizontalPadding={false}>
+      <ScrollView
+        ref={scrollRef}
+        scrollEnabled={!draggingShip}
+        showsVerticalScrollIndicator={false}
+        scrollEventThrottle={32}
+        onScroll={(event) => {
+          scrollYRef.current = event.nativeEvent.contentOffset.y;
+        }}
+        onScrollAnimationEnd={revealResultAfterScroll}
+        onMomentumScrollEnd={revealResultAfterScroll}
+        contentContainerStyle={styles.scroll}
+      >
         <View
           accessible
           accessibilityRole="summary"
           accessibilityLiveRegion="polite"
-          style={[
-            styles.statusCard,
-            clayRaisedStyle(tokens),
-            { backgroundColor: tokens.surfaceMuted },
-          ]}
+          style={[styles.statusCard, clayRaisedStyle(tokens), { backgroundColor: tokens.primary }]}
         >
           <AppText kind="title" tokens={tokens} style={styles.statusTitle}>
             {status.title}
@@ -291,7 +339,7 @@ export function BattleshipScreen({ route }: Props) {
           </AppText>
         </View>
 
-        {terminal ? <BattleshipResultCard won={won} tokens={tokens} /> : null}
+        {terminal && resultReady ? <BattleshipResultCard won={won} tokens={tokens} /> : null}
 
         {phase === 'placement' ? (
           <>
@@ -643,7 +691,7 @@ export function BattleshipScreen({ route }: Props) {
 }
 
 const styles = StyleSheet.create({
-  scroll: { paddingBottom: 32 },
+  scroll: { paddingHorizontal: 24, paddingBottom: 32 },
   statusCard: { borderRadius: 28, padding: 20, marginBottom: 8 },
   statusTitle: { marginBottom: 4 },
   instructions: { marginBottom: 12 },

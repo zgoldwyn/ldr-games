@@ -15,11 +15,8 @@ export function LegalDocumentScreen({
   const document = LEGAL_DOCUMENTS[route.params.document];
 
   return (
-    <Screen tokens={tokens}>
+    <Screen tokens={tokens} topInset={false} horizontalPadding={false}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <AppText kind="title" tokens={tokens} accessibilityRole="header">
-          {document.title}
-        </AppText>
         <AppText kind="muted" tokens={tokens} style={styles.effective}>
           Effective {document.effectiveDate}
         </AppText>
@@ -41,8 +38,8 @@ export function LegalDocumentScreen({
 }
 
 const styles = StyleSheet.create({
-  scroll: { paddingBottom: 40 },
-  effective: { marginTop: 8, marginBottom: 24 },
+  scroll: { paddingHorizontal: 24, paddingBottom: 40 },
+  effective: { marginBottom: 24 },
   heading: { fontWeight: '700', marginTop: 20, marginBottom: 8 },
   paragraph: { marginBottom: 12 },
 });

@@ -19,7 +19,7 @@ import { AppButton } from '../ui/AppButton';
 import { AppField } from '../ui/AppField';
 import { AppText } from '../ui/AppText';
 import { Screen } from '../ui/Screen';
-import { clayRaisedStyle } from '../ui/clay';
+import { clayPressedStyle, clayRaisedStyle } from '../ui/clay';
 
 type Mode = 'signIn' | 'register';
 
@@ -69,7 +69,7 @@ export function SignInScreen() {
   }
 
   return (
-    <Screen tokens={tokens}>
+    <Screen tokens={tokens} horizontalPadding={false}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -133,10 +133,9 @@ export function SignInScreen() {
                 onPress={() => setLegalAccepted((accepted) => !accepted)}
                 style={({ pressed }) => [
                   styles.consent,
-                  clayRaisedStyle(tokens, true),
+                  pressed ? clayPressedStyle(tokens) : clayRaisedStyle(tokens, true),
                   {
-                    backgroundColor: pressed ? tokens.surfaceMuted : tokens.surface,
-                    borderColor: tokens.border,
+                    backgroundColor: pressed ? tokens.primary : tokens.surfaceMuted,
                   },
                 ]}
               >
@@ -221,7 +220,7 @@ export function SignInScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  scroll: { paddingBottom: 24 },
+  scroll: { paddingHorizontal: 24, paddingBottom: 24 },
   lead: { marginTop: 8, marginBottom: 24 },
   hint: { marginBottom: 16 },
   banner: { marginBottom: 16 },
@@ -233,7 +232,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 20,
-    borderWidth: 1,
     padding: 12,
     marginBottom: 16,
   },

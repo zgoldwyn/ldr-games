@@ -7,18 +7,15 @@ import { LEGAL_DOCUMENT_ORDER, LEGAL_DOCUMENTS } from '../legal/legal-content';
 import type { RootStackParamList } from '../navigation';
 import { AppText } from '../ui/AppText';
 import { Screen } from '../ui/Screen';
-import { clayRaisedStyle } from '../ui/clay';
+import { clayPressedStyle, clayRaisedStyle } from '../ui/clay';
 
 export function LegalScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { tokens } = useApp();
 
   return (
-    <Screen tokens={tokens}>
+    <Screen tokens={tokens} topInset={false} horizontalPadding={false}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <AppText kind="title" tokens={tokens} accessibilityRole="header">
-          Legal & privacy
-        </AppText>
         <AppText kind="muted" tokens={tokens} style={styles.lead}>
           Read how LDR Companion handles data, accounts, and purchases.
         </AppText>
@@ -33,10 +30,9 @@ export function LegalScreen() {
               onPress={() => navigation.navigate('LegalDocument', { document: id })}
               style={({ pressed }) => [
                 styles.row,
-                clayRaisedStyle(tokens),
+                pressed ? clayPressedStyle(tokens) : clayRaisedStyle(tokens),
                 {
-                  backgroundColor: pressed ? tokens.surfaceMuted : tokens.surface,
-                  borderColor: tokens.border,
+                  backgroundColor: pressed ? tokens.primary : tokens.surfaceMuted,
                 },
               ]}
             >
@@ -65,16 +61,15 @@ export function LegalScreen() {
 }
 
 const styles = StyleSheet.create({
-  scroll: { paddingBottom: 32 },
-  lead: { marginTop: 8, marginBottom: 24 },
+  scroll: { paddingHorizontal: 24, paddingBottom: 32 },
+  lead: { marginBottom: 24 },
   row: {
     minHeight: 72,
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 24,
-    borderWidth: 1,
-    padding: 16,
-    marginBottom: 12,
+    padding: 20,
+    marginBottom: 16,
   },
   copy: { flex: 1, marginRight: 12 },
   rowTitle: { fontWeight: '600', marginBottom: 4 },

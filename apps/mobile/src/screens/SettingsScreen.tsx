@@ -11,7 +11,7 @@ import type { RootStackParamList } from '../navigation';
 import { AppButton } from '../ui/AppButton';
 import { AppText } from '../ui/AppText';
 import { Screen } from '../ui/Screen';
-import { clayRaisedStyle } from '../ui/clay';
+import { clayPressedStyle, clayRaisedStyle } from '../ui/clay';
 
 type DeleteStep = 'idle' | 'review';
 
@@ -69,12 +69,8 @@ export function SettingsScreen() {
   }
 
   return (
-    <Screen tokens={tokens}>
+    <Screen tokens={tokens} topInset={false} horizontalPadding={false}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <AppText kind="title" tokens={tokens}>
-          Settings
-        </AppText>
-
         <AppText kind="label" tokens={tokens} style={styles.section}>
           Theme
         </AppText>
@@ -88,13 +84,12 @@ export function SettingsScreen() {
               accessibilityRole="radio"
               accessibilityState={{ selected: colorOption === option.name }}
               onPress={() => setColorOption(option.name)}
-              style={[
+              style={({ pressed }) => [
                 styles.palette,
-                clayRaisedStyle(option.light, true),
+                pressed ? clayPressedStyle(option.light) : clayRaisedStyle(option.light, true),
                 {
                   backgroundColor: option.light.primary,
-                  borderColor:
-                    colorOption === option.name ? option.light.onPrimary : option.light.border,
+                  borderColor: colorOption === option.name ? option.light.onPrimary : 'transparent',
                 },
               ]}
             >
@@ -169,7 +164,7 @@ export function SettingsScreen() {
             style={[
               styles.warning,
               clayRaisedStyle(tokens),
-              { backgroundColor: tokens.surface, borderColor: tokens.error },
+              { backgroundColor: tokens.surfaceMuted },
             ]}
           >
             <AppText kind="body" tokens={tokens} style={styles.warningTitle}>
@@ -211,20 +206,19 @@ export function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  scroll: { paddingBottom: 32 },
-  section: { marginTop: 32, marginBottom: 12 },
+  scroll: { paddingHorizontal: 24, paddingBottom: 32 },
+  section: { marginTop: 24, marginBottom: 12 },
   copy: { marginBottom: 16 },
   feedback: { marginTop: 12 },
   warning: {
     borderRadius: 24,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 16,
+    padding: 24,
   },
   warningTitle: { fontWeight: '600', marginBottom: 8 },
   spacer: { height: 12 },
   error: { marginTop: 16 },
   accountSpacer: { height: 16 },
-  paletteRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  paletteRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   palette: {
     minWidth: 92,
     minHeight: 48,

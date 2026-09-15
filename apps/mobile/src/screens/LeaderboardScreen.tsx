@@ -29,22 +29,15 @@ export function LeaderboardScreen() {
   ]);
 
   return (
-    <Screen tokens={tokens}>
+    <Screen tokens={tokens} topInset={false} horizontalPadding={false}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <AppText kind="title" tokens={tokens}>
-          Leaderboard
-        </AppText>
         <AppText kind="muted" tokens={tokens} style={styles.lead}>
           {leaderboard.completedGames} completed games · {leaderboard.draws} draws
         </AppText>
         {leaderboard.standings.map((standing) => (
           <View
             key={standing.accountId}
-            style={[
-              styles.card,
-              clayRaisedStyle(tokens),
-              { backgroundColor: tokens.surface, borderColor: tokens.primary },
-            ]}
+            style={[styles.card, clayRaisedStyle(tokens), { backgroundColor: tokens.primary }]}
           >
             <AppText kind="title" tokens={tokens}>
               #{standing.rank}
@@ -72,7 +65,14 @@ export function LeaderboardScreen() {
             const myWins = self === pairing.memberA ? game.memberAWins : game.memberBWins;
             const partnerWins = self === pairing.memberA ? game.memberBWins : game.memberAWins;
             return (
-              <View key={game.gameId} style={[styles.game, { borderColor: tokens.border }]}>
+              <View
+                key={game.gameId}
+                style={[
+                  styles.game,
+                  clayRaisedStyle(tokens, true),
+                  { backgroundColor: tokens.surfaceMuted },
+                ]}
+              >
                 <AppText kind="body" tokens={tokens}>
                   {gameName(game.gameId)}
                 </AppText>
@@ -89,17 +89,16 @@ export function LeaderboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  scroll: { paddingBottom: 32 },
-  lead: { marginTop: 8, marginBottom: 24 },
+  scroll: { paddingHorizontal: 24, paddingBottom: 32 },
+  lead: { marginBottom: 24 },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 24,
-    padding: 16,
-    marginBottom: 12,
+    borderRadius: 28,
+    padding: 20,
+    marginBottom: 16,
   },
   name: { flex: 1, marginLeft: 16, flexDirection: 'row', justifyContent: 'space-between' },
   section: { marginTop: 24, marginBottom: 12 },
-  game: { borderBottomWidth: StyleSheet.hairlineWidth, paddingVertical: 12, gap: 4 },
+  game: { borderRadius: 20, padding: 16, gap: 4, marginBottom: 16 },
 });

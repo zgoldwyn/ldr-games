@@ -10,7 +10,7 @@ import type { ThemeTokens } from '@ldr/core';
 
 import { themeTokens } from '../theme';
 import { AppText } from './AppText';
-import { clayRaisedStyle } from './clay';
+import { clayPressedStyle, clayRaisedStyle } from './clay';
 
 /** Primary or quiet button, coloured from tokens. */
 export function AppButton({
@@ -58,40 +58,41 @@ export function AppButton({
       }}
       style={rest.style}
     >
-      <Animated.View
-        style={[
-          styles.base,
-          clayRaisedStyle(theme, true),
-          {
-            backgroundColor: primary ? theme.primary : theme.surfaceMuted,
-            borderColor: primary ? theme.surface : theme.primary,
-            opacity: disabled === true ? 0.5 : 1,
-          },
-          animatedStyle,
-        ]}
-      >
-        <AppText
-          kind="body"
-          tokens={theme}
-          style={{
-            color: primary ? theme.onPrimary : theme.textPrimary,
-            fontWeight: '700',
-            textAlign: 'center',
-          }}
+      {({ pressed }) => (
+        <Animated.View
+          style={[
+            styles.base,
+            pressed ? clayPressedStyle(theme) : clayRaisedStyle(theme, true),
+            {
+              backgroundColor: primary ? theme.primary : theme.surfaceMuted,
+              opacity: disabled === true ? 0.5 : 1,
+            },
+            animatedStyle,
+          ]}
         >
-          {label}
-        </AppText>
-      </Animated.View>
+          <AppText
+            kind="body"
+            tokens={theme}
+            style={{
+              color: primary ? theme.onPrimary : theme.textPrimary,
+              fontWeight: '700',
+              textAlign: 'center',
+            }}
+          >
+            {label}
+          </AppText>
+        </Animated.View>
+      )}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   base: {
-    minHeight: 48,
+    minHeight: 54,
     justifyContent: 'center',
     borderRadius: 18,
-    paddingVertical: 14,
+    paddingVertical: 15,
     paddingHorizontal: 16,
   },
 });

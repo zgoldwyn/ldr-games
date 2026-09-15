@@ -1,4 +1,4 @@
-import { StyleSheet, Text, type TextProps } from 'react-native';
+import { Platform, StyleSheet, Text, type TextProps } from 'react-native';
 import type { ThemeTokens } from '@ldr/core';
 
 import { themeTokens } from '../theme';
@@ -25,13 +25,37 @@ export function AppText({
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: 26, lineHeight: 32, fontWeight: '700', letterSpacing: -0.4 },
-  body: { fontSize: 16, lineHeight: 22 },
-  muted: { fontSize: 14, lineHeight: 20 },
-  label: {
-    fontSize: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
+  title: {
+    fontFamily: Platform.select({ ios: 'Avenir Next', android: 'sans-serif-rounded' }),
+    fontSize: 28,
+    lineHeight: 34,
+    fontWeight: '700',
+    letterSpacing: -0.3,
   },
-  error: { fontSize: 14, lineHeight: 20 },
+  body: {
+    fontFamily: Platform.select({ ios: 'Avenir Next', android: 'sans-serif-rounded' }),
+    fontSize: 16,
+    lineHeight: 23,
+    fontWeight: '500',
+    letterSpacing: 0.1,
+  },
+  muted: {
+    fontFamily: Platform.select({ ios: 'Avenir Next', android: 'sans-serif-rounded' }),
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '500',
+  },
+  label: {
+    fontFamily: Platform.select({ ios: 'Avenir Next', android: 'sans-serif-rounded' }),
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  error: {
+    fontFamily: Platform.select({ ios: 'Avenir Next', android: 'sans-serif-rounded' }),
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '600',
+  },
 });

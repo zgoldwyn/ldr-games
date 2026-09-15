@@ -1,10 +1,10 @@
 import { forwardRef } from 'react';
-import { StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
+import { Platform, StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
 import type { ThemeTokens } from '@ldr/core';
 
 import { themeTokens } from '../theme';
 import { AppText } from './AppText';
-import { clayRaisedStyle } from './clay';
+import { clayInsetStyle } from './clay';
 
 /** Labelled field. Placeholder colour comes from `textMuted`. */
 export const AppField = forwardRef<
@@ -24,10 +24,10 @@ export const AppField = forwardRef<
         placeholderTextColor={theme.textMuted}
         style={[
           styles.input,
-          clayRaisedStyle(theme, true),
+          clayInsetStyle(theme),
           {
-            backgroundColor: theme.surface,
-            borderColor: theme.primary,
+            backgroundColor: theme.surfaceMuted,
+            borderColor: theme.primaryStrong,
             color: theme.textPrimary,
           },
           rest.style,
@@ -45,6 +45,8 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 12,
+    fontFamily: Platform.select({ ios: 'Avenir Next', android: 'sans-serif-rounded' }),
     fontSize: 16,
+    fontWeight: '500',
   },
 });

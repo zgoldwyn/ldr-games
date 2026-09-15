@@ -87,16 +87,12 @@ export function TicTacToeScreen({ route }: Props) {
   }
 
   return (
-    <Screen tokens={tokens}>
+    <Screen tokens={tokens} topInset={false}>
       <View
         accessible
         accessibilityRole="summary"
         accessibilityLiveRegion="polite"
-        style={[
-          styles.statusCard,
-          clayRaisedStyle(tokens),
-          { backgroundColor: tokens.surfaceMuted },
-        ]}
+        style={[styles.statusCard, clayRaisedStyle(tokens), { backgroundColor: tokens.primary }]}
       >
         <AppText kind="title" tokens={tokens} style={styles.statusTitle}>
           {status.title}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useNavigation } from '@react-navigation/native';
 import {
@@ -13,19 +13,61 @@ import {
 
 import { useApp } from '../app-context';
 import { messageForError } from '../copy/error-copy';
+import { gameArtForTheme } from '../games/game-art';
 import { sessionStateLabel, unfinishedGames } from '../games/game-list-view';
 import type { RootStackParamList } from '../navigation';
 import { AppButton } from '../ui/AppButton';
 import { AppText } from '../ui/AppText';
 import { Screen } from '../ui/Screen';
 import { SwipeableGameRow } from '../ui/SwipeableGameRow';
-import { clayRaisedStyle } from '../ui/clay';
+import { clayPressedStyle, clayRaisedStyle } from '../ui/clay';
 
 const MAX_OPEN_SESSIONS_PER_GAME = 3;
 
 type IncomingInvite =
   | { readonly kind: 'rt'; readonly sessionId: string }
   | { readonly kind: 'async'; readonly sessionId: string };
+
+function GameChoice({
+  art,
+  label,
+  hint,
+  disabled,
+  onPress,
+  tokens,
+}: {
+  readonly art: number;
+  readonly label: string;
+  readonly hint: string;
+  readonly disabled: boolean;
+  readonly onPress: () => void;
+  readonly tokens: ReturnType<typeof useApp>['tokens'];
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint={hint}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.gameChoice,
+        pressed ? clayPressedStyle(tokens) : clayRaisedStyle(tokens),
+        {
+          backgroundColor: tokens.surfaceMuted,
+          opacity: disabled ? 0.5 : pressed ? 0.82 : 1,
+          transform: [{ scale: pressed ? 0.98 : 1 }],
+        },
+      ]}
+    >
+      <Image source={art} resizeMode="contain" accessible={false} style={styles.gameArt} />
+      <AppText kind="label" tokens={tokens} numberOfLines={1} style={styles.gameChoiceTitle}>
+        {label}
+      </AppText>
+    </Pressable>
+  );
+}
 
 function incomingInvite(notification: Notification): IncomingInvite | null {
   if (notification.category !== 'game_invite') return null;
@@ -49,7 +91,7 @@ function incomingInvite(notification: Notification): IncomingInvite | null {
 
 export function GameListScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { runtime, identity, tokens } = useApp();
+  const { runtime, identity, tokens, colorOption } = useApp();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -110,6 +152,7 @@ export function GameListScreen() {
   const battleshipSessions = unfinishedGames(
     runtime.asyncGames.list().filter((item) => item.gameId === BATTLESHIP_GAME_ID),
   );
+  const gameArt = gameArtForTheme(colorOption);
 
   async function inviteTicTacToe() {
     setBusy(true);
@@ -201,32 +244,30 @@ export function GameListScreen() {
   }
 
   return (
-    <Screen tokens={tokens}>
+    <Screen tokens={tokens} topInset={false} horizontalPadding={false}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <AppText kind="title" tokens={tokens}>
-          Play
-        </AppText>
         <AppText kind="muted" tokens={tokens} style={styles.lead}>
           Real-time: {rtNames}. Async: {asyncCatalog.map((g) => g.name).join(', ')}.
         </AppText>
 
-        <AppButton
-          label="Invite to tic-tac-toe"
-          tokens={tokens}
-          disabled={busy || openTicTacToeCount >= MAX_OPEN_SESSIONS_PER_GAME}
-          onPress={() => {
-            void inviteTicTacToe();
-          }}
-        />
-        <View style={styles.spacer} />
-        <AppButton
-          label="Start battleship"
-          tokens={tokens}
-          disabled={busy || openBattleshipCount >= MAX_OPEN_SESSIONS_PER_GAME}
-          onPress={() => {
-            void startBattleship();
-          }}
-        />
+        <View style={styles.gameChoices}>
+          <GameChoice
+            art={gameArt.ticTacToe}
+            label="Tic-tac-toe"
+            hint="Invites your partner to a new game"
+            tokens={tokens}
+            disabled={busy || openTicTacToeCount >= MAX_OPEN_SESSIONS_PER_GAME}
+            onPress={() => void inviteTicTacToe()}
+          />
+          <GameChoice
+            art={gameArt.battleship}
+            label="Battleship"
+            hint="Starts a new game with your partner"
+            tokens={tokens}
+            disabled={busy || openBattleshipCount >= MAX_OPEN_SESSIONS_PER_GAME}
+            onPress={() => void startBattleship()}
+          />
+        </View>
 
         {incomingInvites.length > 0 ? (
           <>
@@ -239,7 +280,7 @@ export function GameListScreen() {
                 style={[
                   styles.row,
                   clayRaisedStyle(tokens),
-                  { backgroundColor: tokens.surface, borderColor: tokens.border },
+                  { backgroundColor: tokens.surfaceMuted },
                 ]}
               >
                 <AppText kind="body" tokens={tokens} style={styles.rowTitle}>
@@ -276,7 +317,7 @@ export function GameListScreen() {
                 styles.row,
                 styles.swipeRow,
                 clayRaisedStyle(tokens),
-                { backgroundColor: tokens.surface, borderColor: tokens.primary },
+                { backgroundColor: tokens.surfaceMuted },
               ]}
             >
               <AppText kind="body" tokens={tokens}>
@@ -302,7 +343,7 @@ export function GameListScreen() {
                 styles.row,
                 styles.swipeRow,
                 clayRaisedStyle(tokens),
-                { backgroundColor: tokens.surface, borderColor: tokens.primary },
+                { backgroundColor: tokens.surfaceMuted },
               ]}
             >
               <AppText kind="body" tokens={tokens}>
@@ -316,11 +357,7 @@ export function GameListScreen() {
         ))}
         {ticTacToeSessions.length === 0 && battleshipSessions.length === 0 ? (
           <View
-            style={[
-              styles.empty,
-              clayRaisedStyle(tokens),
-              { backgroundColor: tokens.surfaceMuted },
-            ]}
+            style={[styles.empty, clayRaisedStyle(tokens), { backgroundColor: tokens.primary }]}
           >
             <AppText kind="body" tokens={tokens} style={styles.emptyTitle}>
               No games in progress
@@ -342,13 +379,24 @@ export function GameListScreen() {
 }
 
 const styles = StyleSheet.create({
-  scroll: { paddingBottom: 32 },
-  lead: { marginTop: 8, marginBottom: 24 },
-  spacer: { height: 12 },
+  scroll: { paddingHorizontal: 24, paddingBottom: 32 },
+  lead: { marginBottom: 24 },
+  gameChoices: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
+  gameChoice: {
+    flexBasis: '45%',
+    flexGrow: 1,
+    maxWidth: '48%',
+    aspectRatio: 1,
+    borderRadius: 28,
+    padding: 10,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  gameArt: { width: '100%', flex: 1 },
+  gameChoiceTitle: { minHeight: 22, textAlign: 'center', paddingHorizontal: 4 },
   section: { marginTop: 32, marginBottom: 12 },
   row: {
     borderRadius: 24,
-    borderWidth: StyleSheet.hairlineWidth,
     padding: 16,
     marginBottom: 12,
   },

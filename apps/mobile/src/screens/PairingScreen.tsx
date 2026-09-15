@@ -62,21 +62,14 @@ export function PairingScreen() {
   }
 
   return (
-    <Screen tokens={tokens}>
+    <Screen tokens={tokens} topInset={false} horizontalPadding={false}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <AppText kind="title" tokens={tokens}>
-          Pair up
-        </AppText>
         <AppText kind="muted" tokens={tokens} style={styles.lead}>
           Create a 72-hour code, or enter the one your partner sent you.
         </AppText>
 
         <View
-          style={[
-            styles.card,
-            clayRaisedStyle(tokens),
-            { backgroundColor: tokens.surface, borderColor: tokens.primary },
-          ]}
+          style={[styles.card, clayRaisedStyle(tokens), { backgroundColor: tokens.surfaceMuted }]}
         >
           <AppText kind="label" tokens={tokens}>
             Your invitation
@@ -143,12 +136,11 @@ export function PairingScreen() {
 }
 
 const styles = StyleSheet.create({
-  scroll: { paddingBottom: 32 },
-  lead: { marginTop: 8, marginBottom: 24 },
+  scroll: { paddingHorizontal: 24, paddingBottom: 32 },
+  lead: { marginBottom: 24 },
   card: {
     borderRadius: 28,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 20,
+    padding: 24,
     marginBottom: 32,
   },
   code: { marginVertical: 16, letterSpacing: 2 },

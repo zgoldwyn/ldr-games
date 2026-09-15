@@ -22,8 +22,12 @@ export function SkeletonLoader({ tokens }: { readonly tokens: ThemeTokens }) {
       >
         <View style={[styles.title, { backgroundColor: tokens.surfaceMuted }]} />
         <View style={[styles.line, { backgroundColor: tokens.surfaceMuted }]} />
-        <View style={[styles.card, clayRaisedStyle(tokens), { backgroundColor: tokens.surface }]} />
-        <View style={[styles.card, clayRaisedStyle(tokens), { backgroundColor: tokens.surface }]} />
+        <View
+          style={[styles.card, clayRaisedStyle(tokens), { backgroundColor: tokens.surfaceMuted }]}
+        />
+        <View
+          style={[styles.card, clayRaisedStyle(tokens), { backgroundColor: tokens.surfaceMuted }]}
+        />
       </View>
     </View>
   );
@@ -32,7 +36,7 @@ export function SkeletonLoader({ tokens }: { readonly tokens: ThemeTokens }) {
 const styles = StyleSheet.create({
   root: { width: '100%' },
   blocks: { width: '100%', marginTop: 20 },
-  title: { width: '54%', height: 28, borderRadius: 10, marginBottom: 12 },
-  line: { width: '82%', height: 16, borderRadius: 8, marginBottom: 28 },
-  card: { width: '100%', height: 88, borderRadius: 24, marginBottom: 16 },
+  title: { width: '54%', height: 28, borderRadius: 16, marginBottom: 12 },
+  line: { width: '82%', height: 16, borderRadius: 12, marginBottom: 28 },
+  card: { width: '100%', height: 88, borderRadius: 28, marginBottom: 16 },
 });

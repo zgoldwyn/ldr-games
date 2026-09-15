@@ -6,7 +6,7 @@
  * channels so partner game invites and turns arrive without manual ids.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -46,11 +46,15 @@ function MainTabs({ tokens }: { readonly tokens: ReturnType<typeof themeTokens> 
       screenOptions={({ route }) => {
         const tab = primaryTab(route.name);
         return {
-          headerStyle: { backgroundColor: tokens.surface },
-          headerTitleStyle: { color: tokens.textPrimary },
+          headerStyle: { backgroundColor: tokens.background },
+          headerTitleStyle: {
+            color: tokens.textPrimary,
+            fontFamily: Platform.select({ ios: 'Avenir Next', android: 'sans-serif-rounded' }),
+            fontWeight: '700',
+          },
           headerTintColor: tokens.textPrimary,
           sceneStyle: { backgroundColor: tokens.background },
-          tabBarActiveTintColor: tokens.textPrimary,
+          tabBarActiveTintColor: tokens.primaryStrong,
           tabBarInactiveTintColor: tokens.textMuted,
           tabBarLabel: tab.label,
           tabBarIcon: ({ color, focused }) => (
@@ -229,9 +233,13 @@ export function App() {
   }
 
   const header = {
-    headerStyle: { backgroundColor: tokens.surface },
-    headerTitleStyle: { color: tokens.textPrimary },
-    headerTintColor: tokens.onPrimary,
+    headerStyle: { backgroundColor: tokens.background },
+    headerTitleStyle: {
+      color: tokens.textPrimary,
+      fontFamily: Platform.select({ ios: 'Avenir Next', android: 'sans-serif-rounded' }),
+      fontWeight: '700' as const,
+    },
+    headerTintColor: tokens.textPrimary,
     headerShadowVisible: false,
     contentStyle: { backgroundColor: tokens.background },
   };
@@ -294,5 +302,9 @@ const styles = StyleSheet.create({
   boot: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   lead: { marginTop: 16 },
   tabIcon: { fontSize: 21, lineHeight: 24, fontWeight: '600' },
-  tabLabel: { fontSize: 11, fontWeight: '600' },
+  tabLabel: {
+    fontFamily: Platform.select({ ios: 'Avenir Next', android: 'sans-serif-rounded' }),
+    fontSize: 11,
+    fontWeight: '600',
+  },
 });
