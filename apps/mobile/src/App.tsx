@@ -11,7 +11,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DEFAULT_COLOR_OPTION, type ColorOptionName } from '@ldr/core';
 
 import { AppProvider } from './app-context';
@@ -34,14 +34,15 @@ import { bulkKv } from './session/expo-kv';
 import { AppText } from './ui/AppText';
 import { Screen } from './ui/Screen';
 import { SkeletonLoader } from './ui/SkeletonLoader';
-import { clayRaisedStyle } from './ui/clay';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tabs = createBottomTabNavigator<MainTabParamList>();
 
 function MainTabs({ tokens }: { readonly tokens: ReturnType<typeof themeTokens> }) {
+  const insets = useSafeAreaInsets();
   return (
     <Tabs.Navigator
+      safeAreaInsets={{ bottom: 0 }}
       screenOptions={({ route }) => {
         const tab = primaryTab(route.name);
         return {
@@ -61,15 +62,22 @@ function MainTabs({ tokens }: { readonly tokens: ReturnType<typeof themeTokens> 
             </Text>
           ),
           tabBarStyle: {
-            ...clayRaisedStyle(tokens),
             backgroundColor: tokens.surface,
             borderTopColor: tokens.primary,
-            borderRadius: 28,
-            height: 80,
-            marginHorizontal: 12,
-            marginBottom: 8,
-            paddingTop: 8,
-            paddingBottom: 8,
+            borderTopWidth: 1.5,
+            borderTopLeftRadius: 28,
+            borderTopRightRadius: 28,
+            height: 58 + insets.bottom,
+            marginHorizontal: 0,
+            marginBottom: 0,
+            overflow: 'hidden',
+            paddingTop: 9,
+            paddingBottom: Math.max(insets.bottom, 10),
+            shadowColor: tokens.shadow,
+            shadowOffset: { width: 0, height: -5 },
+            shadowOpacity: 1,
+            shadowRadius: 14,
+            elevation: 8,
           },
           tabBarLabelStyle: styles.tabLabel,
         };

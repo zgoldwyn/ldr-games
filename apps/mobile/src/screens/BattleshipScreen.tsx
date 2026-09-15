@@ -447,8 +447,11 @@ export function BattleshipScreen({ route }: Props) {
               style={[
                 styles.gameplayFrame,
                 terminal && styles.finishedGame,
-                clayRaisedStyle(tokens),
-                { backgroundColor: tokens.surfaceMuted },
+                {
+                  backgroundColor: tokens.surface,
+                  borderColor: tokens.border,
+                  shadowColor: tokens.shadow,
+                },
               ]}
             >
               <View
@@ -544,8 +547,11 @@ export function BattleshipScreen({ route }: Props) {
               style={[
                 styles.gameplayFrame,
                 terminal && styles.finishedGame,
-                clayRaisedStyle(tokens),
-                { backgroundColor: tokens.surfaceMuted },
+                {
+                  backgroundColor: tokens.surface,
+                  borderColor: tokens.border,
+                  shadowColor: tokens.shadow,
+                },
               ]}
             >
               <View
@@ -670,11 +676,15 @@ const styles = StyleSheet.create({
   placedShip: { position: 'absolute', zIndex: 5 },
   gameplayFrame: {
     alignSelf: 'center',
-    borderRadius: 24,
-    padding: 6,
+    borderRadius: 21,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 1,
+    shadowRadius: 12,
+    elevation: 4,
   },
   gameplayGrid: {
-    borderRadius: 18,
+    borderRadius: 20,
     overflow: 'hidden',
     position: 'relative',
   },
