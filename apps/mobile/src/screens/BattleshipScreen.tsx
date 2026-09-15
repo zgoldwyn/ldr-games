@@ -270,8 +270,8 @@ export function BattleshipScreen({ route }: Props) {
                         ship={ship}
                         tokens={tokens}
                         disabled={busy}
-                        cellSize={22}
-                        dragScale={cellSize / 22}
+                        cellSize={18}
+                        dragScale={cellSize / 18}
                         showDetails
                         onDrop={dropShip}
                         onDragStart={beginShipDrag}

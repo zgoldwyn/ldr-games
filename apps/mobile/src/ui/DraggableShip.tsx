@@ -107,28 +107,32 @@ export function DraggableShip({
     ],
   }));
 
+  const shipControl = (
+    <GestureDetector gesture={pan}>
+      <Animated.View style={[styles.dragLayer, animatedStyle]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${ship.name}, ${ship.length} cells, ${ship.orientation}${ship.placement === null ? ', not placed' : ', placed'}`}
+          accessibilityHint="Drag the ship onto the grid. Tap to rotate it."
+          disabled={disabled}
+          hitSlop={8}
+          onPress={() => onRotate(ship.id)}
+          style={({ pressed }) => ({ opacity: disabled ? 0.5 : pressed ? 0.72 : 1 })}
+        >
+          <BattleshipShipArt
+            length={ship.length}
+            orientation={ship.orientation}
+            tokens={tokens}
+            cellSize={cellSize}
+          />
+        </Pressable>
+      </Animated.View>
+    </GestureDetector>
+  );
+
   return (
     <View style={showDetails ? styles.dockSlot : styles.boardSlot}>
-      <GestureDetector gesture={pan}>
-        <Animated.View style={[styles.dragLayer, animatedStyle]}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`${ship.name}, ${ship.length} cells, ${ship.orientation}${ship.placement === null ? ', not placed' : ', placed'}`}
-            accessibilityHint="Drag the ship onto the grid. Tap to rotate it."
-            disabled={disabled}
-            hitSlop={8}
-            onPress={() => onRotate(ship.id)}
-            style={({ pressed }) => ({ opacity: disabled ? 0.5 : pressed ? 0.72 : 1 })}
-          >
-            <BattleshipShipArt
-              length={ship.length}
-              orientation={ship.orientation}
-              tokens={tokens}
-              cellSize={cellSize}
-            />
-          </Pressable>
-        </Animated.View>
-      </GestureDetector>
+      {showDetails ? <View style={styles.dockStage}>{shipControl}</View> : shipControl}
       {showDetails ? (
         <View pointerEvents="none" style={styles.copy}>
           <AppText kind="body" tokens={tokens} style={styles.name} numberOfLines={1}>
@@ -145,15 +149,22 @@ export function DraggableShip({
 
 const styles = StyleSheet.create({
   dockSlot: {
-    width: '50%',
-    minHeight: 70,
-    padding: 8,
+    width: '33.333%',
+    height: 136,
+    padding: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'visible',
+  },
+  dockStage: {
+    width: 100,
+    height: 94,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'visible',
   },
   boardSlot: { overflow: 'visible' },
   dragLayer: { alignSelf: 'center' },
-  copy: { marginTop: 6, alignItems: 'center' },
-  name: { fontWeight: '700' },
+  copy: { height: 34, alignItems: 'center', justifyContent: 'flex-end' },
+  name: { fontWeight: '700', fontSize: 14, lineHeight: 17 },
 });

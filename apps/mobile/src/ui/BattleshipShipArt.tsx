@@ -19,77 +19,61 @@ export function BattleshipShipArt({
     <View
       pointerEvents="none"
       style={[
-        styles.hull,
+        styles.clayShell,
         {
           width: horizontal ? length * cellSize : cellSize,
           height: horizontal ? cellSize : length * cellSize,
-          backgroundColor: tokens.primaryStrong,
-          borderColor: tokens.onPrimary,
-          flexDirection: horizontal ? 'row' : 'column',
+          backgroundColor: tokens.onPrimary,
+          shadowColor: tokens.shadow,
+          padding: cellSize * 0.055,
+          shadowOffset: { width: 0, height: cellSize * 0.11 },
+          shadowRadius: cellSize * 0.17,
         },
       ]}
     >
       <View
         style={[
-          styles.deckLine,
-          horizontal
-            ? {
-                left: cellSize * 0.4,
-                right: cellSize * 0.4,
-                top: cellSize / 2 - 1.5,
-                height: 3,
-              }
-            : {
-                top: cellSize * 0.4,
-                bottom: cellSize * 0.4,
-                left: cellSize / 2 - 1.5,
-                width: 3,
-              },
-          { backgroundColor: tokens.onPrimary },
+          styles.hull,
+          {
+            backgroundColor: tokens.primaryStrong,
+            borderColor: tokens.surface,
+            borderWidth: cellSize * 0.03,
+            flexDirection: horizontal ? 'row' : 'column',
+          },
         ]}
-      />
-      {Array.from({ length }, (_, index) => (
-        <View key={index} style={styles.segment}>
-          {index !== Math.floor(length / 2) ? (
-            <View style={[styles.porthole, { backgroundColor: tokens.surface }]} />
-          ) : null}
-          {index === Math.floor(length / 2) ? (
+      >
+        {Array.from({ length }, (_, index) => (
+          <View key={index} style={styles.segment}>
             <View
               style={[
-                styles.bridge,
+                styles.dot,
                 {
-                  backgroundColor: tokens.onPrimary,
-                  borderColor: tokens.surface,
-                  width: horizontal ? 12 : 15,
-                  height: horizontal ? 15 : 12,
+                  width: cellSize * 0.18,
+                  height: cellSize * 0.18,
+                  borderRadius: cellSize * 0.09,
+                  backgroundColor: tokens.surface,
                 },
               ]}
-            >
-              <View style={[styles.bridgeWindow, { backgroundColor: tokens.surface }]} />
-            </View>
-          ) : null}
-        </View>
-      ))}
+            />
+          </View>
+        ))}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  hull: {
-    borderWidth: 2,
+  clayShell: {
     borderRadius: 999,
-    overflow: 'hidden',
+    shadowOpacity: 1,
+    elevation: 4,
+  },
+  hull: {
+    flex: 1,
+    borderRadius: 999,
     alignItems: 'stretch',
+    overflow: 'hidden',
   },
-  deckLine: { position: 'absolute', alignSelf: 'center', borderRadius: 999, opacity: 0.24 },
-  segment: { flex: 1, zIndex: 1, alignItems: 'center', justifyContent: 'center' },
-  porthole: { width: 5, height: 5, borderRadius: 3, opacity: 0.95 },
-  bridge: {
-    position: 'absolute',
-    borderRadius: 5,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bridgeWindow: { width: 4, height: 4, borderRadius: 2 },
+  segment: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  dot: { minWidth: 3, minHeight: 3 },
 });
