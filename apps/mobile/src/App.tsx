@@ -27,6 +27,8 @@ import { PairingScreen } from './screens/PairingScreen';
 import { SignInScreen } from './screens/SignInScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { TicTacToeScreen } from './screens/TicTacToeScreen';
+import { CardGamesScreen } from './screens/CardGamesScreen';
+import { SpeedScreen } from './screens/SpeedScreen';
 import { registerApnsToken, subscribeApnsTokenRotation } from './notifications/apns-registration';
 import { navigationTheme, themeTokens } from './theme';
 import { loadThemePreference, saveThemePreference } from './theme-preference';
@@ -84,6 +86,7 @@ function MainTabs({ tokens }: { readonly tokens: ReturnType<typeof themeTokens> 
       }}
     >
       <Tabs.Screen name="GameList" component={GameListScreen} options={{ title: 'Play' }} />
+      <Tabs.Screen name="CardGames" component={CardGamesScreen} options={{ title: 'Card Games' }} />
       <Tabs.Screen
         name="Leaderboard"
         component={LeaderboardScreen}
@@ -288,6 +291,11 @@ export function App() {
                 name="Battleship"
                 component={BattleshipScreen}
                 options={{ title: 'Battleship', headerBackTitle: 'Play' }}
+              />
+              <Stack.Screen
+                name="Speed"
+                component={SpeedScreen}
+                options={{ title: 'Speed', headerBackTitle: 'Cards' }}
               />
             </Stack.Navigator>
           )}

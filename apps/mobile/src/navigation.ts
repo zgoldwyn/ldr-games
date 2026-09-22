@@ -3,6 +3,7 @@ import type { NavigatorScreenParams } from '@react-navigation/native';
 
 export type MainTabParamList = {
   readonly GameList: undefined;
+  readonly CardGames: undefined;
   readonly Leaderboard: undefined;
   readonly Settings: undefined;
 };
@@ -18,4 +19,5 @@ export type RootStackParamList = {
   readonly LegalDocument: { readonly document: LegalDocumentId };
   readonly TicTacToe: { readonly sessionId: string };
   readonly Battleship: { readonly sessionId: string };
+  readonly Speed: { readonly sessionId: string };
 };

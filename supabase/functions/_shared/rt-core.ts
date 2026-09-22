@@ -21,6 +21,7 @@
 // can dispatch on a state's `game` discriminator. Additional real-time games are
 // enabled server-side by adding their import here.
 import "@ldr/core/rt-tic-tac-toe";
+import "@ldr/core/rt-speed";
 
 export { applyMove, getRuleset, listRulesets } from "@ldr/core/rt-engine";
 

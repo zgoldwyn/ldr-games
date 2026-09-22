@@ -21,6 +21,7 @@ export * from './async-lifecycle.js';
 export * from './rt-session.js';
 export * from './rt-engine.js';
 export * from './rt-tic-tac-toe.js';
+export * from './rt-speed.js';
 export * from './quiz.js';
 export * from './quiz-scoring.js';
 export * from './quiz-session.js';

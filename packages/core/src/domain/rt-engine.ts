@@ -73,7 +73,7 @@ export interface RealTimeRuleset<
    * Build the identical initial state presented to both partners when a pending
    * session becomes active (Req 6.3). `first` is the partner who moves first.
    */
-  createInitialState(players: readonly [AccountId, AccountId], first: AccountId): S;
+  createInitialState(players: readonly [AccountId, AccountId], first: AccountId, seed?: string): S;
   /**
    * Validate and apply `move` by `actor`. Returns `Ok(next)` with a new state on
    * a valid move (Req 6.4); returns `Err(INVALID_MOVE)` without touching `state`

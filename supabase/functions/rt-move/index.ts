@@ -416,6 +416,7 @@ async function handleJoin(
   const initialState = ruleset.createInitialState(
     [accountId(ctx.members[0]), accountId(ctx.members[1])],
     accountId(first),
+    row.id,
   );
 
   const decision = joinSession(

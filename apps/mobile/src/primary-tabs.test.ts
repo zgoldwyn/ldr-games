@@ -4,7 +4,12 @@ import { PRIMARY_TABS, primaryTab } from './primary-tabs';
 
 describe('primary bottom navigation', () => {
   it('keeps each primary destination in one stable tab slot', () => {
-    expect(PRIMARY_TABS.map((tab) => tab.route)).toEqual(['GameList', 'Leaderboard', 'Settings']);
+    expect(PRIMARY_TABS.map((tab) => tab.route)).toEqual([
+      'GameList',
+      'CardGames',
+      'Leaderboard',
+      'Settings',
+    ]);
     expect(new Set(PRIMARY_TABS.map((tab) => tab.route)).size).toBe(PRIMARY_TABS.length);
   });
 

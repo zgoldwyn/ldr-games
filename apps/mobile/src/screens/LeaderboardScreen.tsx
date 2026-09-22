@@ -8,7 +8,13 @@ import { Screen } from '../ui/Screen';
 import { clayRaisedStyle } from '../ui/clay';
 
 const gameName = (id: string) =>
-  id === 'tic-tac-toe' ? 'Tic-tac-toe' : id === 'battleship' ? 'Battleship' : id;
+  id === 'tic-tac-toe'
+    ? 'Tic-tac-toe'
+    : id === 'battleship'
+      ? 'Battleship'
+      : id === 'speed'
+        ? 'Speed'
+        : id;
 
 export function LeaderboardScreen() {
   const { runtime, identity, tokens } = useApp();
