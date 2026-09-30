@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   accountId as toAccountId,
+  notificationId as toNotificationId,
   pairingId as toPairingId,
   sessionId as toSessionId,
 } from '../domain/common.js';
@@ -61,6 +62,8 @@ function harness() {
 
   const teardowns = { account: 0, game: 0, sync: 0 };
   const presenceReports: { sessionId: string; samples: readonly unknown[] }[] = [];
+  let fetchedSessions: readonly ReturnType<typeof sessionPayload>[] = [];
+  const fetchSessions = vi.fn(async () => fetchedSessions as never);
 
   // --- injected timer, so scheduling is asserted rather than awaited -------
   const timers = new Map<number, { at: number; fn: () => void }>();
@@ -106,7 +109,7 @@ function harness() {
   const realTime = createRealTimeGameModule(
     {
       listGames: async () => ({ ok: true, games: [] }),
-      fetchSessions: async () => [],
+      fetchSessions,
       invite: async () => ({ ok: true, session: sessionPayload() as never }),
       join: async () => ({ ok: true, session: sessionPayload() as never }),
       move: async () => ({ ok: true, session: sessionPayload() as never }),
@@ -159,9 +162,14 @@ function harness() {
       accountHandlers?.onEvent(event, payload),
     game: (event: string, payload: Record<string, unknown>) =>
       gameHandlers?.onEvent(event, payload),
+    gameStatus: (status: 'SUBSCRIBED' | 'CHANNEL_ERROR') => gameHandlers?.onStatus(status),
     presenceSync: (ids: string[]) => gameHandlers?.onPresenceSync(ids as never),
     presenceLeave: (id: string) => gameHandlers?.onPresenceLeave(id as never),
     presenceJoin: (id: string) => gameHandlers?.onPresenceJoin(id as never),
+    setFetchedSessions: (sessions: readonly ReturnType<typeof sessionPayload>[]) => {
+      fetchedSessions = sessions;
+    },
+    fetchSessions,
     remoteChange: (
       table: string,
       row: Record<string, unknown>,
@@ -314,6 +322,20 @@ describe('game channel routing', () => {
     expect(h.teardowns.game).toBe(1);
   });
 
+  it('reconciles a missed activation when opening a different game', async () => {
+    const h = connected();
+    h.realTime.applyRemoteState(sessionPayload({ state: 'pending', gameState: {} }) as never);
+    h.setFetchedSessions([sessionPayload({ state: 'active', gameState: board() })]);
+
+    h.manager.joinGame(SESSION);
+    h.gameStatus('SUBSCRIBED');
+    await h.settle();
+
+    expect(h.fetchSessions).toHaveBeenCalledTimes(1);
+    expect(h.realTime.cached(SESSION)?.state).toBe('active');
+    expect(h.realTime.cached(SESSION)?.gameState).toEqual(board());
+  });
+
   it('leaves the game without dropping the account connection', () => {
     const h = connected();
     h.manager.joinGame(SESSION);
@@ -329,6 +351,37 @@ describe('game deletion routing', () => {
     await h.realTime.join(SESSION);
     h.account('game_deleted', { sessionId: SESSION, kind: 'rt' });
     expect(h.realTime.cached(SESSION)).toBeUndefined();
+  });
+
+  it('removes every cached invitation for the deleted session', () => {
+    const h = connected();
+    const matchingId = toNotificationId('77777777-7777-4777-8777-777777777777');
+    const unrelatedId = toNotificationId('88888888-8888-4888-8888-888888888888');
+    h.store.put('notification', matchingId, {
+      id: matchingId,
+      recipientAccountId: ME,
+      category: 'game_invite',
+      payload: { type: 'rt_game_invite', sessionId: SESSION },
+      createdAt: T0,
+      dedupeKey: 'matching',
+      acknowledgedAt: null,
+      deliveredAt: null,
+    });
+    h.store.put('notification', unrelatedId, {
+      id: unrelatedId,
+      recipientAccountId: ME,
+      category: 'game_invite',
+      payload: { type: 'rt_game_invite', sessionId: 'other-session' },
+      createdAt: T0,
+      dedupeKey: 'unrelated',
+      acknowledgedAt: null,
+      deliveredAt: null,
+    });
+
+    h.account('game_deleted', { sessionId: SESSION, kind: 'rt' });
+
+    expect(h.store.get('notification', matchingId)).toBeUndefined();
+    expect(h.store.get('notification', unrelatedId)).toBeDefined();
   });
 
   it('ignores a malformed deletion signal', async () => {

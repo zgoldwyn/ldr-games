@@ -36,6 +36,9 @@ export function buildPairLeaderboard(
   for (const session of sessions) {
     if (session.state !== 'terminal' || session.outcome?.kind !== 'completed') continue;
     completedGames += 1;
+    // Draw Together is cooperative. Its ranking is the persisted high score,
+    // rendered separately from competitive wins and draws.
+    if (session.gameId === 'draw-together') continue;
     const current = games.get(session.gameId) ?? { memberAWins: 0, memberBWins: 0, draws: 0 };
     if (session.outcome.winner === memberA) {
       wins.set(memberA, (wins.get(memberA) ?? 0) + 1);

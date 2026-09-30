@@ -104,10 +104,7 @@ describe.skipIf(cfg === null)('Sync path (integration)', () => {
   }
 
   /** POST straight to the write path, asserting a 200. */
-  async function write(
-    token: string,
-    body: unknown,
-  ): Promise<readonly AppliedChange[]> {
+  async function write(token: string, body: unknown): Promise<readonly AppliedChange[]> {
     const res = await callFunction<SyncWriteResponse>(config, 'sync-write', body, token);
     expect(res.status).toBe(200);
     return res.body.results;
@@ -362,10 +359,7 @@ describe.skipIf(cfg === null)('Sync path (integration)', () => {
     const replay = await write(a.token, { change });
     expect(replay[0]?.superseded).toBe(true);
 
-    const { data } = await admin
-      .from('relationship_dates')
-      .select('title')
-      .eq('id', itemId);
+    const { data } = await admin.from('relationship_dates').select('title').eq('id', itemId);
     expect(data ?? []).toHaveLength(1);
     expect(data?.[0]?.title).toBe('Once');
   });
@@ -432,10 +426,7 @@ describe.skipIf(cfg === null)('Sync path (integration)', () => {
       });
 
       await new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(
-          () => reject(new Error('never subscribed')),
-          SUBSCRIBE_TIMEOUT_MS,
-        );
+        const timer = setTimeout(() => reject(new Error('never subscribed')), SUBSCRIBE_TIMEOUT_MS);
         const poll = setInterval(() => {
           if (candidate.connectivity().status === 'online') {
             clearTimeout(timer);
@@ -464,10 +455,7 @@ describe.skipIf(cfg === null)('Sync path (integration)', () => {
 
     const waitFor = async (event: RemoteChange['event']) => {
       const start = Date.now();
-      while (
-        !events.some((e) => e.event === event) &&
-        Date.now() - start < PROPAGATION_BUDGET_MS
-      ) {
+      while (!events.some((e) => e.event === event) && Date.now() - start < PROPAGATION_BUDGET_MS) {
         await new Promise((r) => setTimeout(r, 25));
       }
       return events.some((e) => e.event === event);

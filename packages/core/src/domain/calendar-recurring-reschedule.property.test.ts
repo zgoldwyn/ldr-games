@@ -16,10 +16,7 @@ import { dateId, pairingId, reminderId } from './common.js';
 import type { CalendarDate, Duration } from './common.js';
 import type { Reminder, RelationshipDate, ReminderStatus } from './calendar.js';
 import { nextOccurrence, reminderTriggerTime } from './calendar-helpers.js';
-import {
-  rescheduleRecurringReminder,
-  type NextTriggerResolver,
-} from './calendar-store.js';
+import { rescheduleRecurringReminder, type NextTriggerResolver } from './calendar-store.js';
 
 const MS_PER_MINUTE = 60_000;
 const MS_PER_DAY = 24 * 60 * MS_PER_MINUTE;

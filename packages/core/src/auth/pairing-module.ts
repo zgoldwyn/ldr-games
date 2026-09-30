@@ -21,12 +21,7 @@
  * or trusted (a way to accept an expired invitation).
  */
 import type { AccountId, InvitationCode, PairingId } from '../domain/common.js';
-import type {
-  Invitation,
-  InvitationStatus,
-  Pairing,
-  PairingStatus,
-} from '../domain/pairing.js';
+import type { Invitation, InvitationStatus, Pairing, PairingStatus } from '../domain/pairing.js';
 import type { PairingError } from '../errors.js';
 import { err, ok, type Result } from '../result.js';
 
@@ -88,8 +83,7 @@ export type AcceptInvitationOutcome =
 
 /** Outcome of `unlink` (Req 4.1-4.6). */
 export type UnlinkOutcome =
-  | { readonly ok: true }
-  | { readonly ok: false; readonly error: PairingError };
+  { readonly ok: true } | { readonly ok: false; readonly error: PairingError };
 
 /** Injected collaborators. Each is the narrowest thing the module needs. */
 export interface PairingPorts {
@@ -123,9 +117,7 @@ export function createPairingModule(ports: PairingPorts): PairingModule {
   return {
     async createInvitation(): Promise<Result<Invitation, PairingError>> {
       const outcome = await ports.createInvitation();
-      return outcome.ok
-        ? ok(invitationFromPayload(outcome.invitation))
-        : err(outcome.error);
+      return outcome.ok ? ok(invitationFromPayload(outcome.invitation)) : err(outcome.error);
     },
 
     async acceptInvitation(code: InvitationCode): Promise<Result<Pairing, PairingError>> {

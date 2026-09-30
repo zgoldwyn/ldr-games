@@ -33,6 +33,7 @@
  */
 import type { AccountId, PairingId, SessionId } from '../domain/common.js';
 import type { PresenceState } from '../domain/game.js';
+import type { Notification } from '../domain/notification.js';
 import type { AsyncGameModule, AsyncSessionRow } from '../games/async-game-module.js';
 import type { RealTimeGameModule } from '../games/rt-game-module.js';
 import type { LocalStore } from '../store/local-store.js';
@@ -308,6 +309,20 @@ export function createConnectionManager(deps: ConnectionManagerDeps): Connection
 
     if (event === ACCOUNT_EVENTS.gameDeleted && typeof payload.sessionId === 'string') {
       const deletedId = payload.sessionId as SessionId;
+      // `delete_game_session` removes the durable invite row, but notification
+      // subscriptions intentionally listen to INSERTs only. Purge any cached
+      // prompt tied to the deleted session so cancellation disappears on the
+      // partner's phone as soon as the account broadcast arrives.
+      for (const notification of store.list<Notification>('notification')) {
+        const invitation = notification.payload;
+        if (
+          invitation !== null &&
+          typeof invitation === 'object' &&
+          (invitation as { readonly sessionId?: unknown }).sessionId === deletedId
+        ) {
+          store.remove('notification', notification.id);
+        }
+      }
       if (payload.kind === 'rt') realTime.applyRemoteDeletion(deletedId);
       if (payload.kind === 'async') asyncGames.applyRemoteDeletion(deletedId);
     }
@@ -358,8 +373,21 @@ export function createConnectionManager(deps: ConnectionManagerDeps): Connection
           updateRoster(applyPresenceJoin(roster, accountId, ports.now())),
         onPresenceLeave: (accountId) =>
           updateRoster(applyPresenceLeave(roster, accountId, ports.now())),
-        onStatus: () => undefined,
+        onStatus: (status) => {
+          // Reconcile only once the channel is listening. Querying before
+          // SUBSCRIBED leaves a race where activation can be committed and
+          // broadcast between the snapshot and the live subscription.
+          if (status === 'SUBSCRIBED' && activeSession === sessionId) {
+            void realTime.refresh();
+          }
+        },
       });
+
+      // Broadcast is deliberately scoped to the one game currently on screen.
+      // If this client joined several games before opening one, it may have
+      // missed that session's activation while subscribed to another channel.
+      // The SUBSCRIBED callback above reconciles the cache from durable rows
+      // after the live event stream is ready.
     },
 
     leaveGame,

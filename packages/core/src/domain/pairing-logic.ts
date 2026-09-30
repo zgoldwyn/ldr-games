@@ -85,9 +85,7 @@ export interface CreateInvitationInput {
  * a paired account may not invite a partner (Req 3.7); the state is left
  * unchanged. On success the invitation's `expiresAt` is `now + 72h` (Req 3.1).
  */
-export function createInvitation(
-  input: CreateInvitationInput,
-): Result<Invitation, PairingError> {
+export function createInvitation(input: CreateInvitationInput): Result<Invitation, PairingError> {
   const { code, inviter, now } = input;
 
   if (isPaired(inviter)) {
@@ -275,9 +273,7 @@ export function dissolvePairing(
   );
 
   const sessionEnded = activeSessions.flatMap((session) =>
-    partners.map((recipient) =>
-      sessionEndedNotification(pairing.id, session, recipient, now),
-    ),
+    partners.map((recipient) => sessionEndedNotification(pairing.id, session, recipient, now)),
   );
 
   return ok({

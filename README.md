@@ -19,19 +19,26 @@ and reviewed by qualified counsel before public release.
 
 **The backend is implemented and verified against local and hosted Supabase
 stacks, and the iOS MVP shell is wired end to end.** The mobile app supports
-account creation/sign-in, pairing, tic-tac-toe, Battleship, notification reads,
-settings, account deletion, and the first UI/legal-accessibility pass.
+account creation/sign-in, pairing, tic-tac-toe, Battleship, Draw Together,
+Speed, the first live Word Chain game, Couples Quiz, notification reads,
+settings, account deletion, and the first UI/legal-accessibility pass. Play now
+groups card games, word games, other minigames, and an early online movement
+prototype for the cooperative platformer **Ember & Tide**.
 
-| Area                                                                                        | State                                     |
-| ------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| Pure domain logic (validation, HLC, game engines, quiz scoring, dates, reminders, delivery) | Done — 38 property tests                  |
-| Schema, RLS, Storage policies                                                               | Done                                      |
-| Auth, pairing, sync, real-time games, async games, Storage wiring                           | Done — Edge Functions + integration tests |
-| Game scheduler (join expiry, pause termination, turn nudge)                                 | Done — pg_cron                            |
-| In-app notification reads                                                                   | Done                                      |
-| Client service modules, Connection Manager                                                  | Done for MVP                              |
-| Expo mobile shell                                                                           | Done for MVP; UI polish in progress       |
-| Quizzes, calendar, reminders, and desktop shell                                             | Deferred — see MVP scope below            |
+| Area                                                                                        | State                                                        |
+| ------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Pure domain logic (validation, HLC, game engines, quiz scoring, dates, reminders, delivery) | Done — broad unit and property-test coverage                 |
+| Schema, RLS, Storage policies                                                               | Done                                                         |
+| Auth, pairing, sync, real-time games, async games, Storage wiring                           | Done — Edge Functions + integration tests                    |
+| Game scheduler (join expiry, pause termination, turn nudge)                                 | Done — pg_cron                                               |
+| In-app notification reads                                                                   | Done                                                         |
+| Client service modules, Connection Manager                                                  | Done for MVP                                                 |
+| Expo mobile shell                                                                           | Done for MVP; UI polish in progress                          |
+| Card games                                                                                  | Speed is playable; additional tables planned                 |
+| Word games                                                                                  | Live Word Chain slice implemented; more modes planned        |
+| Couples Quiz                                                                                | Mobile experience complete; live-stack verification pending  |
+| Ember & Tide cooperative platformer                                                         | Local Colyseus authority + immutable online roles scaffolded |
+| Calendar, reminders, and desktop shell                                                      | Deferred — see MVP scope below                               |
 
 The spec lives in [`.kiro/specs/ldr-companion-app/`](.kiro/specs/ldr-companion-app/)
 (`requirements.md`, `design.md`, `tasks.md`). `tasks.md` is the source of truth
@@ -45,17 +52,18 @@ The remaining work is split into an MVP path and deferred sections, marked
 > sign in on an iPhone, pair with a partner, and play one real-time game
 > (tic-tac-toe) and one asynchronous game (battleship)
 
-which needs **no further backend work** — every server-side piece it depends on
-is already built and tested. What remains is the client core and the shell.
+That baseline is implemented. Current work is focused on game expansion,
+live-stack verification, device testing, and UI polish rather than completing
+the original client shell.
 
 Two honest caveats about the MVP:
 
 - **Deferring the desktop shell means Requirement 5.1 is not satisfied**, since
   5.1 explicitly requires the same data on mobile _and_ desktop. That is a real
   reduction in scope, not a reordering.
-- **A phone cannot reach `127.0.0.1`.** Everything is verified against a local
-  stack, which is fine for a simulator or a LAN dev build, but a real device or
-  TestFlight needs a hosted Supabase project (task 21B).
+- **A phone cannot reach a service bound only to `127.0.0.1`.** The simulator
+  can use localhost, but physical-device testing of a local Supabase or game
+  server needs the Mac's LAN address or a hosted endpoint.
 
 ## Monorepo layout
 
@@ -73,11 +81,15 @@ shells so the experience matches across devices (Requirement 5.1).
 │   ├── theme/           # swappable pastel theme tokens (default: pink)
 │   └── __harness__/     # integration-test harness and suites
 ├── apps/
-│   ├── mobile/          # @ldr/mobile — Expo shell (STUB: no expo deps yet)
+│   ├── mobile/          # @ldr/mobile — Expo/React Native iOS + Android app
+│   ├── game-server/     # @ldr/game-server — authoritative Colyseus platformer
 │   └── desktop/         # @ldr/desktop — Electron/web shell (stub)
 ├── supabase/
-│   ├── migrations/      # 14 SQL migrations (schema, RLS, RPCs, cron)
-│   └── functions/       # 14 Edge Functions (Deno) + _shared/
+│   ├── migrations/      # SQL schema, RLS, RPCs, games, profiles, and cron
+│   └── functions/       # Deno Edge Functions + shared request/runtime code
+├── docs/
+│   ├── live-platformer-architecture.md # Ember & Tide networking plan
+│   └── word-games-roadmap.md            # Word-game product and architecture plan
 ├── scripts/
 │   └── with-supabase-env.sh   # exports local stack URL + keys for integration runs
 ├── vitest.workspace.ts  # unit / property / integration projects
@@ -112,6 +124,29 @@ npm run build
 npm test          # unit + property tests; integration suites self-skip
 ```
 
+Run the iOS development build in a booted simulator:
+
+```bash
+npm run ios --workspace @ldr/mobile
+```
+
+Build once and launch the app on two iPhone simulators for paired-user testing:
+
+```bash
+npm run ios:two
+```
+
+By default this uses the first two iPhones from the newest installed iOS
+runtime. Pass two names or UDIDs after `--` to choose them explicitly; run
+`npm run ios:two -- --list` to see the available choices.
+
+The platformer has a local movement playground plus an initial authoritative
+Colyseus server. The creator chooses Ember or Tide, the linked partner receives
+the other character, and those roles remain fixed for that game. Local server
+setup is in [`apps/game-server/README.md`](apps/game-server/README.md); the full
+authentication bridge and hosting progression are documented in
+[`docs/live-platformer-architecture.md`](docs/live-platformer-architecture.md).
+
 Integration tests need a local Supabase stack, which needs **Docker**:
 
 ```bash
@@ -124,22 +159,27 @@ npm run test:integration:local
 
 Run from the repo root.
 
-| Command                                      | Description                                                   |
-| -------------------------------------------- | ------------------------------------------------------------- |
-| `npm run verify`                             | **Everything**: build, lint, vitest, `deno check`, Deno tests |
-| `npm run build`                              | Type-check and build every package (`tsc --build`)            |
-| `npm run typecheck`                          | Force a full type-check across the workspace                  |
-| `npm run lint` / `lint:fix`                  | Lint with ESLint                                              |
-| `npm run format` / `format:check`            | Format with Prettier                                          |
-| `npm test`                                   | All vitest suites (integration self-skips without keys)       |
-| `npm run test:unit`                          | Example/edge-case tests only                                  |
-| `npm run test:property`                      | `fast-check` property tests (min 100 iterations each)         |
-| `npm run test:integration:local`             | Integration suites against the running local stack            |
-| `npm run edge:check`                         | `deno check` every Edge Function                              |
-| `npm run edge:test`                          | Deno unit tests for `supabase/functions/_shared/`             |
-| `npm run edge:lint` / `edge:fmt:check`       | Deno lint / format check                                      |
-| `npm run supabase:start` / `stop` / `status` | Local stack lifecycle                                         |
-| `npm run supabase:functions`                 | Serve Edge Functions locally                                  |
+| Command                                        | Description                                                   |
+| ---------------------------------------------- | ------------------------------------------------------------- |
+| `npm run verify`                               | **Everything**: build, lint, vitest, `deno check`, Deno tests |
+| `npm run build`                                | Type-check and build every package (`tsc --build`)            |
+| `npm run typecheck`                            | Force a full type-check across the workspace                  |
+| `npm run lint` / `lint:fix`                    | Lint with ESLint                                              |
+| `npm run format` / `format:check`              | Format with Prettier                                          |
+| `npm test`                                     | All vitest suites (integration self-skips without keys)       |
+| `npm run test:unit`                            | Example/edge-case tests only                                  |
+| `npm run test:property`                        | `fast-check` property tests (min 100 iterations each)         |
+| `npm run test:integration:local`               | Integration suites against the running local stack            |
+| `npm run edge:check`                           | `deno check` every Edge Function                              |
+| `npm run edge:test`                            | Deno unit tests for `supabase/functions/_shared/`             |
+| `npm run edge:lint` / `edge:fmt:check`         | Deno lint / format check                                      |
+| `npm run supabase:start` / `stop` / `status`   | Local stack lifecycle                                         |
+| `npm run supabase:functions`                   | Serve Edge Functions locally                                  |
+| `npm run game-server:dev`                      | Run local Colyseus on port 2567                               |
+| `npm run game-server:test`                     | Run focused platformer-server unit tests                      |
+| `npm run ios:two`                              | Build once and launch on two iPhone simulators                |
+| `npm run ios --workspace @ldr/mobile`          | Build, install, and launch the iOS development app            |
+| `npm run bundle:check --workspace @ldr/mobile` | Produce an iOS Expo bundle as a packaging smoke test          |
 
 `npm run verify` is the one to run before committing. Note it does **not**
 include integration tests, because those need Docker.
@@ -159,9 +199,10 @@ Property tests are tagged in-source with
 `// Feature: ldr-companion-app, Property {n}: {text}` for traceability against
 the 44 correctness properties in `design.md`.
 
-There are 10 integration suites: `auth`, `pairing`, `sync`, `realtime-game`,
-`async-game`, `drawing-storage`, `notification`, `scheduler`, `rls`, plus a
-harness smoke test.
+There are integration suites for authentication, account profiles and deletion,
+pairing, sync, real-time and asynchronous games, Draw Together, quizzes,
+calendar, drawing storage, notifications, scheduling, RLS, and the harness
+itself.
 
 ### Integration tests self-skip
 

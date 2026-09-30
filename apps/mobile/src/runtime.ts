@@ -2,16 +2,22 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import {
   createAsyncGameModule,
   createAuthenticationModule,
+  createCalendarModule,
   createConnectionManager,
   createLocalStore,
   createNotificationModule,
   createPairingModule,
+  createProfileModule,
+  createQuizModule,
   createRealTimeGameModule,
   createSupabaseAsyncGamePorts,
   createSupabaseAuthPorts,
+  createSupabaseCalendarPorts,
   createSupabaseConnectionPorts,
   createSupabaseNotificationPorts,
   createSupabasePairingPorts,
+  createSupabaseProfilePorts,
+  createSupabaseQuizPorts,
   createSupabaseRTGamePorts,
   createSupabaseSyncPorts,
   isOk,
@@ -19,10 +25,13 @@ import {
   type ConnectionListeners,
   type ConnectionManager,
   type AuthenticationModule,
+  type CalendarModule,
   type LocalStore,
   type NotificationModule,
   type Pairing,
   type PairingModule,
+  type ProfileModule,
+  type QuizModule,
   type RealTimeGameModule,
   type Session,
 } from '@ldr/core';
@@ -40,6 +49,9 @@ export interface AppRuntime {
   readonly store: LocalStore;
   readonly auth: AuthenticationModule;
   readonly pairing: PairingModule;
+  readonly calendar: CalendarModule;
+  readonly profile: ProfileModule;
+  readonly quiz: QuizModule;
   readonly rt: RealTimeGameModule;
   readonly asyncGames: AsyncGameModule;
   readonly notifications: NotificationModule;
@@ -93,6 +105,9 @@ export async function bootRuntime(listeners: ConnectionListeners = {}): Promise<
     createSupabaseAuthPorts(client, createSessionStore(secureKv)),
   );
   const pairing = createPairingModule(createSupabasePairingPorts(client));
+  const calendar = createCalendarModule(createSupabaseCalendarPorts(client));
+  const profile = createProfileModule(createSupabaseProfilePorts(client));
+  const quiz = createQuizModule(createSupabaseQuizPorts(client));
   const rt = createRealTimeGameModule(createSupabaseRTGamePorts(client), store);
   const asyncGames = createAsyncGameModule(createSupabaseAsyncGamePorts(client), store);
   const connection = createConnectionManager({
@@ -118,6 +133,9 @@ export async function bootRuntime(listeners: ConnectionListeners = {}): Promise<
     store,
     auth,
     pairing,
+    calendar,
+    profile,
+    quiz,
     rt,
     asyncGames,
     notifications,

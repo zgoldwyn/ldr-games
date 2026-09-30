@@ -2,13 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import * as fc from 'fast-check';
 
-import {
-  accountId,
-  gameId,
-  notificationId,
-  pairingId,
-  sessionId,
-} from './common.js';
+import { accountId, gameId, notificationId, pairingId, sessionId } from './common.js';
 import type { AccountId, Timestamp } from './common.js';
 import type { AsyncSession } from './game.js';
 import type { Pairing } from './pairing.js';
@@ -154,9 +148,7 @@ describe('Property 25: Asynchronous session persists through inactivity', () => 
             expect(nudge).not.toBeNull();
             expect(nudge?.recipientAccountId).toBe(holder);
             expect(nudge?.category).toBe('async_turn');
-            expect((nudge?.payload as AsyncTurnNotificationPayload).kind).toBe(
-              'turn_reminder',
-            );
+            expect((nudge?.payload as AsyncTurnNotificationPayload).kind).toBe('turn_reminder');
           } else {
             expect(nudge).toBeNull();
           }

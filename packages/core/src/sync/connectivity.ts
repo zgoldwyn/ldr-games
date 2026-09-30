@@ -115,10 +115,7 @@ export function isOffline(state: ConnectivityState): boolean {
  * fires once per reconnection rather than on every subsequent online
  * observation.
  */
-export function isReconnection(
-  before: ConnectivityState,
-  after: ConnectivityState,
-): boolean {
+export function isReconnection(before: ConnectivityState, after: ConnectivityState): boolean {
   return before.status === 'offline' && after.status === 'online';
 }
 

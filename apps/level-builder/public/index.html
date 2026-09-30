@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Ember & Tide · Level Forge</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <div class="mark"><i></i><i></i></div>
+        <div><span>EMBER & TIDE</span><strong>Level Forge</strong></div>
+      </div>
+      <div class="header-actions">
+        <button id="new-level">New</button><button id="save-progress">Save</button
+        ><button id="open-progress">Open saved</button><button id="archived-levels">Archived</button
+        ><button id="import">Import JSON</button
+        ><button id="import-typescript">Import TypeScript</button
+        ><button id="paste-typescript">Paste TypeScript</button
+        ><button class="primary" id="copy">Copy TypeScript</button
+        ><button class="primary" id="push-level">Push update</button
+        ><button id="download">Download JSON</button
+        ><input hidden type="file" id="file" accept="application/json,.json" />
+        <input hidden type="file" id="typescript-file" accept=".ts,text/typescript,text/plain" />
+      </div>
+    </header>
+    <main>
+      <aside class="left-panel clay">
+        <label class="eyebrow">ACTIVE LEVEL</label>
+        <div class="level-picker-row">
+          <select id="level-picker"></select>
+          <button id="move-level-up" title="Move level earlier">↑</button>
+          <button id="move-level-down" title="Move level later">↓</button>
+        </div>
+        <button id="archive-active-level" class="archive-active-level">Archive active level</button>
+        <div class="meta-grid">
+          <label>Name<input id="level-name" /></label><label>ID<input id="level-id" /></label
+          ><label>Number<input id="level-number" type="number" min="1" step="1" /></label
+          ><label>Width<input id="level-width" type="number" min="20" step="1" /></label
+          ><label
+            >Grid<input id="grid-size" type="number" min="0.25" max="4" step="0.25" value="0.5"
+          /></label>
+        </div>
+        <div class="section-title"><span>BUILD TOOLS</span><small>1–9 + click</small></div>
+        <div id="tools" class="tools"></div>
+        <div class="help">
+          <b>Canvas controls</b
+          ><span
+            >Drag objects to move · two-finger scroll or drag empty space to pan · pinch to zoom ·
+            Shift-click selects several · ⌘C/⌘V copies and pastes · Delete removes · ⌘Z undo · Shift
+            places Tide gates/spawns</span
+          >
+        </div>
+        <div class="layers-head section-title">
+          <span>OBJECTS</span>
+          <div class="object-actions">
+            <button id="copy-elements" title="Copy selected objects">Copy</button>
+            <button id="paste-elements" title="Paste copied objects">Paste</button>
+            <button id="paste-mirrored" title="Paste reflected across X 0">Paste ↔</button>
+            <button id="delete" title="Delete selected">Delete</button>
+          </div>
+        </div>
+        <div id="layers" class="layers"></div>
+      </aside>
+      <section class="workspace">
+        <div class="canvas-bar">
+          <div><b id="canvas-title">Level</b><span id="coordinates">Ready</span></div>
+          <div class="canvas-actions">
+            <div class="simulation-controls">
+              <select id="play-role" aria-label="Playtest role">
+                <option value="ember">Ember</option>
+                <option value="tide">Tide</option>
+              </select>
+              <button id="jump-reach">Jump reach</button>
+              <button id="playtest" class="playtest">Playtest</button>
+              <button id="reset-playtest" hidden>Reset</button>
+            </div>
+            <div class="zoom">
+              <button id="zoom-out">−</button><span id="zoom-label">100%</span
+              ><button id="zoom-in">+</button><button id="fit">Fit</button>
+            </div>
+          </div>
+        </div>
+        <div id="canvas-wrap">
+          <svg id="canvas" role="application" aria-label="Level editing canvas">
+            <defs>
+              <pattern id="minorGrid" width="20" height="20" patternUnits="userSpaceOnUse">
+                <path
+                  d="M 20 0 L 0 0 0 20"
+                  fill="none"
+                  stroke="#747b87"
+                  stroke-opacity=".13"
+                  stroke-width="1"
+                />
+              </pattern>
+              <pattern
+                id="lethalPoolPattern"
+                width="0.7"
+                height="0.7"
+                patternUnits="userSpaceOnUse"
+                patternTransform="rotate(35)"
+              >
+                <rect width="0.7" height="0.7" fill="#111318" />
+                <rect width="0.16" height="0.7" fill="#ffffff" />
+              </pattern>
+              <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#d8e7f5" />
+                <stop offset="1" stop-color="#f2ede7" />
+              </linearGradient>
+            </defs>
+            <g id="camera">
+              <rect class="sky" />
+              <rect class="grid" />
+              <g id="world"></g>
+              <g id="reach-layer" aria-hidden="true"></g>
+              <g id="simulation-layer" aria-hidden="true"></g>
+            </g>
+          </svg>
+          <div id="simulation-hint" hidden></div>
+          <div class="legend">
+            <span><i class="dot ember"></i>Ember</span><span><i class="dot tide"></i>Tide</span
+            ><span><i class="dot neutral"></i>Neutral</span
+            ><span><i class="dot lethal"></i>Kills both</span>
+          </div>
+        </div>
+      </section>
+      <aside class="right-panel">
+        <section class="clay inspector">
+          <div class="section-title">
+            <span>INSPECTOR</span><small id="selection-kind">Level</small>
+          </div>
+          <div id="inspector"></div>
+        </section>
+        <section class="clay validation">
+          <div class="validation-head">
+            <div>
+              <label class="eyebrow">RULE CHECK</label
+              ><strong id="validation-summary">Checking…</strong>
+            </div>
+            <div id="score-ring">—</div>
+          </div>
+          <div class="filter-row">
+            <button class="active" data-filter="all">All</button
+            ><button data-filter="error">Errors</button
+            ><button data-filter="warning">Warnings</button>
+          </div>
+          <div id="issues"></div>
+          <a href="/docs" class="rules-link" id="rules-link">Open authoring rules ↗</a>
+        </section>
+      </aside>
+    </main>
+    <dialog id="typescript-dialog" aria-labelledby="typescript-dialog-title">
+      <form method="dialog" class="typescript-import-card">
+        <div class="dialog-heading">
+          <div>
+            <span class="eyebrow">IMPORT LEVEL</span>
+            <strong id="typescript-dialog-title">Paste TypeScript</strong>
+          </div>
+          <button value="cancel" aria-label="Close">×</button>
+        </div>
+        <p>
+          Paste a level exported by Copy TypeScript. The source is parsed as data and never run.
+        </p>
+        <textarea
+          id="typescript-source"
+          spellcheck="false"
+          placeholder="export const ELEMENTAL_MY_LEVEL = { ... } as const;"
+        ></textarea>
+        <div class="dialog-actions">
+          <button value="cancel">Cancel</button>
+          <button value="default" type="button" class="primary" id="load-typescript">
+            Load level
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="push-dialog" aria-labelledby="push-dialog-title">
+      <form method="dialog" class="typescript-import-card compact-dialog">
+        <div class="dialog-heading">
+          <div>
+            <span class="eyebrow">PUBLISH LEVEL</span>
+            <strong id="push-dialog-title">Choose a live level to overwrite</strong>
+          </div>
+          <button value="cancel" aria-label="Close">×</button>
+        </div>
+        <p id="push-summary"></p>
+        <label class="dialog-field">Live slot<select id="push-target"></select></label>
+        <p class="archive-note">The current live level will be archived before replacement.</p>
+        <div class="dialog-actions">
+          <button value="cancel">Cancel</button>
+          <button value="default" type="button" class="primary" id="confirm-push">
+            Archive and overwrite
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="archive-dialog" aria-labelledby="archive-dialog-title">
+      <form method="dialog" class="typescript-import-card archive-card">
+        <div class="dialog-heading">
+          <div>
+            <span class="eyebrow">LEVEL HISTORY</span>
+            <strong id="archive-dialog-title">Archived levels</strong>
+          </div>
+          <button value="cancel" aria-label="Close">×</button>
+        </div>
+        <div id="archive-list" class="archive-list"></div>
+        <div class="dialog-actions"><button value="cancel">Close</button></div>
+      </form>
+    </dialog>
+    <div id="toast" role="status"></div>
+    <script type="module" src="/app.mjs"></script>
+  </body>
+</html>

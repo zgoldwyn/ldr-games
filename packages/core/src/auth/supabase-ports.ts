@@ -23,11 +23,7 @@ import {
 } from '../errors.js';
 import { narrowCode, readErrorEnvelope } from '../supabase/function-error.js';
 import type { AuthPorts, SessionRegistry } from './auth-module.js';
-import type {
-  InvitationPayload,
-  PairingPayload,
-  PairingPorts,
-} from './pairing-module.js';
+import type { InvitationPayload, PairingPayload, PairingPorts } from './pairing-module.js';
 
 /** Secure, platform-provided storage for the established session. */
 export interface SessionStore {
@@ -65,10 +61,7 @@ const PAIRING_CODES: readonly string[] = [
  * that establish a session, and `adoptSession` is what installs it so every
  * later data and Realtime request runs as the account.
  */
-export function createSupabaseAuthPorts(
-  client: SupabaseClient,
-  store: SessionStore,
-): AuthPorts {
+export function createSupabaseAuthPorts(client: SupabaseClient, store: SessionStore): AuthPorts {
   return {
     async register(email, password) {
       const { data, error } = await client.functions.invoke<{
@@ -121,11 +114,7 @@ export function createSupabaseAuthPorts(
           error: {
             // Req 2.2: anything that is not an explicit lockout is the uniform,
             // non-revealing failure.
-            code: narrowCode<AuthErrorCode>(
-              envelope?.code,
-              AUTH_CODES,
-              ERROR_CODES.AUTH_FAILED,
-            ),
+            code: narrowCode<AuthErrorCode>(envelope?.code, AUTH_CODES, ERROR_CODES.AUTH_FAILED),
             message: envelope?.message ?? 'Invalid email or password.',
             ...(envelope?.details === undefined ? {} : { details: envelope.details }),
           },
@@ -194,8 +183,7 @@ export function createSupabaseAuthPorts(
       const row = data as { epoch: number; last_activity_at: string | null };
       return {
         epoch: row.epoch,
-        lastActivityAt:
-          row.last_activity_at === null ? 0 : Date.parse(row.last_activity_at),
+        lastActivityAt: row.last_activity_at === null ? 0 : Date.parse(row.last_activity_at),
       };
     },
 

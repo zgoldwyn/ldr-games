@@ -291,10 +291,7 @@ describe.skipIf(cfg === null)('Game scheduler jobs (integration)', () => {
     expect(seeded.error).toBeNull();
     const sessionId = seeded.data?.id as string;
 
-    const inside = await runJob(
-      'nudge_stale_async_turns',
-      BASE + TURN_NUDGE_THRESHOLD_MS - 1_000,
-    );
+    const inside = await runJob('nudge_stale_async_turns', BASE + TURN_NUDGE_THRESHOLD_MS - 1_000);
     expect(inside).not.toContain(sessionId);
     expect(await notificationsFor([a.id, b.id], 'async_turn:turn_reminder:')).toHaveLength(0);
 
@@ -424,17 +421,13 @@ describe.skipIf(cfg === null)('Game scheduler jobs (integration)', () => {
     expect(reminder.error).toBeNull();
     const reminderId = reminder.data?.id as string;
 
-    expect(await runJob('deliver_due_calendar_reminders', triggerAt - 1)).not.toContain(
-      reminderId,
-    );
+    expect(await runJob('deliver_due_calendar_reminders', triggerAt - 1)).not.toContain(reminderId);
     expect(await notificationsFor([a.id, b.id], `reminder:${reminderId}:`)).toHaveLength(0);
 
     expect(await runJob('deliver_due_calendar_reminders', triggerAt)).toContain(reminderId);
     const notes = await notificationsFor([a.id, b.id], `reminder:${reminderId}:`);
     expect(notes).toHaveLength(2);
-    expect(new Set(notes.map((note) => note.recipient_account_id))).toEqual(
-      new Set([a.id, b.id]),
-    );
+    expect(new Set(notes.map((note) => note.recipient_account_id))).toEqual(new Set([a.id, b.id]));
     expect(notes.every((note) => note.category === 'reminder')).toBe(true);
     expect(notes.every((note) => note.delivered_at === null)).toBe(true);
 
@@ -489,9 +482,7 @@ describe.skipIf(cfg === null)('Game scheduler jobs (integration)', () => {
       .eq('account_id', account.id)
       .single();
     expect(registry.data?.epoch).toBe(1);
-    expect(Date.parse(registry.data?.expired_at as string)).toBe(
-      FUTURE_BASE + INACTIVITY_LIMIT_MS,
-    );
+    expect(Date.parse(registry.data?.expired_at as string)).toBe(FUTURE_BASE + INACTIVITY_LIMIT_MS);
 
     // The still-signed access token is denied by the registry marker, and the
     // GoTrue session deletion prevents its refresh token from reviving it.

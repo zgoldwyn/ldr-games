@@ -63,9 +63,9 @@ const invalidTitle = fc.oneof(
   fc
     .integer({ min: 101, max: 200 })
     .chain((len) =>
-      fc.tuple(whitespaceRun, whitespaceRun).map(
-        ([lead, trail]) => `${lead}${'a'.repeat(len)}${trail}`,
-      ),
+      fc
+        .tuple(whitespaceRun, whitespaceRun)
+        .map(([lead, trail]) => `${lead}${'a'.repeat(len)}${trail}`),
     ),
 );
 
@@ -101,18 +101,14 @@ function daysInMonth(year: number, month: number): number {
 const validCalendarDate: fc.Arbitrary<CalendarDate> = fc
   .tuple(fc.integer({ min: 1, max: 9999 }), fc.integer({ min: 1, max: 12 }))
   .chain(([year, month]) =>
-    fc
-      .integer({ min: 1, max: daysInMonth(year, month) })
-      .map((day) => ({ year, month, day })),
+    fc.integer({ min: 1, max: daysInMonth(year, month) }).map((day) => ({ year, month, day })),
   );
 
 /** A day strictly beyond the length of its month (e.g. Feb 30, Apr 31). */
 const dayOutOfRange = fc
   .tuple(fc.integer({ min: 1, max: 9999 }), fc.integer({ min: 1, max: 12 }))
   .chain(([year, month]) =>
-    fc
-      .integer({ min: daysInMonth(year, month) + 1, max: 40 })
-      .map((day) => ({ year, month, day })),
+    fc.integer({ min: daysInMonth(year, month) + 1, max: 40 }).map((day) => ({ year, month, day })),
   );
 
 /** Values that are not valid calendar dates, each violating a distinct rule. */
@@ -121,15 +117,27 @@ const invalidCalendarDate: fc.Arbitrary<unknown> = fc.oneof(
   dayOutOfRange,
   // Day below 1.
   fc
-    .tuple(fc.integer({ min: 1, max: 9999 }), fc.integer({ min: 1, max: 12 }), fc.integer({ min: -10, max: 0 }))
+    .tuple(
+      fc.integer({ min: 1, max: 9999 }),
+      fc.integer({ min: 1, max: 12 }),
+      fc.integer({ min: -10, max: 0 }),
+    )
     .map(([year, month, day]) => ({ year, month, day })),
   // Month out of range.
   fc
-    .tuple(fc.integer({ min: 1, max: 9999 }), fc.oneof(fc.integer({ min: -5, max: 0 }), fc.integer({ min: 13, max: 20 })), fc.integer({ min: 1, max: 28 }))
+    .tuple(
+      fc.integer({ min: 1, max: 9999 }),
+      fc.oneof(fc.integer({ min: -5, max: 0 }), fc.integer({ min: 13, max: 20 })),
+      fc.integer({ min: 1, max: 28 }),
+    )
     .map(([year, month, day]) => ({ year, month, day })),
   // Year out of range.
   fc
-    .tuple(fc.oneof(fc.integer({ min: -100, max: 0 }), fc.integer({ min: 10000, max: 20000 })), fc.integer({ min: 1, max: 12 }), fc.integer({ min: 1, max: 28 }))
+    .tuple(
+      fc.oneof(fc.integer({ min: -100, max: 0 }), fc.integer({ min: 10000, max: 20000 })),
+      fc.integer({ min: 1, max: 12 }),
+      fc.integer({ min: 1, max: 28 }),
+    )
     .map(([year, month, day]) => ({ year, month, day })),
   // Non-integer component.
   fc

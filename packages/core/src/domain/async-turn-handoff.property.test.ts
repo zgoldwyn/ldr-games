@@ -39,10 +39,8 @@ const alice = accountId('alice');
 const bob = accountId('bob');
 const players: readonly [AccountId, AccountId] = [alice, bob];
 
-const asGame = (s: AsyncEngineState): AsyncGameState =>
-  s as unknown as AsyncGameState;
-const asEngine = (s: AsyncGameState): AsyncEngineState =>
-  s as unknown as AsyncEngineState;
+const asGame = (s: AsyncEngineState): AsyncGameState => s as unknown as AsyncGameState;
+const asEngine = (s: AsyncGameState): AsyncEngineState => s as unknown as AsyncEngineState;
 
 // ---------------------------------------------------------------------------
 // Generators — a starting state plus a *valid* turn for the current holder

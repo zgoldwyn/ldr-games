@@ -8,11 +8,7 @@ import type { Account } from './account.js';
 import type { Pairing } from './pairing.js';
 import type { Notification, NotificationSettings } from './notification.js';
 import { dissolvePairing } from './pairing-logic.js';
-import {
-  NOTIFICATION_RETENTION_MS,
-  isExpired,
-  shouldDeliver,
-} from './notification-delivery.js';
+import { NOTIFICATION_RETENTION_MS, isExpired, shouldDeliver } from './notification-delivery.js';
 
 /**
  * Property 40 (task 10.8) — Pairing-ended notification is delivered or deferred.
@@ -165,9 +161,7 @@ describe('pairing-ended notification delivery / deferral (property)', () => {
           // The first moment this partner has an authenticated session: now, if
           // they were already active at dissolution (Req 4.2); otherwise the
           // time they next establish one (Req 4.5).
-          const nextSessionAt = s.activeAtDissolution[i]
-            ? s.now
-            : s.now + s.nextSessionDelay[i];
+          const nextSessionAt = s.activeAtDissolution[i] ? s.now : s.now + s.nextSessionDelay[i];
 
           const withinRetention = !isExpired(notification, nextSessionAt);
           const delivered = shouldDeliver(notification, settings) && withinRetention;

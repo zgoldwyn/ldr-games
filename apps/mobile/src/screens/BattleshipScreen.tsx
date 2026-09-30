@@ -101,7 +101,7 @@ function ShotMarker({ shot, cellSize }: { readonly shot: Shot; readonly cellSize
 type Props = NativeStackScreenProps<RootStackParamList, 'Battleship'>;
 
 export function BattleshipScreen({ route }: Props) {
-  const { runtime, identity, tokens } = useApp();
+  const { runtime, identity, accountDetails, tokens } = useApp();
   const id = sessionId(route.params.sessionId);
   const [, setTick] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -183,6 +183,7 @@ export function BattleshipScreen({ route }: Props) {
     myTurn,
     winner: cached?.outcome?.winner,
     self,
+    partnerName: accountDetails?.partnerProfile?.displayName,
   });
 
   useEffect(() => {
@@ -288,6 +289,7 @@ export function BattleshipScreen({ route }: Props) {
             self !== undefined && fresh?.state === 'active' && fresh.activeTurnHolder === self,
           alreadyTargeted: shotAt(freshShots, row, col) !== undefined,
           terminal: fresh?.state === 'terminal',
+          partnerName: accountDetails?.partnerProfile?.displayName,
         });
         setError(specific ?? messageForError(result.error));
       }
@@ -348,7 +350,7 @@ export function BattleshipScreen({ route }: Props) {
             </AppText>
             <AppText kind="muted" tokens={tokens} style={styles.instructions}>
               {fleetSubmitted
-                ? 'Fleet locked in. Waiting for your partner to finish placing theirs.'
+                ? `Fleet locked in. Waiting for ${accountDetails?.partnerProfile?.displayName ?? 'your partner'} to finish placing theirs.`
                 : placedShipCount(draftShips) === draftShips.length
                   ? 'All five ships are placed. Tap one to rotate it, or drag it again to move it.'
                   : 'Drag each ship from the dock onto the grid. Tap a ship to rotate it.'}

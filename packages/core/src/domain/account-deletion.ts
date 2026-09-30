@@ -76,8 +76,7 @@ export interface ConfirmedDeleteAccountDecision {
 }
 
 export type DeleteAccountDecision =
-  | UnconfirmedDeleteAccountDecision
-  | ConfirmedDeleteAccountDecision;
+  UnconfirmedDeleteAccountDecision | ConfirmedDeleteAccountDecision;
 
 export type DeleteAccountError = AccountDeletionError | PairingError;
 
@@ -107,7 +106,9 @@ export function deleteAccount(
 
   if (pairingContext === null) {
     if (account.pairingId !== null) {
-      return err(invalidDeletionState('A paired account requires pairing context before deletion.'));
+      return err(
+        invalidDeletionState('A paired account requires pairing context before deletion.'),
+      );
     }
 
     return ok({
@@ -139,7 +140,9 @@ export function deleteAccount(
   }
 
   if (account.pairingId !== pairing.id || partner.pairingId !== pairing.id) {
-    return err(invalidDeletionState('Both accounts must reference the active pairing before deletion.'));
+    return err(
+      invalidDeletionState('Both accounts must reference the active pairing before deletion.'),
+    );
   }
 
   const memberA = deletedIsMemberA ? account : partner;
@@ -147,9 +150,7 @@ export function deleteAccount(
   const dissolution = dissolvePairing({ pairing, memberA, memberB, activeSessions, now });
   if (!dissolution.ok) return dissolution;
 
-  const remainingPartner = deletedIsMemberA
-    ? dissolution.value.memberB
-    : dissolution.value.memberA;
+  const remainingPartner = deletedIsMemberA ? dissolution.value.memberB : dissolution.value.memberA;
 
   return ok({
     confirmed: true,

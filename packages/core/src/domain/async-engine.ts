@@ -57,10 +57,7 @@ export interface RulesetApplyResult<S extends RulesetStateBase> {
  * holder (`actor`) against `opponent`, returning the new state or `null` when
  * the turn is invalid. It must never mutate its inputs.
  */
-export interface AsyncRuleset<
-  S extends RulesetStateBase,
-  A extends RulesetActionBase,
-> {
+export interface AsyncRuleset<S extends RulesetStateBase, A extends RulesetActionBase> {
   readonly kind: S['kind'];
   readonly def: AsyncGameDef;
   applyAction(
@@ -108,10 +105,7 @@ export interface AsyncEngineState {
 }
 
 /** Catalog of the available asynchronous games (Requirement 7.1). */
-export const ASYNC_GAME_DEFS: readonly AsyncGameDef[] = [
-  battleshipRuleset.def,
-  drawingRuleset.def,
-];
+export const ASYNC_GAME_DEFS: readonly AsyncGameDef[] = [battleshipRuleset.def, drawingRuleset.def];
 
 // ---------------------------------------------------------------------------
 // Engine

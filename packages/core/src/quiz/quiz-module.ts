@@ -14,6 +14,7 @@ import type {
   Answer,
   QuizDef,
   QuizGuess,
+  QuizQuestion,
   QuizResults,
   QuizSelfAnswer,
   QuizSession,
@@ -39,6 +40,12 @@ export type QuizMutationOutcome =
 export interface QuizPorts {
   /** Catalog, read through the authenticated caller's RLS scope. */
   readonly listQuizzes: () => Promise<readonly QuizDef[]>;
+  /** Questions for one catalog entry, in presentation order. */
+  readonly listQuestions: (quizId: QuizId) => Promise<readonly QuizQuestion[]>;
+  /** The pairing's only active session, if one exists. */
+  readonly activeSession: () => Promise<QuizSession | null>;
+  /** Quiz definitions this pairing has completed at least once. */
+  readonly playedQuizIds: () => Promise<readonly QuizId[]>;
   /**
    * Session aggregate, read through RLS. `null` covers a missing/inaccessible
    * session and an unavailable read; mutations retain their typed error result.
@@ -63,6 +70,12 @@ export interface QuizPorts {
 export interface QuizModule {
   /** Available themed quizzes for the authenticated caller (Req 8.1). */
   listQuizzes(): Promise<readonly QuizDef[]>;
+  /** Questions for a themed quiz, in presentation order. */
+  listQuestions(quizId: QuizId): Promise<readonly QuizQuestion[]>;
+  /** Resume the pairing's active quiz from either partner's device. */
+  activeSession(): Promise<QuizSession | null>;
+  /** Quiz definitions this pairing has completed at least once. */
+  playedQuizIds(): Promise<readonly QuizId[]>;
   /** Open a two-partner, zero-score session through the authoritative function. */
   startSession(quizId: QuizId): Promise<Result<QuizSession, QuizError>>;
   /** Record the caller's own answer through the authoritative function. */
@@ -107,6 +120,12 @@ export function createQuizModule(ports: QuizPorts): QuizModule {
 
   return {
     listQuizzes: () => ports.listQuizzes(),
+
+    listQuestions: (quizId) => ports.listQuestions(quizId),
+
+    activeSession: () => ports.activeSession(),
+
+    playedQuizIds: () => ports.playedQuizIds(),
 
     startSession: (quizId) => mutation(() => ports.startSession(quizId)),
 

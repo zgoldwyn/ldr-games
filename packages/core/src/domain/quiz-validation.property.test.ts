@@ -60,15 +60,13 @@ function freshState(): QuizSessionState {
 const targetQuestionArb: fc.Arbitrary<QuizQuestion> = fc.oneof(
   fc
     .uniqueArray(fc.string({ maxLength: 12 }), { minLength: 1, maxLength: 5 })
-    .map(
-      (choices): QuizQuestion => ({
-        id: TARGET,
-        quizId: QUIZ,
-        type: 'multiple_choice',
-        prompt: 'pick?',
-        choices,
-      }),
-    ),
+    .map((choices): QuizQuestion => ({
+      id: TARGET,
+      quizId: QUIZ,
+      type: 'multiple_choice',
+      prompt: 'pick?',
+      choices,
+    })),
   fc.constant<QuizQuestion>({ id: TARGET, quizId: QUIZ, type: 'short_answer', prompt: 'say?' }),
 );
 
@@ -76,7 +74,9 @@ const targetQuestionArb: fc.Arbitrary<QuizQuestion> = fc.oneof(
 function validAnswerArb(q: QuizQuestion): fc.Arbitrary<Answer> {
   if (q.type === 'multiple_choice') {
     // Exactly one of the offered choices.
-    return fc.constantFrom(...(q.choices ?? [])).map((value): Answer => ({ kind: 'choice', value }));
+    return fc
+      .constantFrom(...(q.choices ?? []))
+      .map((value): Answer => ({ kind: 'choice', value }));
   }
   // Short-answer text of length 1..100, exercising whitespace-only strings and
   // the inclusive 100-character upper boundary.

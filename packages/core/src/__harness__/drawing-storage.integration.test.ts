@@ -169,8 +169,10 @@ describe.skipIf(cfg === null)('Drawing image Storage (integration)', () => {
     // Reading the other pairing's object is refused. Note the outsider has to lie
     // about the pairing id to even get past the client-side check, which is why
     // the server-side RLS assertion below is the one that matters.
-    const stolen = await createDrawingImageStore(outsiderA.client)
-      .readUrl({ imageRef: uploaded.value.imageRef, pairingId: toPairingId(pairing) });
+    const stolen = await createDrawingImageStore(outsiderA.client).readUrl({
+      imageRef: uploaded.value.imageRef,
+      pairingId: toPairingId(pairing),
+    });
     expect(isErr(stolen)).toBe(true);
 
     // Writing INTO the other pairing's folder is refused by Storage RLS, which is

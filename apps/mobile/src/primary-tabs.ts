@@ -7,9 +7,10 @@ export const PRIMARY_TABS: readonly {
   readonly label: string;
   readonly icon: string;
 }[] = [
-  { route: 'GameList', label: 'Play', icon: '▶︎' },
-  { route: 'CardGames', label: 'Cards', icon: '♠' },
+  { route: 'Play', label: 'Play', icon: '▶' },
+  { route: 'AsyncGames', label: 'Your Games', icon: '↺' },
   { route: 'Leaderboard', label: 'Scores', icon: '★' },
+  { route: 'ImportantDates', label: 'Dates', icon: '♥' },
   { route: 'Settings', label: 'Settings', icon: '⚙︎' },
 ];
 

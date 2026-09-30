@@ -17,6 +17,25 @@ export interface Account {
   readonly createdAt: Timestamp;
 }
 
+/** Public-to-a-current-partner identity used for friendly in-app copy. */
+export interface AccountProfile {
+  readonly accountId: AccountId;
+  readonly displayName: string;
+  readonly updatedAt: Timestamp;
+}
+
+export const DISPLAY_NAME_MAX_LENGTH = 40;
+
+/** Names are deliberately small, single-line labels rather than free-form bios. */
+export function normalizeDisplayName(value: string): string {
+  return value.trim().replace(/\s+/g, ' ');
+}
+
+export function isValidDisplayName(value: string): boolean {
+  const normalized = normalizeDisplayName(value);
+  return normalized.length > 0 && normalized.length <= DISPLAY_NAME_MAX_LENGTH;
+}
+
 /**
  * Single-session registry row (one per account). Overrides Supabase's default
  * multi-session behavior: `epoch` increments on every new login and a token

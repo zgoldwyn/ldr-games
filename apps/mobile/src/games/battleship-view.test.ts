@@ -30,6 +30,17 @@ describe('battleship presentation', () => {
     ).toBe('Partner’s turn');
     expect(
       battleshipStatus({
+        sessionState: 'active',
+        phase: 'playing',
+        fleetSubmitted: true,
+        myTurn: false,
+        winner: null,
+        self: SELF,
+        partnerName: 'Sam',
+      }).title,
+    ).toBe('Sam’s turn');
+    expect(
+      battleshipStatus({
         sessionState: 'terminal',
         phase: 'playing',
         fleetSubmitted: true,

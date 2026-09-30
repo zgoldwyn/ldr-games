@@ -69,7 +69,11 @@ export function CardGamesScreen() {
           ): item is {
             readonly notification: Notification;
             readonly action: { readonly sessionId: string };
-          } => item.action !== null,
+          } => {
+            if (item.action === null) return false;
+            const invitedSession = runtime.rt.cached(sessionId(item.action.sessionId));
+            return invitedSession !== undefined && invitedSession.state !== 'terminal';
+          },
         )
     : [];
 
@@ -89,10 +93,16 @@ export function CardGamesScreen() {
     setBusy(true);
     setError(null);
     try {
-      const result = await runtime.rt.join(sessionId(rawId));
-      if (isErr(result)) return setError(messageForError(result.error));
+      const id = sessionId(rawId);
+      await runtime.rt.refresh();
+      let opened = runtime.rt.cached(id);
+      if (opened === undefined || opened.state === 'pending') {
+        const result = await runtime.rt.join(id);
+        if (isErr(result)) return setError(messageForError(result.error));
+        opened = result.value;
+      }
       await runtime.notifications.acknowledge(notification.id);
-      navigation.navigate('Speed', { sessionId: result.value.id });
+      navigation.navigate('Speed', { sessionId: opened.id });
     } finally {
       setBusy(false);
     }

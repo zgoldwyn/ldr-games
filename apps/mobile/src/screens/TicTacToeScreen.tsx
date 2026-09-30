@@ -6,6 +6,8 @@ import { isErr, sessionId, type AccountId, type TicTacToeState } from '@ldr/core
 import { useApp } from '../app-context';
 import { messageForError } from '../copy/error-copy';
 import {
+  TIC_TAC_TOE_BOARD_PADDING,
+  TIC_TAC_TOE_CELL_GAP,
   markForCell,
   markForPlayer,
   ticTacToeBoardLayout,
@@ -17,7 +19,7 @@ import { AppButton } from '../ui/AppButton';
 import { AppText } from '../ui/AppText';
 import { Screen } from '../ui/Screen';
 import { TicTacToeMark } from '../ui/TicTacToeMark';
-import { clayRaisedStyle } from '../ui/clay';
+import { clayPressedStyle, clayRaisedStyle } from '../ui/clay';
 
 function asBoard(state: unknown): TicTacToeState | null {
   if (state === null || typeof state !== 'object') return null;
@@ -30,8 +32,8 @@ function asBoard(state: unknown): TicTacToeState | null {
 
 type Props = NativeStackScreenProps<RootStackParamList, 'TicTacToe'>;
 
-export function TicTacToeScreen({ route }: Props) {
-  const { runtime, identity, tokens } = useApp();
+export function TicTacToeScreen({ route, navigation }: Props) {
+  const { runtime, identity, accountDetails, tokens } = useApp();
   const id = sessionId(route.params.sessionId);
   const [, setTick] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -58,10 +60,12 @@ export function TicTacToeScreen({ route }: Props) {
     currentTurn: board?.currentTurn,
     winner: board?.winner,
     self,
+    partnerName: accountDetails?.partnerProfile?.displayName,
   });
   const ownMark = markForPlayer(self, board?.players);
   const winning = new Set(board === null ? [] : winningCells(board.board));
   const { boardSize, cellSize } = ticTacToeBoardLayout(viewportWidth);
+  const cells = board?.board ?? Array<AccountId | null>(9).fill(null);
 
   async function place(cell: number) {
     if (!myTurn || busy) return;
@@ -81,6 +85,21 @@ export function TicTacToeScreen({ route }: Props) {
     try {
       const result = await runtime.rt.rejoin(id);
       if (isErr(result)) setError(messageForError(result.error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cancelInvitation() {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await runtime.rt.deleteSession(id);
+      if (isErr(result)) {
+        setError(messageForError(result.error));
+        return;
+      }
+      navigation.goBack();
     } finally {
       setBusy(false);
     }
@@ -112,35 +131,52 @@ export function TicTacToeScreen({ route }: Props) {
         </AppText>
       ) : null}
 
-      <View style={[styles.grid, { width: boardSize, height: boardSize }]}>
-        {(board?.board ?? Array<AccountId | null>(9).fill(null)).map((cell, index) => (
-          <Pressable
-            key={index}
-            accessibilityRole="button"
-            accessibilityLabel={`Row ${Math.floor(index / 3) + 1}, column ${(index % 3) + 1}, ${board === null || cell === null ? 'empty' : markForCell(cell, board.players)}`}
-            accessibilityHint={myTurn && cell === null ? 'Places your mark' : undefined}
-            accessibilityState={{ disabled: !myTurn || cell !== null }}
-            disabled={!myTurn || cell !== null}
-            onPress={() => {
-              void place(index);
-            }}
-            style={({ pressed }) => [
-              styles.cell,
-              {
-                backgroundColor: winning.has(index) ? tokens.accent : tokens.surface,
-                borderColor: tokens.border,
-                borderRightWidth: index % 3 < 2 ? 2 : 0,
-                borderBottomWidth: Math.floor(index / 3) < 2 ? 2 : 0,
-                opacity: pressed ? 0.78 : 1,
-                width: cellSize,
-                height: cellSize,
-              },
-            ]}
-          >
-            {board && markForCell(cell, board.players) !== '' ? (
-              <TicTacToeMark mark={markForCell(cell, board.players) as 'X' | 'O'} tokens={tokens} />
-            ) : null}
-          </Pressable>
+      <View
+        style={[
+          styles.grid,
+          clayRaisedStyle(tokens),
+          { width: boardSize, height: boardSize, backgroundColor: tokens.primary },
+        ]}
+      >
+        {[0, 1, 2].map((row) => (
+          <View key={`row-${row}`} style={styles.gridRow}>
+            {cells.slice(row * 3, row * 3 + 3).map((cell, column) => {
+              const index = row * 3 + column;
+              const cellBackground = winning.has(index) ? tokens.accent : tokens.surfaceMuted;
+              const mark = board === null ? '' : markForCell(cell, board.players);
+              return (
+                <Pressable
+                  key={index}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Row ${row + 1}, column ${column + 1}, ${mark === '' ? 'empty' : mark}`}
+                  accessibilityHint={myTurn && cell === null ? 'Places your mark' : undefined}
+                  accessibilityState={{ disabled: !myTurn || cell !== null }}
+                  disabled={!myTurn || cell !== null}
+                  onPress={() => {
+                    void place(index);
+                  }}
+                  style={({ pressed }) => [
+                    styles.cell,
+                    pressed ? clayPressedStyle(tokens) : clayRaisedStyle(tokens, true),
+                    {
+                      backgroundColor: cellBackground,
+                      opacity: pressed ? 0.82 : 1,
+                      width: cellSize,
+                      height: cellSize,
+                    },
+                  ]}
+                >
+                  {mark !== '' ? (
+                    <TicTacToeMark
+                      mark={mark as 'X' | 'O'}
+                      tokens={tokens}
+                      backgroundColor={cellBackground}
+                    />
+                  ) : null}
+                </Pressable>
+              );
+            })}
+          </View>
         ))}
       </View>
 
@@ -152,6 +188,16 @@ export function TicTacToeScreen({ route }: Props) {
           onPress={() => {
             void rejoin();
           }}
+        />
+      ) : null}
+
+      {cached?.state === 'pending' ? (
+        <AppButton
+          label="Cancel invitation"
+          variant="quiet"
+          tokens={tokens}
+          disabled={busy}
+          onPress={() => void cancelInvitation()}
         />
       ) : null}
 
@@ -175,14 +221,17 @@ const styles = StyleSheet.create({
   statusTitle: { marginBottom: 4 },
   identity: { marginTop: 12 },
   grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
     marginTop: 16,
     alignSelf: 'center',
+    borderRadius: 32,
+    padding: TIC_TAC_TOE_BOARD_PADDING,
+    gap: TIC_TAC_TOE_CELL_GAP,
   },
+  gridRow: { flexDirection: 'row', gap: TIC_TAC_TOE_CELL_GAP },
   cell: {
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 20,
   },
   banner: { marginTop: 16 },
 });

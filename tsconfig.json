@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "./packages/core" },
+    { "path": "./apps/game-server" },
     { "path": "./apps/mobile" },
     { "path": "./apps/desktop" }
   ]

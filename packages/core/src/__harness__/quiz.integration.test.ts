@@ -193,6 +193,15 @@ describe.skipIf(cfg === null)('Quiz Edge Function (integration)', () => {
     expect(started.status).toBe(201);
     const sessionId = started.body.session.id;
     expect(started.body.session.phase).toBe('self_answer');
+    const quizStarted = await admin
+      .from('notifications')
+      .select('category, payload')
+      .eq('recipient_account_id', f.b.id)
+      .eq('category', 'quiz')
+      .eq('payload->>kind', 'quiz_started')
+      .maybeSingle();
+    expect(quizStarted.error).toBeNull();
+    expect(quizStarted.data?.payload).toMatchObject({ sessionId, kind: 'quiz_started' });
 
     // The second start is rejected by the active-session uniqueness guard and
     // does not create another active row (Req 8.11).
@@ -269,6 +278,18 @@ describe.skipIf(cfg === null)('Quiz Edge Function (integration)', () => {
     expect(revealed.body.session.phase).toBe('guessing');
     expect(revealed.body.selfAnswers).toHaveLength(4);
     expect(revealed.body.selfAnswers?.map((answer) => answer.accountId)).toContain(f.a.id);
+    const guessingReady = await admin
+      .from('notifications')
+      .select('category, payload')
+      .eq('recipient_account_id', f.a.id)
+      .eq('category', 'quiz')
+      .eq('payload->>kind', 'quiz_guessing_ready')
+      .maybeSingle();
+    expect(guessingReady.error).toBeNull();
+    expect(guessingReady.data?.payload).toMatchObject({
+      sessionId,
+      kind: 'quiz_guessing_ready',
+    });
     const visibleInGuessing = await f.bClient
       .from('quiz_self_answers')
       .select('account_id')
@@ -293,6 +314,18 @@ describe.skipIf(cfg === null)('Quiz Edge Function (integration)', () => {
     expect(complete.body.session.scores).toMatchObject({ [f.a.id]: 2, [f.b.id]: 1 });
     expect(complete.body.results?.scores).toMatchObject({ [f.a.id]: 2, [f.b.id]: 1 });
     expect(complete.body.results?.questions).toHaveLength(2);
+    const resultsReady = await admin
+      .from('notifications')
+      .select('category, payload')
+      .eq('recipient_account_id', f.a.id)
+      .eq('category', 'quiz')
+      .eq('payload->>kind', 'quiz_results_ready')
+      .maybeSingle();
+    expect(resultsReady.error).toBeNull();
+    expect(resultsReady.data?.payload).toMatchObject({
+      sessionId,
+      kind: 'quiz_results_ready',
+    });
 
     // RLS remains revealed after completion (the phase transition is durable).
     const visibleWhenComplete = await f.bClient

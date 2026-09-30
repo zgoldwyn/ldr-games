@@ -62,7 +62,11 @@ export interface DrawingObjectKey {
 /** Signed-URL lifetime for reading a drawing (seconds). */
 export const DRAWING_URL_TTL_SECONDS = 60 * 60;
 
-function asyncError(code: AsyncError['code'], message: string, details?: Record<string, unknown>): AsyncError {
+function asyncError(
+  code: AsyncError['code'],
+  message: string,
+  details?: Record<string, unknown>,
+): AsyncError {
   return details === undefined ? { code, message } : { code, message, details };
 }
 
@@ -148,25 +152,23 @@ export function validateDrawingImageRef(params: {
   const parsed = parseDrawingObjectKey(params.imageRef);
   if (parsed === null) {
     return err(
-      asyncError(ERROR_CODES.INVALID_TURN, 'The image reference is not a valid drawing object key.', {
-        imageRef: params.imageRef,
-      }),
+      asyncError(
+        ERROR_CODES.INVALID_TURN,
+        'The image reference is not a valid drawing object key.',
+        {
+          imageRef: params.imageRef,
+        },
+      ),
     );
   }
   if (parsed.pairingId !== params.pairingId) {
     return err(
-      asyncError(
-        ERROR_CODES.INVALID_TURN,
-        'The image reference belongs to a different pairing.',
-      ),
+      asyncError(ERROR_CODES.INVALID_TURN, 'The image reference belongs to a different pairing.'),
     );
   }
   if (params.sessionId !== undefined && parsed.sessionId !== params.sessionId) {
     return err(
-      asyncError(
-        ERROR_CODES.INVALID_TURN,
-        'The image reference belongs to a different session.',
-      ),
+      asyncError(ERROR_CODES.INVALID_TURN, 'The image reference belongs to a different session.'),
     );
   }
   return ok(parsed);
@@ -179,9 +181,13 @@ export function validateDrawingUpload(params: {
 }): Result<void, AsyncError> {
   if (!ALLOWED_DRAWING_CONTENT_TYPES.includes(params.contentType)) {
     return err(
-      asyncError(ERROR_CODES.INVALID_TURN, `Unsupported drawing content type "${params.contentType}".`, {
-        allowed: ALLOWED_DRAWING_CONTENT_TYPES,
-      }),
+      asyncError(
+        ERROR_CODES.INVALID_TURN,
+        `Unsupported drawing content type "${params.contentType}".`,
+        {
+          allowed: ALLOWED_DRAWING_CONTENT_TYPES,
+        },
+      ),
     );
   }
   if (params.byteLength <= 0) {

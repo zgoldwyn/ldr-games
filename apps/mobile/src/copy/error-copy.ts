@@ -26,6 +26,10 @@ function unmetCopy(details: AppError['details']): string | null {
  * not leak whether the email or the password was wrong.
  */
 export function messageForError(error: AppError): string {
+  if (error.details?.reason === 'partner_won_race') {
+    return 'Your partner beat you to that one.';
+  }
+
   switch (error.code) {
     case ERROR_CODES.AUTH_FAILED:
       return 'Invalid email or password.';
@@ -56,6 +60,9 @@ export function messageForError(error: AppError): string {
     case ERROR_CODES.PAIRING_REQUIRED:
       return 'Pair with your partner before starting a game.';
     case ERROR_CODES.SESSION_NOT_FOUND:
+      if (error.message === 'The real-time game request failed.') {
+        return 'Could not reach the game server. Check your connection and try again.';
+      }
       return 'That game could not be found.';
     case ERROR_CODES.INVALID_MOVE:
       return 'That move is not allowed.';
@@ -69,6 +76,22 @@ export function messageForError(error: AppError): string {
       return 'The pause window ended, so this game closed.';
     case ERROR_CODES.INVALID_SESSION_STATE:
       return 'This game cannot take that action right now.';
+    case ERROR_CODES.QUIZ_NOT_FOUND:
+      return 'That quiz is no longer available.';
+    case ERROR_CODES.QUIZ_SESSION_IN_PROGRESS:
+      return 'Finish your current quiz before starting another one.';
+    case ERROR_CODES.QUESTION_NOT_FOUND:
+      return 'That question is no longer available.';
+    case ERROR_CODES.INVALID_ANSWER:
+      return 'Choose or enter a valid answer.';
+    case ERROR_CODES.ALREADY_ANSWERED:
+      return 'You already answered that question.';
+    case ERROR_CODES.INVALID_GUESS:
+      return 'Choose or enter a valid guess.';
+    case ERROR_CODES.ALREADY_GUESSED:
+      return 'You already guessed that question.';
+    case ERROR_CODES.WRONG_PHASE:
+      return 'Your partner moved this quiz forward. Refresh and try again.';
     default:
       return error.message;
   }

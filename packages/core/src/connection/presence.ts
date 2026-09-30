@@ -58,11 +58,7 @@ function present(accountId: AccountId, now: Timestamp): PresenceState {
  * the continuous absence began, and moving it would restart the 30-second
  * window (Req 6.6).
  */
-function absent(
-  roster: PresenceRoster,
-  accountId: AccountId,
-  now: Timestamp,
-): PresenceState {
+function absent(roster: PresenceRoster, accountId: AccountId, now: Timestamp): PresenceState {
   const existing = roster.members[accountId];
   if (existing !== undefined && !existing.online) return existing;
   return { accountId, online: false, lastSeenAt: now };
@@ -124,11 +120,7 @@ export function presenceSamples(roster: PresenceRoster): readonly PresenceState[
 }
 
 /** How long `accountId` has been continuously absent, or 0 while present. */
-export function absenceMs(
-  roster: PresenceRoster,
-  accountId: AccountId,
-  now: Timestamp,
-): number {
+export function absenceMs(roster: PresenceRoster, accountId: AccountId, now: Timestamp): number {
   const member = roster.members[accountId];
   if (member === undefined || member.online) return 0;
   // Clamped like the server does, so a clock skew cannot report a negative or
@@ -137,11 +129,7 @@ export function absenceMs(
 }
 
 /** The longest continuous absence across the roster, excluding `self`. */
-export function longestAbsenceMs(
-  roster: PresenceRoster,
-  self: AccountId,
-  now: Timestamp,
-): number {
+export function longestAbsenceMs(roster: PresenceRoster, self: AccountId, now: Timestamp): number {
   let longest = 0;
   for (const accountId of Object.keys(roster.members)) {
     if (accountId === self) continue;

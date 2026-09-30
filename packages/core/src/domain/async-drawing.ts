@@ -18,11 +18,7 @@
 import type { AccountId, GameId } from './common.js';
 import { gameId } from './common.js';
 import type { AsyncGameDef } from './game.js';
-import type {
-  AsyncEngineState,
-  AsyncRuleset,
-  RulesetApplyResult,
-} from './async-engine.js';
+import type { AsyncEngineState, AsyncRuleset, RulesetApplyResult } from './async-engine.js';
 
 /** Maximum caption length accepted for a drawing turn. */
 export const DRAWING_CAPTION_MAX_LENGTH = 280;
@@ -106,8 +102,7 @@ export const drawingRuleset: AsyncRuleset<DrawingState, DrawingAction> = {
     const drawings = [...state.drawings, entry];
 
     const nextState: DrawingState = { ...state, drawings };
-    const terminal =
-      state.maxRounds !== undefined && drawings.length >= state.maxRounds;
+    const terminal = state.maxRounds !== undefined && drawings.length >= state.maxRounds;
 
     return { rulesetState: nextState, terminal, winner: null };
   },

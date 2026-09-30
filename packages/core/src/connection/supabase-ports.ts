@@ -48,9 +48,7 @@ interface PresenceMeta {
  * `accountId` carried in the metadata and falls back to the key. That keeps it
  * working whether a client keys by account id or by a per-connection id.
  */
-function presentAccountIds(
-  state: Record<string, readonly PresenceMeta[]>,
-): readonly AccountId[] {
+function presentAccountIds(state: Record<string, readonly PresenceMeta[]>): readonly AccountId[] {
   const ids: AccountId[] = [];
   for (const [key, metas] of Object.entries(state)) {
     const fromMeta = metas.find((meta) => typeof meta.accountId === 'string')?.accountId;
@@ -90,10 +88,7 @@ export function createSupabaseConnectionPorts(client: SupabaseClient): Connectio
       });
 
       channel.on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState() as unknown as Record<
-          string,
-          readonly PresenceMeta[]
-        >;
+        const state = channel.presenceState() as unknown as Record<string, readonly PresenceMeta[]>;
         handlers.onPresenceSync(presentAccountIds(state));
       });
 
@@ -121,10 +116,7 @@ export function createSupabaseConnectionPorts(client: SupabaseClient): Connectio
       };
     },
 
-    async reportPresence(
-      sessionId: SessionId,
-      samples: readonly PresenceState[],
-    ): Promise<void> {
+    async reportPresence(sessionId: SessionId, samples: readonly PresenceState[]): Promise<void> {
       const { error } = await client.functions.invoke('rt-presence', {
         body: { sessionId, presence: samples },
       });

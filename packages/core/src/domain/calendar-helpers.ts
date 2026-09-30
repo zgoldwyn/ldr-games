@@ -210,10 +210,7 @@ function compareTitleCaseInsensitive(a: string, b: string): number {
  */
 export function orderDates(dates: RelationshipDate[], now: CalendarDate): RelationshipDate[] {
   return [...dates].sort((a, b) => {
-    const occurrenceOrder = compareCalendarDate(
-      nextOccurrence(a, now),
-      nextOccurrence(b, now),
-    );
+    const occurrenceOrder = compareCalendarDate(nextOccurrence(a, now), nextOccurrence(b, now));
     if (occurrenceOrder !== 0) {
       return occurrenceOrder;
     }

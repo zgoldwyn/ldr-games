@@ -3,11 +3,7 @@ import * as fc from 'fast-check';
 
 import { accountId, notificationId } from './common.js';
 import type { Timestamp } from './common.js';
-import type {
-  Notification,
-  NotificationCategory,
-  NotificationSettings,
-} from './notification.js';
+import type { Notification, NotificationCategory, NotificationSettings } from './notification.js';
 import {
   NOTIFICATION_RETENTION_MS,
   isCategoryEnabled,
@@ -39,9 +35,7 @@ const CATEGORIES: readonly NotificationCategory[] = [
 ];
 
 /** Recipient identity kept small so duplicate dedupe keys actually collide. */
-const recipientArb = fc
-  .constantFrom('alice', 'bob', 'carol')
-  .map((raw) => accountId(raw));
+const recipientArb = fc.constantFrom('alice', 'bob', 'carol').map((raw) => accountId(raw));
 
 const categoryArb = fc.constantFrom(...CATEGORIES);
 
@@ -77,7 +71,9 @@ function notificationArb(): fc.Arbitrary<Notification> {
 }
 
 /** Settings whose disabled set is an arbitrary subset of the categories. */
-function settingsArb(recipient: NotificationSettings['accountId']): fc.Arbitrary<NotificationSettings> {
+function settingsArb(
+  recipient: NotificationSettings['accountId'],
+): fc.Arbitrary<NotificationSettings> {
   return fc
     .subarray(CATEGORIES as NotificationCategory[])
     .map((disabledCategories) => ({ accountId: recipient, disabledCategories }));

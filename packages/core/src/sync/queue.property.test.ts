@@ -75,9 +75,7 @@ describe('Property 17: offline changes are queued without loss', () => {
         expect(pendingChanges(queued)).toEqual(changes);
 
         // seq is monotonically increasing in submission order.
-        expect(pendingEntries(queued).map((e) => e.seq)).toEqual(
-          changes.map((_, i) => i),
-        );
+        expect(pendingEntries(queued).map((e) => e.seq)).toEqual(changes.map((_, i) => i));
 
         // Draining (connectivity restored) yields exactly the submitted
         // changes, in submission order, and empties the queue.
@@ -138,10 +136,7 @@ describe('Property 17: offline changes are queued without loss', () => {
           const remainingChanges = pendingChanges(remaining);
 
           // No loss: acknowledged + remaining == everything ever submitted.
-          expect([...ackedChanges, ...remainingChanges]).toEqual([
-            ...firstBatch,
-            ...secondBatch,
-          ]);
+          expect([...ackedChanges, ...remainingChanges]).toEqual([...firstBatch, ...secondBatch]);
 
           // Order preserved: remaining is the submission-ordered leftover.
           const expectedRemaining = [...firstBatch, ...secondBatch].filter(

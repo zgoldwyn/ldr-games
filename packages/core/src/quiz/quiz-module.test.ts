@@ -39,6 +39,16 @@ function refusal(code: QuizError['code']): QuizMutationOutcome {
 function harness(overrides: Partial<QuizPorts> = {}) {
   const ports: QuizPorts = {
     listQuizzes: async () => [{ id: QUIZ, theme: 'Favorites', questionIds: [QUESTION] }],
+    listQuestions: async () => [
+      {
+        id: QUESTION,
+        quizId: QUIZ,
+        type: 'short_answer',
+        prompt: 'What is your ideal morning?',
+      },
+    ],
+    activeSession: async () => null,
+    playedQuizIds: async () => [],
     fetchSession: async () => snapshot(),
     startSession: async () => ({ ok: true, snapshot: snapshot() }),
     submitSelfAnswer: async () => ({ ok: true, snapshot: snapshot() }),
@@ -52,6 +62,18 @@ describe('QuizModule catalog and mutations', () => {
   it('reads the themed catalog from the caller-scoped port (Req 8.1)', async () => {
     const quizzes = await harness().module.listQuizzes();
     expect(quizzes).toEqual([{ id: QUIZ, theme: 'Favorites', questionIds: [QUESTION] }]);
+  });
+
+  it('loads questions and lets either partner resume the active session', async () => {
+    const active = snapshot().session;
+    const h = harness({ activeSession: async () => active });
+    expect(await h.module.listQuestions(QUIZ)).toHaveLength(1);
+    expect(await h.module.activeSession()).toEqual(active);
+  });
+
+  it('reports quiz definitions the pairing has completed', async () => {
+    const h = harness({ playedQuizIds: async () => [QUIZ] });
+    expect(await h.module.playedQuizIds()).toEqual([QUIZ]);
   });
 
   it('caches the Edge Function-created zero-score self-answer session', async () => {

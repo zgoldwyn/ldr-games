@@ -21,9 +21,7 @@ import { REJOIN_WINDOW_MS, pauseSession, resumeSession } from './rt-session.js';
 
 // An arbitrary authoritative game state: an open record of JSON-ish values,
 // matching `GameState = Record<string, unknown>`.
-const gameStateArb: fc.Arbitrary<GameState> = fc
-  .object({ maxDepth: 3 })
-  .map((o) => o as GameState);
+const gameStateArb: fc.Arbitrary<GameState> = fc.object({ maxDepth: 3 }).map((o) => o as GameState);
 
 // An arbitrary *active* real-time session (the only state pause accepts).
 const activeSessionArb: fc.Arbitrary<RTSession> = fc.record({

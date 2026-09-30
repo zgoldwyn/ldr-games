@@ -62,14 +62,12 @@ describe('validatePasswordPolicy', () => {
 });
 
 describe('validateEmailFormat', () => {
-  it.each([
-    'user@example.com',
-    'first.last@sub.example.co.uk',
-    'user+tag@example.org',
-    'u@ex.io',
-  ])('accepts valid address %s', (email) => {
-    expect(validateEmailFormat(email)).toBe(true);
-  });
+  it.each(['user@example.com', 'first.last@sub.example.co.uk', 'user+tag@example.org', 'u@ex.io'])(
+    'accepts valid address %s',
+    (email) => {
+      expect(validateEmailFormat(email)).toBe(true);
+    },
+  );
 
   it.each([
     '',

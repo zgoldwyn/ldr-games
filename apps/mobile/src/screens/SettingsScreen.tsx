@@ -12,6 +12,7 @@ import { AppButton } from '../ui/AppButton';
 import { AppText } from '../ui/AppText';
 import { Screen } from '../ui/Screen';
 import { clayPressedStyle, clayRaisedStyle } from '../ui/clay';
+import { PartnerPresencePill } from '../ui/PartnerPresencePill';
 
 type DeleteStep = 'idle' | 'review';
 
@@ -69,8 +70,15 @@ export function SettingsScreen() {
   }
 
   return (
-    <Screen tokens={tokens} topInset={false} horizontalPadding={false}>
+    <Screen
+      tokens={tokens}
+      topInset
+      bottomInset={false}
+      bottomPadding={false}
+      horizontalPadding={false}
+    >
       <ScrollView contentContainerStyle={styles.scroll}>
+        <PartnerPresencePill />
         <AppText kind="label" tokens={tokens} style={styles.section}>
           Theme
         </AppText>
@@ -134,6 +142,15 @@ export function SettingsScreen() {
         <AppText kind="label" tokens={tokens} style={styles.section}>
           Account
         </AppText>
+
+        <AppButton
+          variant="quiet"
+          label="Profile, email & password"
+          tokens={tokens}
+          disabled={busy}
+          onPress={() => navigation.navigate('Account')}
+        />
+        <View style={styles.accountSpacer} />
 
         <AppButton
           variant="quiet"

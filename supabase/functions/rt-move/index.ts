@@ -31,14 +31,11 @@ import {
   jsonResponse,
   statusForErrorCode,
 } from "../_shared/http.ts";
-import {
-  authenticatedAccountId,
-  serviceClient,
-} from "../_shared/supabase.ts";
+import { authenticatedAccountId, serviceClient } from "../_shared/supabase.ts";
 import {
   accountTopic,
-  type BroadcastMessage,
   broadcast,
+  type BroadcastMessage,
   gameChannelTopic,
 } from "../_shared/realtime.ts";
 import {
@@ -507,6 +504,7 @@ async function handleMove(
   db: SupabaseClient,
   ctx: CallerContext,
   body: Record<string, unknown>,
+  conflictAttempt = 0,
 ): Promise<Response> {
   const move = body.move;
   if (typeof move !== "object" || move === null || Array.isArray(move)) {
@@ -539,11 +537,18 @@ async function handleMove(
 
   if (!result.ok) {
     // Rejected: no write happened, so the authoritative state is unchanged.
+    // A move that was valid on the first read but became invalid only after a
+    // compare-and-set retry lost a real-time race to the partner. Preserve that
+    // distinction so the client can explain the collision instead of implying
+    // the player chose an illegal card.
     return errorResponse(
       result.error.code,
       result.error.message,
       statusForErrorCode(result.error.code),
-      { gameState: row.game_state ?? {} },
+      {
+        gameState: row.game_state ?? {},
+        ...(conflictAttempt > 0 ? { reason: "partner_won_race" } : {}),
+      },
     );
   }
 
@@ -590,10 +595,19 @@ async function handleMove(
     );
   }
   if (!saved) {
+    // Speed permits both players to act at once. If their writes race, reload
+    // the winner's state and re-validate this intent instead of making the
+    // losing phone pause and manually retry. The compare-and-set still provides
+    // the ordering; this simply turns a transient storage race into the next
+    // legal move in that order.
+    if (conflictAttempt < 2) {
+      return await handleMove(db, ctx, body, conflictAttempt + 1);
+    }
     return errorResponse(
       "INVALID_SESSION_STATE",
       "The session was modified concurrently; reload it and retry.",
       statusForErrorCode("INVALID_SESSION_STATE"),
+      { reason: "partner_won_race" },
     );
   }
 

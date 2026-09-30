@@ -67,7 +67,12 @@ const exactLength = (n: number) =>
 
 // Boundary lengths mandated by the task: 11 (just below min), 12 (min),
 // 128 (max), 129 (just above max). These pin down the inclusive 12-128 window.
-const boundaryPassword = fc.oneof(exactLength(11), exactLength(12), exactLength(128), exactLength(129));
+const boundaryPassword = fc.oneof(
+  exactLength(11),
+  exactLength(12),
+  exactLength(128),
+  exactLength(129),
+);
 
 // General coverage: arbitrary-length strings from the pool, including the empty
 // string, spanning the whole 0..140 range so both the min and max edges are hit.
@@ -77,7 +82,11 @@ const generalPassword = fc
 
 // Also fold in fully arbitrary unicode strings so the property is not limited to
 // the curated pool (e.g. astral characters, control chars, non-ASCII letters).
-const arbitraryPassword = fc.oneof(boundaryPassword, generalPassword, fc.string({ maxLength: 140 }));
+const arbitraryPassword = fc.oneof(
+  boundaryPassword,
+  generalPassword,
+  fc.string({ maxLength: 140 }),
+);
 
 describe('validatePasswordPolicy (Property 1: Password policy reports every unmet criterion)', () => {
   // Feature: ldr-companion-app, Property 1: Password policy reports every unmet criterion

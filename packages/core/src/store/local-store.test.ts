@@ -42,7 +42,12 @@ describe('LocalStore reads', () => {
     s.put('async_session', B.id, B);
     s.put('rt_session', 'rt', { id: 'rt', turns: 0 });
 
-    expect(s.list<Session>('async_session').map((e) => e.id).sort()).toEqual(['a', 'b']);
+    expect(
+      s
+        .list<Session>('async_session')
+        .map((e) => e.id)
+        .sort(),
+    ).toEqual(['a', 'b']);
     expect(s.list('rt_session')).toHaveLength(1);
   });
 

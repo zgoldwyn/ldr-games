@@ -3,7 +3,14 @@ import * as fc from 'fast-check';
 
 import { ERROR_CODES } from '../errors.js';
 import { isErr, isOk } from '../result.js';
-import { accountId, invitationCode, pairingId, sessionId, type AccountId, type Timestamp } from './common.js';
+import {
+  accountId,
+  invitationCode,
+  pairingId,
+  sessionId,
+  type AccountId,
+  type Timestamp,
+} from './common.js';
 import type { Account } from './account.js';
 import type { Pairing } from './pairing.js';
 import { deleteAccount } from './account-deletion.js';
@@ -31,9 +38,11 @@ const sessionKindArb: fc.Arbitrary<SessionKind> = fc.constantFrom('realtime', 'a
 const activeSessionsArb: fc.Arbitrary<readonly ActiveSessionRef[]> = fc
   .uniqueArray(fc.string({ minLength: 1, maxLength: 10 }), { maxLength: 5 })
   .chain((ids) =>
-    fc.tuple(...ids.map(() => sessionKindArb)).map((kinds) =>
-      ids.map((id, i): ActiveSessionRef => ({ sessionId: sessionId(id), kind: kinds[i] })),
-    ),
+    fc
+      .tuple(...ids.map(() => sessionKindArb))
+      .map((kinds) =>
+        ids.map((id, i): ActiveSessionRef => ({ sessionId: sessionId(id), kind: kinds[i] })),
+      ),
   );
 
 interface PairedDeletionScenario {
@@ -92,13 +101,11 @@ const pairedDeletionScenarioArb: fc.Arbitrary<PairedDeletionScenario> = fc
 
 interface UnconfirmedDeletionScenario {
   readonly account: Account;
-  readonly pairingContext:
-    | {
-        readonly pairing: Pairing;
-        readonly partner: Account;
-        readonly activeSessions: readonly ActiveSessionRef[];
-      }
-    | null;
+  readonly pairingContext: {
+    readonly pairing: Pairing;
+    readonly partner: Account;
+    readonly activeSessions: readonly ActiveSessionRef[];
+  } | null;
   readonly now: Timestamp;
 }
 

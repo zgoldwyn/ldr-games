@@ -1,10 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import {
   BATTLESHIP_GAME_ID,
+  DRAW_TOGETHER_GAME_ID,
+  SPEED_GAME_ID,
   TIC_TAC_TOE,
+  WORD_CHAIN_GAME_ID,
   isErr,
   isOk,
   sessionId,
@@ -14,7 +17,14 @@ import {
 import { useApp } from '../app-context';
 import { messageForError } from '../copy/error-copy';
 import { gameArtForTheme } from '../games/game-art';
-import { sessionStateLabel, unfinishedGames } from '../games/game-list-view';
+import {
+  gameListNotificationAction,
+  isCurrentQuizUpdate,
+  sessionStateLabel,
+  unfinishedGames,
+  withoutIncomingInvites,
+  type GameListNotificationAction,
+} from '../games/game-list-view';
 import type { RootStackParamList } from '../navigation';
 import { AppButton } from '../ui/AppButton';
 import { AppText } from '../ui/AppText';
@@ -23,10 +33,6 @@ import { SwipeableGameRow } from '../ui/SwipeableGameRow';
 import { clayPressedStyle, clayRaisedStyle } from '../ui/clay';
 
 const MAX_OPEN_SESSIONS_PER_GAME = 3;
-
-type IncomingInvite =
-  | { readonly kind: 'rt'; readonly sessionId: string }
-  | { readonly kind: 'async'; readonly sessionId: string };
 
 function GameChoice({
   art,
@@ -69,24 +75,70 @@ function GameChoice({
   );
 }
 
-function incomingInvite(notification: Notification): IncomingInvite | null {
-  if (notification.category !== 'game_invite') return null;
-  if (notification.payload === null || typeof notification.payload !== 'object') return null;
-  const payload = notification.payload as {
-    readonly type?: unknown;
-    readonly kind?: unknown;
-    readonly sessionId?: unknown;
-  };
-  if (typeof payload.sessionId !== 'string' || payload.sessionId.length === 0) {
-    return null;
-  }
-  if (payload.type === 'rt_game_invite') {
-    return { kind: 'rt', sessionId: payload.sessionId };
-  }
-  if (payload.kind === 'async_game_invite') {
-    return { kind: 'async', sessionId: payload.sessionId };
-  }
-  return null;
+function WideGameChoice({
+  icon,
+  label,
+  description,
+  badge,
+  disabled = false,
+  onPress,
+  tokens,
+}: {
+  readonly icon: string;
+  readonly label: string;
+  readonly description: string;
+  readonly badge?: string;
+  readonly disabled?: boolean;
+  readonly onPress?: () => void;
+  readonly tokens: ReturnType<typeof useApp>['tokens'];
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint={description}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.wideChoice,
+        pressed ? clayPressedStyle(tokens) : clayRaisedStyle(tokens),
+        {
+          backgroundColor: tokens.primary,
+          opacity: disabled ? 0.62 : pressed ? 0.84 : 1,
+          transform: [{ scale: pressed ? 0.99 : 1 }],
+        },
+      ]}
+    >
+      <View style={[styles.categoryIcon, { backgroundColor: tokens.surface }]}>
+        <AppText kind="title" tokens={tokens} style={styles.categoryIconText}>
+          {icon}
+        </AppText>
+      </View>
+      <View style={styles.categoryCopy}>
+        <View style={styles.categoryTitleRow}>
+          <AppText kind="title" tokens={tokens} style={styles.categoryTitle}>
+            {label}
+          </AppText>
+          {badge ? (
+            <View style={[styles.badge, { backgroundColor: tokens.surface }]}>
+              <AppText kind="label" tokens={tokens}>
+                {badge}
+              </AppText>
+            </View>
+          ) : null}
+        </View>
+        <AppText kind="muted" tokens={tokens}>
+          {description}
+        </AppText>
+      </View>
+      {disabled ? null : (
+        <AppText kind="title" tokens={tokens} style={styles.categoryChevron}>
+          ›
+        </AppText>
+      )}
+    </Pressable>
+  );
 }
 
 export function GameListScreen() {
@@ -96,6 +148,9 @@ export function GameListScreen() {
   const [busy, setBusy] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [rtNames, setRtNames] = useState<string>('Tic-Tac-Toe');
+  const [quizPhases, setQuizPhases] = useState<
+    Record<string, 'self_answer' | 'guessing' | 'complete' | null>
+  >({});
   const [, setTick] = useState(0);
   const pairing = identity.pairing;
   const session = identity.session;
@@ -112,16 +167,62 @@ export function GameListScreen() {
     return runtime.notifications.subscribeCache(() => setTick((n) => n + 1));
   }, [runtime.notifications]);
 
+  const refreshQuizUpdates = useCallback(async () => {
+    if (session === null) return;
+    const updates = runtime.notifications
+      .cached(session.accountId)
+      .map((notification) => ({ notification, action: gameListNotificationAction(notification) }))
+      .filter((entry) => entry.action?.kind === 'quiz');
+    const ids = [...new Set(updates.map((entry) => entry.action!.sessionId))];
+    const phases = await Promise.all(
+      ids.map(async (id) => ({
+        id,
+        phase: (await runtime.quiz.refreshSession(sessionId(id)))?.session.phase ?? null,
+      })),
+    );
+    const nextPhases = Object.fromEntries(phases.map(({ id, phase }) => [id, phase]));
+    setQuizPhases(nextPhases);
+    await Promise.all(
+      updates.map(async ({ notification, action }) => {
+        if (action === null || action.kind !== 'quiz') return;
+        const phase = nextPhases[action.sessionId];
+        if (phase !== null && phase !== undefined && !isCurrentQuizUpdate(action, phase)) {
+          await runtime.notifications.acknowledge(notification.id);
+        }
+      }),
+    );
+  }, [runtime.notifications, runtime.quiz, session]);
+
+  const quizNoticeKey =
+    session === null
+      ? ''
+      : runtime.notifications
+          .cached(session.accountId)
+          .filter((notification) => notification.category === 'quiz')
+          .map((notification) => notification.id)
+          .join(',');
+
+  useEffect(() => {
+    void refreshQuizUpdates();
+  }, [quizNoticeKey, refreshQuizUpdates]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void runtime.rt.refresh();
+      if (session !== null) {
+        void runtime.notifications.list(session.accountId).then(() => refreshQuizUpdates());
+      }
+      void runtime.asyncGames.refresh();
+    }, [runtime, session, refreshQuizUpdates]),
+  );
+
   useEffect(() => {
     void runtime.rt.listGames().then((result) => {
       if (isOk(result)) {
         setRtNames(result.value.map((game) => game.name).join(', '));
       }
     });
-    void runtime.rt.refresh();
-    if (session !== null) void runtime.notifications.list(session.accountId);
-    void runtime.asyncGames.refresh();
-  }, [runtime, session]);
+  }, [runtime.rt]);
 
   if (pairing === null || session === null) return null;
 
@@ -132,25 +233,56 @@ export function GameListScreen() {
   const openTicTacToeCount = runtime.rt
     .list()
     .filter((item) => item.gameId === TIC_TAC_TOE && item.state !== 'terminal').length;
+  const openDrawTogetherCount = runtime.rt
+    .list()
+    .filter((item) => item.gameId === DRAW_TOGETHER_GAME_ID && item.state !== 'terminal').length;
   const openBattleshipCount = runtime.asyncGames
     .list()
     .filter((item) => item.gameId === BATTLESHIP_GAME_ID && item.state === 'active').length;
   const incomingInvites = runtime.notifications
     .cached(self)
-    .map((notification) => ({ notification, invite: incomingInvite(notification) }))
+    .map((notification) => ({
+      notification,
+      invite: gameListNotificationAction(notification),
+    }))
     .filter(
       (
         item,
       ): item is {
         readonly notification: Notification;
-        readonly invite: IncomingInvite;
-      } => item.invite !== null,
+        readonly invite: GameListNotificationAction;
+      } => {
+        if (item.invite === null) return false;
+        if (item.invite.kind === 'rt') {
+          const invitedSession = runtime.rt.cached(sessionId(item.invite.sessionId));
+          return invitedSession !== undefined && invitedSession.state !== 'terminal';
+        }
+        if (item.invite.kind === 'async') {
+          const invitedSession = runtime.asyncGames.cached(sessionId(item.invite.sessionId));
+          return invitedSession !== undefined && invitedSession.state === 'active';
+        }
+        return (
+          item.invite.kind !== 'quiz' ||
+          isCurrentQuizUpdate(item.invite, quizPhases[item.invite.sessionId])
+        );
+      },
     );
-  const ticTacToeSessions = unfinishedGames(
-    runtime.rt.list().filter((item) => item.gameId === TIC_TAC_TOE),
+  const incomingGameSessionIds = new Set(
+    incomingInvites
+      .filter(({ invite }) => invite.kind === 'rt' || invite.kind === 'async')
+      .map(({ invite }) => invite.sessionId),
   );
-  const battleshipSessions = unfinishedGames(
-    runtime.asyncGames.list().filter((item) => item.gameId === BATTLESHIP_GAME_ID),
+  const ticTacToeSessions = withoutIncomingInvites(
+    unfinishedGames(runtime.rt.list().filter((item) => item.gameId === TIC_TAC_TOE)),
+    incomingGameSessionIds,
+  );
+  const battleshipSessions = withoutIncomingInvites(
+    unfinishedGames(runtime.asyncGames.list().filter((item) => item.gameId === BATTLESHIP_GAME_ID)),
+    incomingGameSessionIds,
+  );
+  const drawTogetherSessions = withoutIncomingInvites(
+    unfinishedGames(runtime.rt.list().filter((item) => item.gameId === DRAW_TOGETHER_GAME_ID)),
+    incomingGameSessionIds,
   );
   const gameArt = gameArtForTheme(colorOption);
 
@@ -184,19 +316,50 @@ export function GameListScreen() {
     }
   }
 
-  async function openInvite(notification: Notification, invite: IncomingInvite) {
+  async function inviteDrawTogether() {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await runtime.rt.invite(DRAW_TOGETHER_GAME_ID);
+      if (isErr(result)) {
+        setError(messageForError(result.error));
+        return;
+      }
+      navigation.navigate('DrawTogether', { sessionId: result.value.id });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function openInvite(notification: Notification, invite: GameListNotificationAction) {
     setBusy(true);
     setError(null);
     try {
       const id = sessionId(invite.sessionId);
-      if (invite.kind === 'rt') {
-        const result = await runtime.rt.join(id);
-        if (isErr(result)) {
-          setError(messageForError(result.error));
-          return;
+      if (invite.kind === 'quiz') {
+        await runtime.notifications.acknowledge(notification.id);
+        navigation.navigate('CouplesQuiz', { sessionId: id });
+      } else if (invite.kind === 'rt') {
+        await runtime.rt.refresh();
+        let opened = runtime.rt.cached(id);
+        if (opened === undefined || opened.state === 'pending') {
+          const result = await runtime.rt.join(id);
+          if (isErr(result)) {
+            setError(messageForError(result.error));
+            return;
+          }
+          opened = result.value;
         }
         await runtime.notifications.acknowledge(notification.id);
-        navigation.navigate('TicTacToe', { sessionId: result.value.id });
+        if (invite.gameId === DRAW_TOGETHER_GAME_ID) {
+          navigation.navigate('DrawTogether', { sessionId: opened.id });
+        } else if (invite.gameId === SPEED_GAME_ID) {
+          navigation.navigate('Speed', { sessionId: opened.id });
+        } else if (invite.gameId === WORD_CHAIN_GAME_ID) {
+          navigation.navigate('WordChain', { sessionId: opened.id });
+        } else {
+          navigation.navigate('TicTacToe', { sessionId: opened.id });
+        }
       } else {
         await runtime.asyncGames.refresh();
         if (runtime.asyncGames.cached(id) === undefined) {
@@ -246,33 +409,88 @@ export function GameListScreen() {
   return (
     <Screen tokens={tokens} topInset={false} horizontalPadding={false}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <AppText kind="muted" tokens={tokens} style={styles.lead}>
-          Real-time: {rtNames}. Async: {asyncCatalog.map((g) => g.name).join(', ')}.
-        </AppText>
-
-        <View style={styles.gameChoices}>
-          <GameChoice
-            art={gameArt.ticTacToe}
-            label="Tic-tac-toe"
-            hint="Invites your partner to a new game"
+        <View style={styles.categories}>
+          <WideGameChoice
+            icon="♥"
+            label="Card games"
+            description="Open a live table for Speed, with more card games on the way."
             tokens={tokens}
-            disabled={busy || openTicTacToeCount >= MAX_OPEN_SESSIONS_PER_GAME}
-            onPress={() => void inviteTicTacToe()}
+            onPress={() => navigation.navigate('CardGames')}
           />
-          <GameChoice
-            art={gameArt.battleship}
-            label="Battleship"
-            hint="Starts a new game with your partner"
+
+          <WideGameChoice
+            icon="Aa"
+            label="Word games"
+            description="Live word games for two, starting with Word Chain."
             tokens={tokens}
-            disabled={busy || openBattleshipCount >= MAX_OPEN_SESSIONS_PER_GAME}
-            onPress={() => void startBattleship()}
+            onPress={() => navigation.navigate('WordGames')}
+          />
+
+          <View
+            style={[
+              styles.otherGames,
+              clayRaisedStyle(tokens),
+              { backgroundColor: tokens.surface },
+            ]}
+          >
+            <View style={styles.otherGamesHeader}>
+              <AppText kind="title" tokens={tokens} style={styles.categoryTitle}>
+                Other minigames
+              </AppText>
+              <AppText kind="muted" tokens={tokens}>
+                {rtNames}. {asyncCatalog.map((game) => game.name).join(', ')}.
+              </AppText>
+            </View>
+            <View style={styles.gameChoices}>
+              <GameChoice
+                art={gameArt.ticTacToe}
+                label="Tic-tac-toe"
+                hint="Invites your partner to a new game"
+                tokens={tokens}
+                disabled={busy || openTicTacToeCount >= MAX_OPEN_SESSIONS_PER_GAME}
+                onPress={() => void inviteTicTacToe()}
+              />
+              <GameChoice
+                art={gameArt.drawTogether}
+                label="Draw Together"
+                hint="Invites your partner to a cooperative drawing game"
+                tokens={tokens}
+                disabled={busy || openDrawTogetherCount >= MAX_OPEN_SESSIONS_PER_GAME}
+                onPress={() => void inviteDrawTogether()}
+              />
+              <GameChoice
+                art={gameArt.battleship}
+                label="Battleship"
+                hint="Starts a new game with your partner"
+                tokens={tokens}
+                disabled={busy || openBattleshipCount >= MAX_OPEN_SESSIONS_PER_GAME}
+                onPress={() => void startBattleship()}
+              />
+              <GameChoice
+                art={gameArt.couplesQuiz}
+                label="Couples Quiz"
+                hint="Choose a quiz and predict your partner’s answers"
+                tokens={tokens}
+                disabled={busy}
+                onPress={() => navigation.navigate('QuizLibrary')}
+              />
+            </View>
+          </View>
+
+          <WideGameChoice
+            icon="≈"
+            label="Ember & Tide"
+            description="Cross an enchanted grove together as two spirits with complementary powers."
+            badge="CO-OP ADVENTURE"
+            tokens={tokens}
+            onPress={() => navigation.navigate('ElementalDuetSetup')}
           />
         </View>
 
         {incomingInvites.length > 0 ? (
           <>
             <AppText kind="label" tokens={tokens} style={styles.section}>
-              Incoming invites
+              Updates & invites
             </AppText>
             {incomingInvites.map(({ notification, invite }) => (
               <View
@@ -284,11 +502,25 @@ export function GameListScreen() {
                 ]}
               >
                 <AppText kind="body" tokens={tokens} style={styles.rowTitle}>
-                  {invite.kind === 'rt' ? 'Tic-tac-toe invite' : 'Battleship invite'}
+                  {invite.kind === 'quiz'
+                    ? invite.phase === 'self_answer'
+                      ? 'Your partner started a Couples Quiz'
+                      : invite.phase === 'guessing'
+                        ? 'Couples Quiz: ready to guess'
+                        : 'Couples Quiz: results ready'
+                    : invite.kind === 'rt'
+                      ? invite.gameId === DRAW_TOGETHER_GAME_ID
+                        ? 'Draw Together invite'
+                        : invite.gameId === SPEED_GAME_ID
+                          ? 'Speed invite'
+                          : invite.gameId === WORD_CHAIN_GAME_ID
+                            ? 'Word Chain invite'
+                            : 'Tic-tac-toe invite'
+                      : 'Battleship invite'}
                 </AppText>
                 <AppButton
                   variant="quiet"
-                  label={invite.kind === 'rt' ? 'Join game' : 'Open game'}
+                  label={invite.kind === 'rt' ? 'Join game' : 'Open'}
                   tokens={tokens}
                   disabled={busy}
                   onPress={() => {
@@ -329,6 +561,32 @@ export function GameListScreen() {
             </View>
           </SwipeableGameRow>
         ))}
+        {drawTogetherSessions.map((item) => (
+          <SwipeableGameRow
+            key={item.id}
+            tokens={tokens}
+            disabled={deletingId === item.id}
+            accessibilityLabel={`Draw Together, ${sessionStateLabel(item.state)}`}
+            onOpen={() => navigation.navigate('DrawTogether', { sessionId: item.id })}
+            onDelete={() => confirmDelete('rt', item.id, 'Draw Together')}
+          >
+            <View
+              style={[
+                styles.row,
+                styles.swipeRow,
+                clayRaisedStyle(tokens),
+                { backgroundColor: tokens.surfaceMuted },
+              ]}
+            >
+              <AppText kind="body" tokens={tokens}>
+                Draw Together
+              </AppText>
+              <AppText kind="muted" tokens={tokens}>
+                {sessionStateLabel(item.state)}
+              </AppText>
+            </View>
+          </SwipeableGameRow>
+        ))}
         {battleshipSessions.map((item) => (
           <SwipeableGameRow
             key={item.id}
@@ -355,7 +613,9 @@ export function GameListScreen() {
             </View>
           </SwipeableGameRow>
         ))}
-        {ticTacToeSessions.length === 0 && battleshipSessions.length === 0 ? (
+        {ticTacToeSessions.length === 0 &&
+        drawTogetherSessions.length === 0 &&
+        battleshipSessions.length === 0 ? (
           <View
             style={[styles.empty, clayRaisedStyle(tokens), { backgroundColor: tokens.primary }]}
           >
@@ -380,7 +640,32 @@ export function GameListScreen() {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: 24, paddingBottom: 32 },
-  lead: { marginBottom: 24 },
+  categories: { gap: 20 },
+  wideChoice: {
+    width: '100%',
+    minHeight: 132,
+    borderRadius: 28,
+    padding: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  categoryIcon: {
+    width: 64,
+    height: 76,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    transform: [{ rotate: '-4deg' }],
+  },
+  categoryIconText: { fontSize: 34 },
+  categoryCopy: { flex: 1, gap: 5 },
+  categoryTitleRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
+  categoryTitle: { fontSize: 23, lineHeight: 28 },
+  categoryChevron: { fontSize: 34, lineHeight: 38 },
+  badge: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4 },
+  otherGames: { width: '100%', borderRadius: 28, padding: 16 },
+  otherGamesHeader: { paddingHorizontal: 4, paddingTop: 2, paddingBottom: 16, gap: 4 },
   gameChoices: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
   gameChoice: {
     flexBasis: '45%',

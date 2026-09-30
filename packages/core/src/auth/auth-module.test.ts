@@ -39,11 +39,13 @@ function okLogin(overrides: Partial<LoginSuccess> = {}): LoginSuccess {
   };
 }
 
-function harness(options: {
-  register?: AuthPorts['register'];
-  login?: AuthPorts['login'];
-  registry?: { epoch: number; lastActivityAt: number } | null;
-} = {}) {
+function harness(
+  options: {
+    register?: AuthPorts['register'];
+    login?: AuthPorts['login'];
+    registry?: { epoch: number; lastActivityAt: number } | null;
+  } = {},
+) {
   let clock = NOW;
   let persisted: Session | null = null;
   const adopted: { accessToken: string; refreshToken: string }[] = [];

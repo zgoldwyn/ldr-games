@@ -114,7 +114,7 @@ export const ticTacToeRuleset: RealTimeRuleset<TicTacToeState, TicTacToeMove> = 
       return err(invalidMove('Actor is not a participant'));
     }
     if (actor !== state.currentTurn) {
-      return err(invalidMove('Not this player\'s turn'));
+      return err(invalidMove("Not this player's turn"));
     }
     // Move must be a well-formed placement into a valid, empty cell.
     if (!isPlaceMove(move)) {

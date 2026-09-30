@@ -100,9 +100,7 @@ export function createDrawingImageStore(client: SupabaseClient): DrawingImageSto
     if (error || !data?.signedUrl) {
       // A denial and a missing object are indistinguishable here by design:
       // Storage RLS must not reveal that another pairing's object exists.
-      return err(
-        storageError('The drawing could not be read.', { imageRef }),
-      );
+      return err(storageError('The drawing could not be read.', { imageRef }));
     }
     return ok({
       imageRef,
@@ -134,9 +132,7 @@ export function createDrawingImageStore(client: SupabaseClient): DrawingImageSto
         upsert: false,
       });
       if (error) {
-        return err(
-          storageError('The drawing could not be stored.', { imageRef: key.value }),
-        );
+        return err(storageError('The drawing could not be stored.', { imageRef: key.value }));
       }
 
       return await sign(key.value, DRAWING_URL_TTL_SECONDS);

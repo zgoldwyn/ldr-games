@@ -36,6 +36,17 @@ config.resolver.nodeModulesPaths = [
 
 config.resolver.disableHierarchicalLookup = true;
 
+// @colyseus/sdk imports `ws` as its Node fallback, then prefers
+// globalThis.WebSocket at runtime. Metro still tries to bundle that fallback
+// (and its Node `zlib` dependency), so map it to React Native's native socket.
+const nativeWebSocketShim = path.resolve(projectRoot, 'src/shims/ws.ts');
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (moduleName === 'ws') {
+    return { type: 'sourceFile', filePath: nativeWebSocketShim };
+  }
+  return context.resolveRequest(context, moduleName, platform);
+};
+
 // `@ldr/core` ships ESM with an `exports` map, which Metro only honours with
 // package exports enabled.
 config.resolver.unstable_enablePackageExports = true;

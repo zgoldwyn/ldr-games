@@ -91,9 +91,7 @@ describe('resolveReminderTrigger (Property 36: Reminder scheduling and validatio
     fc.assert(
       fc.property(reminderRequest, ({ occurrence, leadTime, now }) => {
         const inRange =
-          Number.isFinite(leadTime) &&
-          leadTime >= MIN_LEAD_TIME_MS &&
-          leadTime <= MAX_LEAD_TIME_MS;
+          Number.isFinite(leadTime) && leadTime >= MIN_LEAD_TIME_MS && leadTime <= MAX_LEAD_TIME_MS;
         const expectedTrigger = calendarDateToTimestamp(occurrence) - leadTime;
         const shouldSchedule = inRange && expectedTrigger > now;
 

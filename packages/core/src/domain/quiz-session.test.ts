@@ -61,7 +61,11 @@ describe('recordSelfAnswer and phase progression (Requirements 8.3, 8.5)', () =>
   it('records a valid self-answer and stays in self_answer until both answer all', () => {
     let state = freshState();
     state = expectOk(
-      recordSelfAnswer(state, QUESTIONS, { accountId: A, questionId: Q1, answer: { kind: 'choice', value: 'red' } }),
+      recordSelfAnswer(state, QUESTIONS, {
+        accountId: A,
+        questionId: Q1,
+        answer: { kind: 'choice', value: 'red' },
+      }),
     );
     expect(state.selfAnswers).toHaveLength(1);
     expect(state.session.phase).toBe('self_answer');
@@ -70,29 +74,71 @@ describe('recordSelfAnswer and phase progression (Requirements 8.3, 8.5)', () =>
 
   it('transitions to guessing only when both partners answered every question', () => {
     let state = freshState();
-    state = expectOk(recordSelfAnswer(state, QUESTIONS, { accountId: A, questionId: Q1, answer: { kind: 'choice', value: 'red' } }));
-    state = expectOk(recordSelfAnswer(state, QUESTIONS, { accountId: A, questionId: Q2, answer: { kind: 'text', value: 'pizza' } }));
+    state = expectOk(
+      recordSelfAnswer(state, QUESTIONS, {
+        accountId: A,
+        questionId: Q1,
+        answer: { kind: 'choice', value: 'red' },
+      }),
+    );
+    state = expectOk(
+      recordSelfAnswer(state, QUESTIONS, {
+        accountId: A,
+        questionId: Q2,
+        answer: { kind: 'text', value: 'pizza' },
+      }),
+    );
     expect(state.session.phase).toBe('self_answer');
-    state = expectOk(recordSelfAnswer(state, QUESTIONS, { accountId: B, questionId: Q1, answer: { kind: 'choice', value: 'blue' } }));
+    state = expectOk(
+      recordSelfAnswer(state, QUESTIONS, {
+        accountId: B,
+        questionId: Q1,
+        answer: { kind: 'choice', value: 'blue' },
+      }),
+    );
     expect(state.session.phase).toBe('self_answer');
-    state = expectOk(recordSelfAnswer(state, QUESTIONS, { accountId: B, questionId: Q2, answer: { kind: 'text', value: 'tacos' } }));
+    state = expectOk(
+      recordSelfAnswer(state, QUESTIONS, {
+        accountId: B,
+        questionId: Q2,
+        answer: { kind: 'text', value: 'tacos' },
+      }),
+    );
     expect(state.session.phase).toBe('guessing');
     expect(bothAnsweredAll(state, [Q1, Q2])).toBe(true);
   });
 
   it('rejects duplicate, invalid, unknown-question, and wrong-phase submissions, retaining prior state', () => {
     let state = freshState();
-    state = expectOk(recordSelfAnswer(state, QUESTIONS, { accountId: A, questionId: Q1, answer: { kind: 'choice', value: 'red' } }));
+    state = expectOk(
+      recordSelfAnswer(state, QUESTIONS, {
+        accountId: A,
+        questionId: Q1,
+        answer: { kind: 'choice', value: 'red' },
+      }),
+    );
 
-    const dup = recordSelfAnswer(state, QUESTIONS, { accountId: A, questionId: Q1, answer: { kind: 'choice', value: 'blue' } });
+    const dup = recordSelfAnswer(state, QUESTIONS, {
+      accountId: A,
+      questionId: Q1,
+      answer: { kind: 'choice', value: 'blue' },
+    });
     expect(dup.ok).toBe(false);
     if (!dup.ok) expect(dup.error.code).toBe('ALREADY_ANSWERED');
 
-    const invalid = recordSelfAnswer(state, QUESTIONS, { accountId: A, questionId: Q2, answer: { kind: 'text', value: '' } });
+    const invalid = recordSelfAnswer(state, QUESTIONS, {
+      accountId: A,
+      questionId: Q2,
+      answer: { kind: 'text', value: '' },
+    });
     expect(invalid.ok).toBe(false);
     if (!invalid.ok) expect(invalid.error.code).toBe('INVALID_ANSWER');
 
-    const unknown = recordSelfAnswer(state, QUESTIONS, { accountId: A, questionId: questionId('nope'), answer: { kind: 'text', value: 'x' } });
+    const unknown = recordSelfAnswer(state, QUESTIONS, {
+      accountId: A,
+      questionId: questionId('nope'),
+      answer: { kind: 'text', value: 'x' },
+    });
     expect(unknown.ok).toBe(false);
     if (!unknown.ok) expect(unknown.error.code).toBe('QUESTION_NOT_FOUND');
 
@@ -104,10 +150,34 @@ describe('recordSelfAnswer and phase progression (Requirements 8.3, 8.5)', () =>
 describe('recordGuess, scoring, and completion (Requirements 8.7, 8.8)', () => {
   function guessingState(): QuizSessionState {
     let state = freshState();
-    state = expectOk(recordSelfAnswer(state, QUESTIONS, { accountId: A, questionId: Q1, answer: { kind: 'choice', value: 'red' } }));
-    state = expectOk(recordSelfAnswer(state, QUESTIONS, { accountId: A, questionId: Q2, answer: { kind: 'text', value: 'Pizza' } }));
-    state = expectOk(recordSelfAnswer(state, QUESTIONS, { accountId: B, questionId: Q1, answer: { kind: 'choice', value: 'blue' } }));
-    state = expectOk(recordSelfAnswer(state, QUESTIONS, { accountId: B, questionId: Q2, answer: { kind: 'text', value: 'tacos' } }));
+    state = expectOk(
+      recordSelfAnswer(state, QUESTIONS, {
+        accountId: A,
+        questionId: Q1,
+        answer: { kind: 'choice', value: 'red' },
+      }),
+    );
+    state = expectOk(
+      recordSelfAnswer(state, QUESTIONS, {
+        accountId: A,
+        questionId: Q2,
+        answer: { kind: 'text', value: 'Pizza' },
+      }),
+    );
+    state = expectOk(
+      recordSelfAnswer(state, QUESTIONS, {
+        accountId: B,
+        questionId: Q1,
+        answer: { kind: 'choice', value: 'blue' },
+      }),
+    );
+    state = expectOk(
+      recordSelfAnswer(state, QUESTIONS, {
+        accountId: B,
+        questionId: Q2,
+        answer: { kind: 'text', value: 'tacos' },
+      }),
+    );
     return state;
   }
 
@@ -116,14 +186,38 @@ describe('recordGuess, scoring, and completion (Requirements 8.7, 8.8)', () => {
     expect(state.session.phase).toBe('guessing');
 
     // A guesses B's answers: B answered blue / tacos.
-    state = expectOk(recordGuess(state, QUESTIONS, { accountId: A, questionId: Q1, guess: { kind: 'choice', value: 'blue' } }));
-    state = expectOk(recordGuess(state, QUESTIONS, { accountId: A, questionId: Q2, guess: { kind: 'text', value: '  TACOS ' } }));
+    state = expectOk(
+      recordGuess(state, QUESTIONS, {
+        accountId: A,
+        questionId: Q1,
+        guess: { kind: 'choice', value: 'blue' },
+      }),
+    );
+    state = expectOk(
+      recordGuess(state, QUESTIONS, {
+        accountId: A,
+        questionId: Q2,
+        guess: { kind: 'text', value: '  TACOS ' },
+      }),
+    );
     expect(state.session.scores[A]).toBe(2); // both correct (case/whitespace insensitive)
 
     // B guesses A's answers: A answered red / Pizza. B gets one right.
-    state = expectOk(recordGuess(state, QUESTIONS, { accountId: B, questionId: Q1, guess: { kind: 'choice', value: 'red' } }));
+    state = expectOk(
+      recordGuess(state, QUESTIONS, {
+        accountId: B,
+        questionId: Q1,
+        guess: { kind: 'choice', value: 'red' },
+      }),
+    );
     expect(state.session.phase).toBe('guessing');
-    state = expectOk(recordGuess(state, QUESTIONS, { accountId: B, questionId: Q2, guess: { kind: 'text', value: 'sushi' } }));
+    state = expectOk(
+      recordGuess(state, QUESTIONS, {
+        accountId: B,
+        questionId: Q2,
+        guess: { kind: 'text', value: 'sushi' },
+      }),
+    );
 
     expect(state.session.phase).toBe('complete');
     expect(state.session.scores[B]).toBe(1);
@@ -132,10 +226,34 @@ describe('recordGuess, scoring, and completion (Requirements 8.7, 8.8)', () => {
 
   it('builds full results with both self-answers, guesses, and scores', () => {
     let state = guessingState();
-    state = expectOk(recordGuess(state, QUESTIONS, { accountId: A, questionId: Q1, guess: { kind: 'choice', value: 'blue' } }));
-    state = expectOk(recordGuess(state, QUESTIONS, { accountId: A, questionId: Q2, guess: { kind: 'text', value: 'tacos' } }));
-    state = expectOk(recordGuess(state, QUESTIONS, { accountId: B, questionId: Q1, guess: { kind: 'choice', value: 'red' } }));
-    state = expectOk(recordGuess(state, QUESTIONS, { accountId: B, questionId: Q2, guess: { kind: 'text', value: 'pizza' } }));
+    state = expectOk(
+      recordGuess(state, QUESTIONS, {
+        accountId: A,
+        questionId: Q1,
+        guess: { kind: 'choice', value: 'blue' },
+      }),
+    );
+    state = expectOk(
+      recordGuess(state, QUESTIONS, {
+        accountId: A,
+        questionId: Q2,
+        guess: { kind: 'text', value: 'tacos' },
+      }),
+    );
+    state = expectOk(
+      recordGuess(state, QUESTIONS, {
+        accountId: B,
+        questionId: Q1,
+        guess: { kind: 'choice', value: 'red' },
+      }),
+    );
+    state = expectOk(
+      recordGuess(state, QUESTIONS, {
+        accountId: B,
+        questionId: Q2,
+        guess: { kind: 'text', value: 'pizza' },
+      }),
+    );
 
     const results = buildQuizResults(state, QUESTIONS);
     expect(results.questions).toHaveLength(2);
@@ -149,7 +267,11 @@ describe('recordGuess, scoring, and completion (Requirements 8.7, 8.8)', () => {
 
   it('rejects a guess submitted in the wrong phase', () => {
     const state = freshState(); // self_answer phase
-    const res = recordGuess(state, QUESTIONS, { accountId: A, questionId: Q1, guess: { kind: 'choice', value: 'red' } });
+    const res = recordGuess(state, QUESTIONS, {
+      accountId: A,
+      questionId: Q1,
+      guess: { kind: 'choice', value: 'red' },
+    });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error.code).toBe('WRONG_PHASE');
   });
@@ -200,7 +322,9 @@ describe('findQuizCatalogViolations (Requirement 8.9)', () => {
         { id: quizId('qa'), theme: 'A', questionIds: [Q1] },
         { id: quizId('qb'), theme: 'B', questionIds: [Q1] },
       ],
-      questions: [{ id: Q1, quizId: quizId('qa'), type: 'short_answer', prompt: 'p1' }] as QuizQuestion[],
+      questions: [
+        { id: Q1, quizId: quizId('qa'), type: 'short_answer', prompt: 'p1' },
+      ] as QuizQuestion[],
     };
     const violations = findQuizCatalogViolations(catalog);
     expect(violations).toHaveLength(1);
@@ -212,7 +336,9 @@ describe('findQuizCatalogViolations (Requirement 8.9)', () => {
   it('flags an orphaned question that belongs to no quiz', () => {
     const catalog = {
       quizzes: [] as QuizDef[],
-      questions: [{ id: Q1, quizId: quizId('qa'), type: 'short_answer', prompt: 'p1' }] as QuizQuestion[],
+      questions: [
+        { id: Q1, quizId: quizId('qa'), type: 'short_answer', prompt: 'p1' },
+      ] as QuizQuestion[],
     };
     const violations = findQuizCatalogViolations(catalog);
     expect(violations).toHaveLength(1);
@@ -223,8 +349,20 @@ describe('findQuizCatalogViolations (Requirement 8.9)', () => {
 describe('buildQuizSessionView self-answer redaction (Requirement 8.4)', () => {
   function bothAnsweredOne(): QuizSessionState {
     let state = freshState();
-    state = expectOk(recordSelfAnswer(state, QUESTIONS, { accountId: A, questionId: Q1, answer: { kind: 'choice', value: 'red' } }));
-    state = expectOk(recordSelfAnswer(state, QUESTIONS, { accountId: B, questionId: Q1, answer: { kind: 'choice', value: 'blue' } }));
+    state = expectOk(
+      recordSelfAnswer(state, QUESTIONS, {
+        accountId: A,
+        questionId: Q1,
+        answer: { kind: 'choice', value: 'red' },
+      }),
+    );
+    state = expectOk(
+      recordSelfAnswer(state, QUESTIONS, {
+        accountId: B,
+        questionId: Q1,
+        answer: { kind: 'choice', value: 'blue' },
+      }),
+    );
     return state;
   }
 
@@ -244,8 +382,20 @@ describe('buildQuizSessionView self-answer redaction (Requirement 8.4)', () => {
     // Complete all self-answers to reach guessing phase.
     let state = freshState();
     for (const acct of [A, B]) {
-      state = expectOk(recordSelfAnswer(state, QUESTIONS, { accountId: acct, questionId: Q1, answer: { kind: 'choice', value: 'red' } }));
-      state = expectOk(recordSelfAnswer(state, QUESTIONS, { accountId: acct, questionId: Q2, answer: { kind: 'text', value: 'pizza' } }));
+      state = expectOk(
+        recordSelfAnswer(state, QUESTIONS, {
+          accountId: acct,
+          questionId: Q1,
+          answer: { kind: 'choice', value: 'red' },
+        }),
+      );
+      state = expectOk(
+        recordSelfAnswer(state, QUESTIONS, {
+          accountId: acct,
+          questionId: Q2,
+          answer: { kind: 'text', value: 'pizza' },
+        }),
+      );
     }
     expect(state.session.phase).toBe('guessing');
 

@@ -42,8 +42,7 @@ const PLAYERS: readonly [AccountId, AccountId] = [accountId('alice'), accountId(
 const STRANGER = accountId('carol');
 
 /** Snapshot for structural-equality comparison (deep clone of plain data). */
-const clone = (state: TicTacToeState): TicTacToeState =>
-  structuredClone(state) as TicTacToeState;
+const clone = (state: TicTacToeState): TicTacToeState => structuredClone(state) as TicTacToeState;
 
 /**
  * Build a *reachable* Tic-Tac-Toe state by folding a sequence of proposed cell

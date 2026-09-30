@@ -10,3 +10,5 @@
 export * from './auth-module.js';
 export * from './pairing-module.js';
 export * from './supabase-ports.js';
+export * from './profile-module.js';
+export * from './profile-supabase-ports.js';

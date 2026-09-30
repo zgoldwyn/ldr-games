@@ -63,8 +63,7 @@ function harness(
 
   const ports: PairingPorts = {
     createInvitation:
-      options.createInvitation ??
-      (async () => ({ ok: true, invitation: invitationPayload() })),
+      options.createInvitation ?? (async () => ({ ok: true, invitation: invitationPayload() })),
     acceptInvitation:
       options.acceptInvitation ??
       (async (code) => {

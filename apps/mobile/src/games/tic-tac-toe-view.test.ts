@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { accountId } from '@ldr/core';
 
 import {
+  TIC_TAC_TOE_BOARD_PADDING,
+  TIC_TAC_TOE_CELL_GAP,
   markForCell,
   markForPlayer,
   ticTacToeBoardLayout,
@@ -25,16 +27,18 @@ describe('tic-tac-toe presentation', () => {
   it('calculates three explicit square cells for each supported phone width', () => {
     expect(ticTacToeBoardLayout(402)).toEqual({
       boardSize: 288,
-      cellSize: 96,
+      cellSize: 81.33333333333333,
     });
     expect(ticTacToeBoardLayout(440)).toEqual({
       boardSize: 288,
-      cellSize: 96,
+      cellSize: 81.33333333333333,
     });
     expect(ticTacToeBoardLayout(320)).toEqual({
       boardSize: 256,
-      cellSize: 85.33333333333333,
+      cellSize: 70.66666666666667,
     });
+    expect(TIC_TAC_TOE_BOARD_PADDING).toBe(12);
+    expect(TIC_TAC_TOE_CELL_GAP).toBe(10);
   });
 
   it('uses clear turn language instead of raw lifecycle values', () => {
@@ -56,6 +60,16 @@ describe('tic-tac-toe presentation', () => {
         self: A,
       }).title,
     ).toBe('Partner’s turn');
+    expect(
+      ticTacToeStatus({
+        sessionState: 'active',
+        boardStatus: 'in_progress',
+        currentTurn: B,
+        winner: null,
+        self: A,
+        partnerName: 'Sam',
+      }).title,
+    ).toBe('Sam’s turn');
   });
 
   it('describes each terminal outcome without exposing the word terminal', () => {

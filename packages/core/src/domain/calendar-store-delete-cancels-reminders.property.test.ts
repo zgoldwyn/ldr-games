@@ -62,12 +62,11 @@ describe('calendar-store: deleting a date cancels its reminders (property)', () 
     ),
   });
 
-  const scenarioArb = fc
-    .record({
-      dates: fc.array(dateSpecArb, { minLength: 1, maxLength: 6 }),
-      // [0,1) selector resolved against the built date set to pick the target.
-      selector: fc.double({ min: 0, max: 1, noNaN: true, maxExcluded: true }),
-    });
+  const scenarioArb = fc.record({
+    dates: fc.array(dateSpecArb, { minLength: 1, maxLength: 6 }),
+    // [0,1) selector resolved against the built date set to pick the target.
+    selector: fc.double({ min: 0, max: 1, noNaN: true, maxExcluded: true }),
+  });
 
   interface BuiltCalendar {
     readonly state: CalendarState;

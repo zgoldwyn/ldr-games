@@ -4,11 +4,7 @@ import * as fc from 'fast-check';
 
 import { questionId, quizId } from './common.js';
 import type { QuizDef, QuizQuestion } from './quiz.js';
-import {
-  findQuizCatalogViolations,
-  isQuizCatalogValid,
-  type QuizCatalog,
-} from './quiz-session.js';
+import { findQuizCatalogViolations, isQuizCatalogValid, type QuizCatalog } from './quiz-session.js';
 
 /**
  * Property 32 (task 7.9) — Each quiz question belongs to exactly one quiz

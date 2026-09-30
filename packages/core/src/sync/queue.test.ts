@@ -88,14 +88,12 @@ describe('SyncQueue', () => {
   });
 
   it('acknowledge removes only the acknowledged seqs and keeps the rest ordered', () => {
-    const q = enqueueAll(emptySyncQueue(), [
-      change('a', 1),
-      change('b', 2),
-      change('c', 3),
-    ]);
+    const q = enqueueAll(emptySyncQueue(), [change('a', 1), change('b', 2), change('c', 3)]);
 
     // Simulate writing the first two, then a new change arriving.
-    const snapshot = pendingEntries(q).slice(0, 2).map((e) => e.seq);
+    const snapshot = pendingEntries(q)
+      .slice(0, 2)
+      .map((e) => e.seq);
     const withNew = enqueue(q, change('d', 4));
     const after = acknowledge(withNew, snapshot);
 

@@ -325,10 +325,7 @@ describe('Sync Module — reconnect drain (Req 5.5)', () => {
     const h = harness();
     await h.module.applyChange(change('d1'));
 
-    const [first, second] = await Promise.all([
-      h.module.drainQueue(),
-      h.module.drainQueue(),
-    ]);
+    const [first, second] = await Promise.all([h.module.drainQueue(), h.module.drainQueue()]);
 
     // Exactly one of them did the work; neither double-submitted.
     const did = [first, second].filter((o) => o.applied.length > 0);

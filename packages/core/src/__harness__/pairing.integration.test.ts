@@ -87,11 +87,7 @@ describe.skipIf(cfg === null)('Pairing Edge Functions (integration)', () => {
 
   /** The account's current pairing_id straight from the table. */
   async function pairingIdOf(id: string): Promise<string | null> {
-    const { data, error } = await admin
-      .from('accounts')
-      .select('pairing_id')
-      .eq('id', id)
-      .single();
+    const { data, error } = await admin.from('accounts').select('pairing_id').eq('id', id).single();
     expect(error).toBeNull();
     return (data?.pairing_id as string | null) ?? null;
   }
@@ -178,18 +174,8 @@ describe.skipIf(cfg === null)('Pairing Edge Functions (integration)', () => {
     // Both invitees race on the SAME invitation. Whichever transaction reaches
     // the locked invitation row first wins; the other must be rejected.
     const [r1, r2] = await Promise.all([
-      callFunction<PairingOk & FunctionErrorBody>(
-        config,
-        'accept-invitation',
-        { code },
-        j1.token,
-      ),
-      callFunction<PairingOk & FunctionErrorBody>(
-        config,
-        'accept-invitation',
-        { code },
-        j2.token,
-      ),
+      callFunction<PairingOk & FunctionErrorBody>(config, 'accept-invitation', { code }, j1.token),
+      callFunction<PairingOk & FunctionErrorBody>(config, 'accept-invitation', { code }, j2.token),
     ]);
 
     const statuses = [r1.status, r2.status].sort((a, b) => a - b);
@@ -199,9 +185,7 @@ describe.skipIf(cfg === null)('Pairing Edge Functions (integration)', () => {
     expect([409]).toContain(statuses[1]);
 
     const loser = r1.status === 201 ? r2 : r1;
-    expect(['INVITATION_ALREADY_CONSUMED', 'ALREADY_PAIRED']).toContain(
-      loser.body.error?.code,
-    );
+    expect(['INVITATION_ALREADY_CONSUMED', 'ALREADY_PAIRED']).toContain(loser.body.error?.code);
 
     // The invariant: the inviter ends up in exactly ONE active pairing.
     const { data: pairings } = await admin
@@ -265,9 +249,7 @@ describe.skipIf(cfg === null)('Pairing Edge Functions (integration)', () => {
       .eq('status', 'active');
     expect(pairings ?? []).toHaveLength(1);
 
-    const paired = [await pairingIdOf(j1.id), await pairingIdOf(j2.id)].filter(
-      (p) => p !== null,
-    );
+    const paired = [await pairingIdOf(j1.id), await pairingIdOf(j2.id)].filter((p) => p !== null);
     expect(paired).toHaveLength(1);
   });
 
@@ -433,9 +415,7 @@ describe.skipIf(cfg === null)('Pairing Edge Functions (integration)', () => {
       (n) => (n.payload as { type?: string })?.type === 'pairing_ended',
     );
     expect(pairingEnded).toHaveLength(2);
-    expect(new Set(pairingEnded.map((n) => n.recipient_account_id))).toEqual(
-      new Set([a.id, b.id]),
-    );
+    expect(new Set(pairingEnded.map((n) => n.recipient_account_id))).toEqual(new Set([a.id, b.id]));
     for (const note of pairingEnded) {
       expect(note.delivered_at).toBeNull();
     }
@@ -450,9 +430,7 @@ describe.skipIf(cfg === null)('Pairing Edge Functions (integration)', () => {
       const forSession = sessionEnded.filter(
         (n) => (n.payload as { sessionId?: string })?.sessionId === sessionId,
       );
-      expect(new Set(forSession.map((n) => n.recipient_account_id))).toEqual(
-        new Set([a.id, b.id]),
-      );
+      expect(new Set(forSession.map((n) => n.recipient_account_id))).toEqual(new Set([a.id, b.id]));
     }
 
     // Req 4.4 (a former partner losing read access to pairing data) is asserted

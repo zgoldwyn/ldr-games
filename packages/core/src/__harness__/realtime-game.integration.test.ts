@@ -157,10 +157,7 @@ describe.skipIf(cfg === null)('Real-time game wiring (integration)', () => {
   }
 
   /** Invite, then have both partners join, returning the active session. */
-  async function activeSession(
-    a: { token: string },
-    b: { token: string },
-  ): Promise<RTSessionView> {
+  async function activeSession(a: { token: string }, b: { token: string }): Promise<RTSessionView> {
     const invited = await callFunction<{ session: RTSessionView }>(
       config,
       'rt-move',
@@ -242,6 +239,56 @@ describe.skipIf(cfg === null)('Real-time game wiring (integration)', () => {
       lonely.token,
     );
     expect(lonelyCatalog.status).toBe(409);
+  });
+
+  it('publishes Word Chain and can create its pending session', async () => {
+    const a = await member();
+    const b = await member();
+    await pair(a.token, b.token);
+
+    const games = await callFunction<{ games: { id: string; name: string }[] }>(
+      config,
+      'rt-move',
+      { action: 'games' },
+      a.token,
+    );
+    expect(games.status).toBe(200);
+    expect(games.body.games).toContainEqual({ id: 'word-chain', name: 'Word Chain' });
+
+    const invited = await callFunction<{ session: RTSessionView }>(
+      config,
+      'rt-move',
+      { action: 'invite', gameId: 'word-chain' },
+      a.token,
+    );
+    expect(invited.status).toBe(201);
+    expect(invited.body.session).toMatchObject({
+      gameId: 'word-chain',
+      state: 'pending',
+      gameState: {},
+    });
+
+    const sessionId = invited.body.session.id;
+    const joinedA = await callFunction<{ session: RTSessionView }>(
+      config,
+      'rt-move',
+      { action: 'join', sessionId },
+      a.token,
+    );
+    expect(joinedA.status).toBe(200);
+
+    const joinedB = await callFunction<{ session: RTSessionView }>(
+      config,
+      'rt-move',
+      { action: 'join', sessionId },
+      b.token,
+    );
+    expect(joinedB.status).toBe(200);
+    expect(joinedB.body.session).toMatchObject({
+      gameId: 'word-chain',
+      state: 'active',
+      gameState: { game: 'word-chain', status: 'in_progress' },
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -346,8 +393,16 @@ describe.skipIf(cfg === null)('Real-time game wiring (integration)', () => {
 
     // Both partners read the SAME authoritative row, so "identical state" is
     // asserted by reading it back as each of them.
-    const asA = await a.client.from('rt_sessions').select('game_state').eq('id', sessionId).single();
-    const asB = await b.client.from('rt_sessions').select('game_state').eq('id', sessionId).single();
+    const asA = await a.client
+      .from('rt_sessions')
+      .select('game_state')
+      .eq('id', sessionId)
+      .single();
+    const asB = await b.client
+      .from('rt_sessions')
+      .select('game_state')
+      .eq('id', sessionId)
+      .single();
     expect(asA.error).toBeNull();
     expect(asB.error).toBeNull();
     expect(asA.data?.game_state).toEqual(asB.data?.game_state);
@@ -379,7 +434,11 @@ describe.skipIf(cfg === null)('Real-time game wiring (integration)', () => {
     const moved = await callFunction<{ session: RTSessionView }>(
       config,
       'rt-move',
-      { action: 'move', sessionId: session.id, move: { type: 'place', cell: 0, game: 'tic-tac-toe' } },
+      {
+        action: 'move',
+        sessionId: session.id,
+        move: { type: 'place', cell: 0, game: 'tic-tac-toe' },
+      },
       mover.token,
     );
     expect(moved.status).toBe(200);
@@ -415,7 +474,11 @@ describe.skipIf(cfg === null)('Real-time game wiring (integration)', () => {
     await callFunction(
       config,
       'rt-move',
-      { action: 'move', sessionId: session.id, move: { type: 'place', cell: 0, game: 'tic-tac-toe' } },
+      {
+        action: 'move',
+        sessionId: session.id,
+        move: { type: 'place', cell: 0, game: 'tic-tac-toe' },
+      },
       mover.token,
     );
 
@@ -439,7 +502,11 @@ describe.skipIf(cfg === null)('Real-time game wiring (integration)', () => {
       const res = await callFunction<FunctionErrorBody>(
         config,
         'rt-move',
-        { action: 'move', sessionId: session.id, move: { type: 'place', cell, game: 'tic-tac-toe' } },
+        {
+          action: 'move',
+          sessionId: session.id,
+          move: { type: 'place', cell, game: 'tic-tac-toe' },
+        },
         token,
       );
       expect(res.status, label).toBe(400);
@@ -474,7 +541,11 @@ describe.skipIf(cfg === null)('Real-time game wiring (integration)', () => {
     await callFunction(
       config,
       'rt-move',
-      { action: 'move', sessionId: session.id, move: { type: 'place', cell: 4, game: 'tic-tac-toe' } },
+      {
+        action: 'move',
+        sessionId: session.id,
+        move: { type: 'place', cell: 4, game: 'tic-tac-toe' },
+      },
       mover.token,
     );
     const atPause = await admin
@@ -550,9 +621,7 @@ describe.skipIf(cfg === null)('Real-time game wiring (integration)', () => {
       .from('notifications')
       .select('recipient_account_id, payload')
       .eq('recipient_account_id', a.id);
-    expect(
-      (notes ?? []).some((n) => JSON.stringify(n.payload).includes(session.id)),
-    ).toBe(true);
+    expect((notes ?? []).some((n) => JSON.stringify(n.payload).includes(session.id))).toBe(true);
 
     // Req 6.7: rejoin resumes from exactly the preserved state.
     const resumed = await callFunction<{ resumed: boolean; session: RTSessionView }>(

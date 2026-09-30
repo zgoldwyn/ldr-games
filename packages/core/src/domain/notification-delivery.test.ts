@@ -52,9 +52,9 @@ describe('shouldDeliver', () => {
   });
 
   it('withholds a notification whose category is disabled (Req 11.3)', () => {
-    expect(
-      shouldDeliver(makeNotification({ category: 'quiz' }), makeSettings(['quiz'])),
-    ).toBe(false);
+    expect(shouldDeliver(makeNotification({ category: 'quiz' }), makeSettings(['quiz']))).toBe(
+      false,
+    );
   });
 
   it('withholds an acknowledged notification (Req 11.6)', () => {

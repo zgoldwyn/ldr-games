@@ -20,7 +20,11 @@
       "icon": "./assets/icon.png",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "CADisableMinimumFrameDurationOnPhone": true
+        "CADisableMinimumFrameDurationOnPhone": true,
+        "NSLocalNetworkUsageDescription": "LDR Companion connects to the Ember & Tide game server running on your Mac during local development.",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
       }
     },
     "android": {
@@ -29,7 +33,7 @@
     "plugins": ["expo-status-bar", "expo-secure-store", "expo-notifications"],
     "extra": {
       "supabaseUrl": "https://xbtnbrzwnarbqrqsxdch.supabase.co",
-      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhidG5icnp3bmFyYnFycXN4ZGNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc3NzUxNTEsImV4cCI6MjEwMzM1MTE1MX0.Y1WPMUBk4pMh2UueiJ512E5bJD_5-XTnnCyapwlu7ro"
+      "supabaseAnonKey": "sb_publishable_zn63Az1gIyofJTV8D4NozA_41AsHoAx"
     }
   }
 }

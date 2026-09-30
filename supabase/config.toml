@@ -544,6 +544,14 @@ verify_jwt = true
 import_map = "./functions/deno.json"
 entrypoint = "./functions/battleship-place/index.ts"
 
+[functions.draw-together]
+enabled = true
+# Word choices and answers are server-private. This endpoint identifies the
+# drawer/guesser from the verified token and is the only scoring write path.
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/draw-together/index.ts"
+
 [functions.quiz]
 enabled = true
 # Quiz starts and answer/guess submissions are server-authoritative and tied to

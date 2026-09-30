@@ -31,9 +31,7 @@ export function validateAnswer(q: QuizQuestion, answer: Answer): boolean {
   switch (q.type) {
     case 'multiple_choice':
       return (
-        answer.kind === 'choice' &&
-        Array.isArray(q.choices) &&
-        q.choices.includes(answer.value)
+        answer.kind === 'choice' && Array.isArray(q.choices) && q.choices.includes(answer.value)
       );
     case 'short_answer':
       return (
@@ -84,7 +82,7 @@ export function answersMatch(q: QuizQuestion, self: Answer, guess: Answer): bool
 export function scoreSession(session: QuizSession): { partnerA: number; partnerB: number } {
   const accounts = (Object.keys(session.scores) as AccountId[]).sort();
   const scoreFor = (account: AccountId | undefined): number =>
-    account === undefined ? 0 : session.scores[account] ?? 0;
+    account === undefined ? 0 : (session.scores[account] ?? 0);
   return {
     partnerA: scoreFor(accounts[0]),
     partnerB: scoreFor(accounts[1]),

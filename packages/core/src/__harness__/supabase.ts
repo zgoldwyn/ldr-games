@@ -118,7 +118,10 @@ export async function createTestAccount(admin: SupabaseClient): Promise<TestAcco
  * RLS-scoped client. The returned client's requests run as the `authenticated`
  * role with the account's JWT (including the `app_metadata.epoch` claim).
  */
-export async function signIn(cfg: IntegrationConfig, account: TestAccount): Promise<SupabaseClient> {
+export async function signIn(
+  cfg: IntegrationConfig,
+  account: TestAccount,
+): Promise<SupabaseClient> {
   const client = createAnonClient(cfg);
   const { error } = await client.auth.signInWithPassword({
     email: account.email,

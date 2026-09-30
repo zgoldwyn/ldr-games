@@ -89,11 +89,7 @@ export interface AuthPorts {
   readonly register: (email: string, password: string) => Promise<RegisterOutcome>;
 
   /** POST the `auth-login` Edge Function (Req 2.1, 2.2, 2.3, 2.7-2.9). */
-  readonly login: (
-    email: string,
-    password: string,
-    client: ClientInfo,
-  ) => Promise<LoginOutcome>;
+  readonly login: (email: string, password: string, client: ClientInfo) => Promise<LoginOutcome>;
 
   /**
    * Install the issued tokens on the underlying Supabase client so subsequent
@@ -139,10 +135,7 @@ export interface AuthenticationModule {
 /** Build an authentication module over the given ports. */
 export function createAuthenticationModule(ports: AuthPorts): AuthenticationModule {
   return {
-    async register(
-      email: string,
-      password: string,
-    ): Promise<Result<AccountId, RegistrationError>> {
+    async register(email: string, password: string): Promise<Result<AccountId, RegistrationError>> {
       // Req 1.5: name every missing field rather than failing on the first.
       const missing: string[] = [];
       if (email.length === 0) missing.push('email');

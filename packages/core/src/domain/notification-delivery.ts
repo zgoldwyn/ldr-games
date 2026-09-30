@@ -22,10 +22,7 @@ export const NOTIFICATION_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
  * A category is enabled unless the recipient has explicitly listed it in
  * `disabledCategories` (Requirement 11.3).
  */
-export function isCategoryEnabled(
-  n: Notification,
-  settings: NotificationSettings,
-): boolean {
+export function isCategoryEnabled(n: Notification, settings: NotificationSettings): boolean {
   return !settings.disabledCategories.includes(n.category);
 }
 
@@ -38,10 +35,7 @@ export function isCategoryEnabled(
  * acknowledged. Once acknowledged, a notification is considered delivered and
  * is withheld from subsequent sessions (Requirement 11.6).
  */
-export function shouldDeliver(
-  n: Notification,
-  settings: NotificationSettings,
-): boolean {
+export function shouldDeliver(n: Notification, settings: NotificationSettings): boolean {
   return isCategoryEnabled(n, settings) && n.acknowledgedAt === null;
 }
 

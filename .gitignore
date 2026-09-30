@@ -34,6 +34,9 @@ web-build/
 apps/mobile/ios/
 apps/mobile/android/
 
+# Local authoritative game progress (contains hashed pairing identifiers)
+apps/game-server/data/
+
 # Electron
 apps/desktop/out/
 apps/desktop/release/

@@ -25,10 +25,7 @@ import type { DataChange, HLCTimestamp } from './sync.js';
  * `physicalNow` (defaulting to 0 so a clock can be created deterministically in
  * tests) with a zero counter.
  */
-export function initialClock(
-  originAccountId: AccountId,
-  physicalNow = 0,
-): HLCTimestamp {
+export function initialClock(originAccountId: AccountId, physicalNow = 0): HLCTimestamp {
   return { physical: physicalNow, counter: 0, originAccountId };
 }
 
@@ -39,10 +36,7 @@ export function initialClock(
  * resets to 0; if it did not (same or stale physical reading) the counter
  * increments so the new timestamp still strictly follows the previous one.
  */
-export function hlcLocalEvent(
-  state: HLCTimestamp,
-  physicalNow: number,
-): HLCTimestamp {
+export function hlcLocalEvent(state: HLCTimestamp, physicalNow: number): HLCTimestamp {
   const physical = Math.max(state.physical, physicalNow);
   const counter = physical === state.physical ? state.counter + 1 : 0;
   return { physical, counter, originAccountId: state.originAccountId };

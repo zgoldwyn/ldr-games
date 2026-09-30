@@ -71,9 +71,9 @@ describe('computeLockout (Requirement 2.3)', () => {
   it('does not lock when fewer than 5 failures have occurred', () => {
     fc.assert(
       fc.property(
-        fc.integer({ min: 0, max: LOCKOUT_THRESHOLD - 1 }).chain((n) =>
-          sortedFailureTimes(n, 10 * LOCKOUT_WINDOW_MS),
-        ),
+        fc
+          .integer({ min: 0, max: LOCKOUT_THRESHOLD - 1 })
+          .chain((n) => sortedFailureTimes(n, 10 * LOCKOUT_WINDOW_MS)),
         fc.integer({ min: 0, max: 10 * LOCKOUT_WINDOW_MS }),
         (failureTimes, extra) => {
           const now = (failureTimes[failureTimes.length - 1] ?? BASE) + extra;
@@ -124,9 +124,7 @@ describe('computeLockout (Requirement 2.3)', () => {
         fc.integer({ min: 0, max: LOCKOUT_DURATION_MS }),
         (overshoot, interior, sinceLast) => {
           const last = BASE + LOCKOUT_WINDOW_MS + overshoot;
-          const failureTimes = [BASE, ...interior.map((o) => BASE + o), last].sort(
-            (a, b) => a - b,
-          );
+          const failureTimes = [BASE, ...interior.map((o) => BASE + o), last].sort((a, b) => a - b);
           const now = last + sinceLast;
 
           const status = computeLockout(failureTimes.map(fail), now);

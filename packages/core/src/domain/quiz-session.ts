@@ -143,9 +143,7 @@ export function bothAnsweredAll(
   state: QuizSessionState,
   questionIds: readonly QuestionId[],
 ): boolean {
-  return sessionPartners(state.session).every((p) =>
-    partnerAnsweredAll(state, p, questionIds),
-  );
+  return sessionPartners(state.session).every((p) => partnerAnsweredAll(state, p, questionIds));
 }
 
 /**
@@ -156,9 +154,7 @@ export function bothGuessedAll(
   state: QuizSessionState,
   questionIds: readonly QuestionId[],
 ): boolean {
-  return sessionPartners(state.session).every((p) =>
-    partnerGuessedAll(state, p, questionIds),
-  );
+  return sessionPartners(state.session).every((p) => partnerGuessedAll(state, p, questionIds));
 }
 
 // ---------------------------------------------------------------------------
@@ -184,7 +180,9 @@ export function recordSelfAnswer(
   submission: SelfAnswerSubmission,
 ): Result<QuizSessionState, QuizError> {
   if (state.session.phase !== 'self_answer') {
-    return err(quizErr('WRONG_PHASE', 'Self-answers may only be recorded in the self-answer phase.'));
+    return err(
+      quizErr('WRONG_PHASE', 'Self-answers may only be recorded in the self-answer phase.'),
+    );
   }
 
   const question = questions.find((q) => q.id === submission.questionId);
@@ -282,7 +280,8 @@ export function recordGuess(
     (sa) => sa.accountId !== submission.accountId && sa.questionId === submission.questionId,
   );
   const isMatch =
-    otherSelfAnswer !== undefined && answersMatch(question, otherSelfAnswer.answer, submission.guess);
+    otherSelfAnswer !== undefined &&
+    answersMatch(question, otherSelfAnswer.answer, submission.guess);
   const nextScores: Record<AccountId, number> = isMatch
     ? {
         ...state.session.scores,
@@ -369,7 +368,10 @@ export function checkNoActiveQuizSession(
   );
   if (hasActive) {
     return err(
-      quizErr('QUIZ_SESSION_IN_PROGRESS', 'An active quiz session already exists for this pairing.'),
+      quizErr(
+        'QUIZ_SESSION_IN_PROGRESS',
+        'An active quiz session already exists for this pairing.',
+      ),
     );
   }
   return ok(undefined);
@@ -443,7 +445,9 @@ export function findQuizCatalogViolations(catalog: QuizCatalog): QuizCatalogViol
       violations.push({ questionId, quizIds: [...quizIds].sort() });
     }
   }
-  return violations.sort((x, y) => (x.questionId < y.questionId ? -1 : x.questionId > y.questionId ? 1 : 0));
+  return violations.sort((x, y) =>
+    x.questionId < y.questionId ? -1 : x.questionId > y.questionId ? 1 : 0,
+  );
 }
 
 /**
@@ -483,10 +487,7 @@ export interface QuizSessionView {
  *
  * The viewer always sees their own submissions regardless of phase.
  */
-export function buildQuizSessionView(
-  state: QuizSessionState,
-  viewer: AccountId,
-): QuizSessionView {
+export function buildQuizSessionView(state: QuizSessionState, viewer: AccountId): QuizSessionView {
   if (state.session.phase === 'self_answer') {
     return {
       session: state.session,

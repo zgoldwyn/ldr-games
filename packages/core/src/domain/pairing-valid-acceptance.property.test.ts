@@ -78,8 +78,12 @@ describe('acceptInvitation valid acceptance (Requirement 3.2)', () => {
           expect(isOk(result)).toBe(true);
           if (!isOk(result)) return;
 
-          const { pairing, invitation: consumed, inviter: newInviter, invitee: newInvitee } =
-            result.value;
+          const {
+            pairing,
+            invitation: consumed,
+            inviter: newInviter,
+            invitee: newInvitee,
+          } = result.value;
 
           // The pairing links exactly the inviter and invitee accounts.
           expect(pairing.memberA).toBe(inviter.id);

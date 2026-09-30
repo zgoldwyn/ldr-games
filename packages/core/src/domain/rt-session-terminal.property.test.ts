@@ -5,11 +5,7 @@ import { ERROR_CODES } from '../errors.js';
 import { isErr, isOk } from '../result.js';
 import { type AccountId, accountId, gameId, pairingId, sessionId } from './common.js';
 import type { GameOutcome, GameState, RTSession, RTSessionState } from './game.js';
-import {
-  completedOutcome,
-  endedWithoutOutcome,
-  terminateSession,
-} from './rt-session.js';
+import { completedOutcome, endedWithoutOutcome, terminateSession } from './rt-session.js';
 
 /**
  * Property 23 (task 5.6) — Real-time terminal outcome is recorded and presented.

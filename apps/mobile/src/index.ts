@@ -10,6 +10,9 @@
 // Metro, which resolves literally and would look for a real `App.js` next to a
 // file that is actually `App.tsx`. TypeScript's `Bundler` module resolution
 // accepts the extensionless form, so both tools agree.
+// Must run before App imports @colyseus/sdk. Hermes currently lacks this
+// primitive, while @colyseus/schema references it during module evaluation.
+import './shims/hermes-finalization-registry';
 import 'react-native-url-polyfill/auto';
 import { registerRootComponent } from 'expo';
 import { createElement } from 'react';

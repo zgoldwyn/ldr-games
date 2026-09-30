@@ -33,21 +33,28 @@
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",
     "supabase:status": "supabase status",
-    "supabase:functions": "supabase functions serve"
+    "supabase:functions": "supabase functions serve",
+    "game-server:dev": "npm run dev --workspace @ldr/game-server",
+    "game-server:start": "npm run start --workspace @ldr/game-server",
+    "game-server:test": "npm run test --workspace @ldr/game-server",
+    "ios:two": "node scripts/ios-two-simulators.mjs",
+    "word-chain:lexicon": "node scripts/generate-word-chain-lexicon.mjs",
+    "level-builder": "npm run build --workspace @ldr/core && node apps/level-builder/server.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.14.0",
     "@types/node": "^20.14.0",
-    "deno": "2.1.4",
     "@typescript-eslint/eslint-plugin": "^8.13.0",
     "@typescript-eslint/parser": "^8.13.0",
+    "deno": "2.1.4",
     "eslint": "^9.14.0",
     "eslint-config-prettier": "^9.1.0",
     "prettier": "^3.3.3",
     "supabase": "^2.115.0",
     "typescript": "^5.6.3",
     "typescript-eslint": "^8.13.0",
-    "vitest": "^2.1.4"
+    "vitest": "^2.1.4",
+    "word-list": "^4.1.0"
   },
   "allowScripts": {
     "esbuild@0.21.5": true,

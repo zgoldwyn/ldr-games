@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  accountId,
-  gameId,
-  notificationId,
-  pairingId,
-  sessionId,
-} from './common.js';
+import { accountId, gameId, notificationId, pairingId, sessionId } from './common.js';
 import type { AsyncSession } from './game.js';
 import type { Pairing } from './pairing.js';
 import {

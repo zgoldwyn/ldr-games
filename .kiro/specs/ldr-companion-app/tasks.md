@@ -352,8 +352,8 @@ The game-related cron jobs (20.1) were initially deferred and then pulled back I
     - Passing against a live stack (7 tests), also covering Req 7.2/7.3/7.8/7.9/7.11. Writing these found that a battleship session started without ship placements could never reach a terminal state — fixed in the preceding commit. Mutation-checked by dropping and gutting the `async_take_turn` RPC (no holder transfer, no outcome, no notifications): 4 tests fail. Note `async-start` takes its options NESTED under `options`, i.e. `{ gameId, options: { ships, size, firstHolder, maxRounds } }`.
     - _Requirements: 7.5, 7.7, 7.10_
 
-- [x] 17. Quiz wiring — **[DEFERRED, post-MVP]**
-  - Cost of deferring: Requirement 8 is entirely unavailable. The pure quiz logic and its property tests (7.x) are already done, so this is wiring only. Note there is **no seed data** for `quiz_defs` / `quiz_questions` yet — whoever picks this up needs to create some before anything can be exercised end to end.
+- [x] 17. Quiz wiring — **[SHIPPED, post-MVP]**
+  - The mobile Couples Quiz experience now covers catalog selection, cross-device resume, private self-answers, partner guessing, waiting states, completed results, and durable/push-capable notifications when a quiz starts or advances. Three launch themes seed 15 ordered questions, and every color theme has matching clay game art.
 
   - [x] 17.1 Implement quiz submission and scoring Edge Function
     - Handle `startSession` (partial-UNIQUE one-active-per-pairing), `submitSelfAnswer`/`submitGuess` (validation, retain prior on reject), phase transitions, and `scoreSession`; enforce `requirePairing`
@@ -362,7 +362,7 @@ The game-related cron jobs (20.1) were initially deferred and then pulled back I
 
   - [x] 17.2 Wire the client quiz module with RLS-backed withholding
     - Implement the client `QuizModule` reading through RLS so the partner's self-answers are non-selectable during the self-answer phase and results (self-answers, guesses, scores) surface on completion
-    - Added `packages/core/src/quiz/` with a caller-scoped Supabase adapter and client module. Catalog/session reads go directly through authenticated RLS while every mutation invokes the authoritative `quiz` function; completed reads assemble full `QuizResults`, and incomplete reads never synthesize absent partner answers. Seven unit tests cover catalog, mutations, rejection stability, withheld views, caching, and completed results.
+    - Added `packages/core/src/quiz/` with a caller-scoped Supabase adapter and client module. Catalog/session reads go directly through authenticated RLS while every mutation invokes the authoritative `quiz` function; completed reads assemble full `QuizResults`, and incomplete reads never synthesize absent partner answers. Eight unit tests cover catalog, questions, active-session resume, mutations, rejection stability, withheld views, caching, and completed results.
     - _Requirements: 8.1, 8.4, 8.8_
 
   - [x] 17.3 Write quiz integration tests
@@ -599,7 +599,7 @@ These are accepted as out of scope for the current MVP, but should be preserved 
 - Games need explicit removal/cancel controls. Users currently cannot cancel pending games or remove stale/finished games from the visible list.
 - Terminal game sessions are recorded correctly but remain visible indefinitely. Decide whether completed sessions should be hidden by default, archived, or moved into history before changing the session lifecycle.
 - Battleship placement received its first product pass: each partner now places a private classic fleet, with overlap/off-board/shape validation shared by client and server. Further polish can add drag-to-place and ship-sunk labels.
-- Game icons are placeholder-quality and should be replaced with theme-consistent, recognizable icons.
+- Game icons now use recognizable clay illustrations with pink, lavender, mint, sky, and butter variants for every playable game.
 - Theme settings now expose and persist all five named color options on-device.
 - The mobile Leaderboard ranks both partners by completed-game wins and shows per-game wins and draws.
 - Primary navigation now links Play, Leaderboard, and Settings consistently; relationship tools can join it when those screens are added.

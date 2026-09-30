@@ -186,6 +186,20 @@ function snapshotFromFunction(value: unknown): QuizSessionSnapshot | null {
 
 /** Build QuizPorts over a caller-scoped authenticated Supabase client. */
 export function createSupabaseQuizPorts(client: SupabaseClient): QuizPorts {
+  async function listQuestions(requestedQuiz: ReturnType<typeof quizId>) {
+    const { data, error } = await client
+      .from('quiz_questions')
+      .select('id, quiz_id, type, prompt, choices, position, created_at')
+      .eq('quiz_id', requestedQuiz)
+      .order('position', { ascending: true })
+      .order('created_at', { ascending: true });
+    if (error) return [];
+    const questions = (data ?? []).map(questionFromRow);
+    return questions.some((question) => question === null)
+      ? []
+      : (questions as readonly QuizQuestion[]);
+  }
+
   async function mutate(body: Record<string, unknown>): Promise<QuizMutationOutcome> {
     const { data, error } = await client.functions.invoke('quiz', { body });
     if (error) {
@@ -220,7 +234,11 @@ export function createSupabaseQuizPorts(client: SupabaseClient): QuizPorts {
     async listQuizzes(): Promise<readonly QuizDef[]> {
       const [{ data: quizRows, error: quizError }, { data: questionRows, error: questionError }] =
         await Promise.all([
-          client.from('quiz_defs').select('id, theme'),
+          client
+            .from('quiz_defs')
+            .select('id, theme, position, created_at')
+            .order('position', { ascending: true })
+            .order('created_at', { ascending: true }),
           client.from('quiz_questions').select('id, quiz_id, type, prompt, choices'),
         ]);
       if (quizError || questionError) return [];
@@ -247,6 +265,40 @@ export function createSupabaseQuizPorts(client: SupabaseClient): QuizPorts {
       return quizzes;
     },
 
+    listQuestions,
+
+    async activeSession(): Promise<QuizSession | null> {
+      const { data, error } = await client
+        .from('quiz_sessions')
+        .select('id, pairing_id, quiz_id, phase, scores, updated_at')
+        .neq('phase', 'complete')
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error || data === null) return null;
+      return sessionFromWire({
+        id: data.id,
+        pairingId: data.pairing_id,
+        quizId: data.quiz_id,
+        phase: data.phase,
+        scores: data.scores,
+      });
+    },
+
+    async playedQuizIds(): Promise<readonly ReturnType<typeof quizId>[]> {
+      const { data, error } = await client
+        .from('quiz_sessions')
+        .select('quiz_id')
+        .eq('phase', 'complete');
+      if (error) return [];
+
+      const played = new Set<ReturnType<typeof quizId>>();
+      for (const row of data ?? []) {
+        if (typeof row.quiz_id === 'string') played.add(quizId(row.quiz_id));
+      }
+      return [...played];
+    },
+
     async fetchSession(requestedSession): Promise<QuizSessionSnapshot | null> {
       const { data: sessionRow, error: sessionError } = await client
         .from('quiz_sessions')
@@ -271,11 +323,8 @@ export function createSupabaseQuizPorts(client: SupabaseClient): QuizPorts {
       });
       if (session === null) return null;
 
-      const [questionsResult, selfResult, guessesResult] = await Promise.all([
-        client
-          .from('quiz_questions')
-          .select('id, quiz_id, type, prompt, choices')
-          .eq('quiz_id', session.quizId),
+      const [questions, selfResult, guessesResult] = await Promise.all([
+        listQuestions(session.quizId),
         client
           .from('quiz_self_answers')
           .select('session_id, account_id, question_id, answer')
@@ -285,9 +334,7 @@ export function createSupabaseQuizPorts(client: SupabaseClient): QuizPorts {
           .select('session_id, account_id, question_id, guess')
           .eq('session_id', session.id),
       ]);
-      if (questionsResult.error || selfResult.error || guessesResult.error) return null;
-
-      const questions = (questionsResult.data ?? []).map(questionFromRow);
+      if (questions.length === 0 || selfResult.error || guessesResult.error) return null;
       const selfAnswers = (selfResult.data ?? []).map((raw) =>
         selfAnswerFromWire({
           sessionId: raw.session_id,
@@ -305,7 +352,6 @@ export function createSupabaseQuizPorts(client: SupabaseClient): QuizPorts {
         }),
       );
       if (
-        questions.some((question) => question === null) ||
         selfAnswers.some((answer) => answer === null) ||
         guesses.some((guess) => guess === null)
       ) {
@@ -322,7 +368,7 @@ export function createSupabaseQuizPorts(client: SupabaseClient): QuizPorts {
             ...snapshot,
             results: buildQuizResults(
               { session, selfAnswers: snapshot.selfAnswers, guesses: snapshot.guesses },
-              questions as QuizQuestion[],
+              questions,
             ),
           }
         : snapshot;

@@ -64,8 +64,7 @@ function expectedGreater(a: HLCTimestamp, b: HLCTimestamp): 'a' | 'b' | 'equal' 
   return 'equal';
 }
 
-const hlcEquals = (x: HLCTimestamp, y: HLCTimestamp): boolean =>
-  compareHLC(x, y) === 0;
+const hlcEquals = (x: HLCTimestamp, y: HLCTimestamp): boolean => compareHLC(x, y) === 0;
 
 describe('resolveConflict (last-write-wins conflict resolution)', () => {
   // Feature: ldr-companion-app, Property 18: Last-write-wins conflict resolution is deterministic and convergent

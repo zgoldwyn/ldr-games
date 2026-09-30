@@ -65,7 +65,9 @@ interface RawBundle {
 const rawMultipleChoiceArb: fc.Arbitrary<RawBundle> = fc
   .uniqueArray(fc.string({ minLength: 1, maxLength: 8 }), { minLength: 2, maxLength: 4 })
   .chain((choices) => {
-    const choiceArb = fc.constantFrom(...choices).map((value): Answer => ({ kind: 'choice', value }));
+    const choiceArb = fc
+      .constantFrom(...choices)
+      .map((value): Answer => ({ kind: 'choice', value }));
     return fc.record({
       type: fc.constant<'multiple_choice'>('multiple_choice'),
       choices: fc.constant(choices),
@@ -102,7 +104,13 @@ function bindBundle(raw: RawBundle, index: number): QuestionBundle {
   const id = questionId(`q${index}`);
   const question: QuizQuestion =
     raw.type === 'multiple_choice'
-      ? { id, quizId: QUIZ, type: 'multiple_choice', prompt: `prompt-${index}`, choices: raw.choices ?? [] }
+      ? {
+          id,
+          quizId: QUIZ,
+          type: 'multiple_choice',
+          prompt: `prompt-${index}`,
+          choices: raw.choices ?? [],
+        }
       : { id, quizId: QUIZ, type: 'short_answer', prompt: `prompt-${index}` };
   return { ...raw, question };
 }
@@ -119,7 +127,10 @@ function reorderByKeys<T>(items: readonly T[], keys: readonly number[]): T[] {
 // self-answer and guessing phases (2·N distinct submissions each).
 const scenarioArb = fc.array(rawBundleArb, { minLength: 1, maxLength: 5 }).chain((raws) => {
   const submissionCount = raws.length * 2;
-  const keysArb = fc.array(fc.integer(), { minLength: submissionCount, maxLength: submissionCount });
+  const keysArb = fc.array(fc.integer(), {
+    minLength: submissionCount,
+    maxLength: submissionCount,
+  });
   return fc.record({
     raws: fc.constant(raws),
     selfKeys: keysArb,

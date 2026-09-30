@@ -11,6 +11,9 @@ const WINNING_LINES = [
   [2, 4, 6],
 ] as const;
 
+export const TIC_TAC_TOE_BOARD_PADDING = 12;
+export const TIC_TAC_TOE_CELL_GAP = 10;
+
 export function ticTacToeBoardLayout(viewportWidth: number): {
   readonly boardSize: number;
   readonly cellSize: number;
@@ -20,7 +23,7 @@ export function ticTacToeBoardLayout(viewportWidth: number): {
   const boardSize = Math.min(288, availableWidth);
   return {
     boardSize,
-    cellSize: boardSize / 3,
+    cellSize: (boardSize - TIC_TAC_TOE_BOARD_PADDING * 2 - TIC_TAC_TOE_CELL_GAP * 2) / 3,
   };
 }
 
@@ -57,13 +60,17 @@ export function ticTacToeStatus(params: {
   readonly currentTurn: AccountId | undefined;
   readonly winner: AccountId | null | undefined;
   readonly self: AccountId | undefined;
+  readonly partnerName?: string;
 }): { readonly title: string; readonly detail: string } {
-  const { sessionState, boardStatus, currentTurn, winner, self } = params;
+  const { sessionState, boardStatus, currentTurn, winner, self, partnerName } = params;
+  const partner = partnerName?.trim() || 'your partner';
+  const partnerTitle = partnerName?.trim() || 'Partner';
+  const partnerWinner = partnerName?.trim() || 'Your partner';
   if (sessionState === undefined) {
     return { title: 'Loading game…', detail: 'Getting the latest board.' };
   }
   if (sessionState === 'pending') {
-    return { title: 'Waiting for your partner', detail: 'The game begins when they join.' };
+    return { title: `Waiting for ${partner}`, detail: 'The game begins when they join.' };
   }
   if (sessionState === 'paused') {
     return { title: 'Game paused', detail: 'Rejoin when you are both ready.' };
@@ -75,12 +82,12 @@ export function ticTacToeStatus(params: {
     if (winner !== null && winner !== undefined && self !== undefined) {
       return winner === self
         ? { title: 'You won!', detail: 'Three in a row. Nicely played.' }
-        : { title: 'Your partner won', detail: 'Good game — time for a rematch.' };
+        : { title: `${partnerWinner} won`, detail: 'Good game — time for a rematch.' };
     }
     return { title: 'Game finished', detail: 'This match is complete.' };
   }
   if (self !== undefined && currentTurn === self) {
     return { title: 'Your turn', detail: 'Choose any open square.' };
   }
-  return { title: 'Partner’s turn', detail: 'Their move is up next.' };
+  return { title: `${partnerTitle}’s turn`, detail: 'Their move is up next.' };
 }

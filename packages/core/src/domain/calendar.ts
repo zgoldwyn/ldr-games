@@ -1,14 +1,7 @@
 /**
  * Relationship-date and reminder shapes (Requirements 9 and 10).
  */
-import type {
-  CalendarDate,
-  DateId,
-  Duration,
-  PairingId,
-  ReminderId,
-  Timestamp,
-} from './common.js';
+import type { CalendarDate, DateId, Duration, PairingId, ReminderId, Timestamp } from './common.js';
 
 /**
  * A pairing-owned calendar entry. `title` is a non-whitespace string of 1-100

@@ -1,0 +1,52 @@
+{
+  "archivedAt": "2026-09-30T16:50:42.881Z",
+  "targetNumber": 4,
+  "reason": "manual",
+  "level": {
+    "number": 4,
+    "id": "new-level-04",
+    "name": "Untitled Level",
+    "chapter": "Level 4",
+    "width": 64,
+    "playerWidth": 1.6,
+    "moveSpeed": 8.6,
+    "jumpSpeed": 13,
+    "gravity": -24,
+    "spawns": {
+      "ember": 5,
+      "tide": 9
+    },
+    "spawnY": {
+      "ember": 0,
+      "tide": 0
+    },
+    "gates": {
+      "ember": {
+        "x": 1,
+        "y": 0,
+        "width": 2.7
+      },
+      "tide": {
+        "x": 60.3,
+        "y": 0,
+        "width": 2.7
+      }
+    },
+    "solids": [],
+    "platforms": [],
+    "ramps": [],
+    "hazards": [],
+    "crystals": [],
+    "environmentZones": [
+      {
+        "id": "outside-zone",
+        "x": 0,
+        "y": 0,
+        "width": 64,
+        "height": 17.2,
+        "environment": "outside"
+      }
+    ],
+    "entrances": []
+  }
+}

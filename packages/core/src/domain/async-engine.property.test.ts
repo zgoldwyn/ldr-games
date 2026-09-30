@@ -34,10 +34,8 @@ const alice = accountId('alice');
 const bob = accountId('bob');
 const players: readonly [AccountId, AccountId] = [alice, bob];
 
-const asGame = (s: AsyncEngineState): AsyncGameState =>
-  s as unknown as AsyncGameState;
-const asEngine = (s: AsyncGameState): AsyncEngineState =>
-  s as unknown as AsyncEngineState;
+const asGame = (s: AsyncEngineState): AsyncGameState => s as unknown as AsyncGameState;
+const asEngine = (s: AsyncGameState): AsyncEngineState => s as unknown as AsyncEngineState;
 
 /** A structural snapshot used to assert a rejected turn changed nothing. */
 function snapshot(s: AsyncEngineState): string {
@@ -56,11 +54,7 @@ function snapshot(s: AsyncEngineState): string {
 
 const holderArb: fc.Arbitrary<AccountId> = fc.constantFrom(alice, bob);
 /** A generated "actor" that may or may not be the current holder or a stranger. */
-const actorArb: fc.Arbitrary<AccountId> = fc.constantFrom(
-  alice,
-  bob,
-  accountId('carol'),
-);
+const actorArb: fc.Arbitrary<AccountId> = fc.constantFrom(alice, bob, accountId('carol'));
 
 const GRID = 4;
 

@@ -150,9 +150,7 @@ describe('validateDrawingImageRef', () => {
 
 describe('validateDrawingUpload', () => {
   it('accepts an allowed type within the size cap', () => {
-    expect(
-      isOk(validateDrawingUpload({ contentType: 'image/png', byteLength: 1_024 })),
-    ).toBe(true);
+    expect(isOk(validateDrawingUpload({ contentType: 'image/png', byteLength: 1_024 }))).toBe(true);
     // Exactly at the cap is allowed; one byte over is not.
     expect(
       isOk(validateDrawingUpload({ contentType: 'image/png', byteLength: MAX_DRAWING_BYTES })),
@@ -164,9 +162,7 @@ describe('validateDrawingUpload', () => {
 
   it('rejects an empty upload and a disallowed type', () => {
     expect(isErr(validateDrawingUpload({ contentType: 'image/png', byteLength: 0 }))).toBe(true);
-    expect(
-      isErr(validateDrawingUpload({ contentType: 'image/gif', byteLength: 100 })),
-    ).toBe(true);
+    expect(isErr(validateDrawingUpload({ contentType: 'image/gif', byteLength: 100 }))).toBe(true);
   });
 });
 

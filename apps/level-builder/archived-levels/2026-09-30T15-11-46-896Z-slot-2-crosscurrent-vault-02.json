@@ -1,0 +1,194 @@
+{
+  "archivedAt": "2026-09-30T15:11:46.896Z",
+  "targetNumber": 2,
+  "reason": "manual",
+  "level": {
+    "number": 2,
+    "id": "crosscurrent-vault-02",
+    "name": "Crosscurrent Vault",
+    "chapter": "Level 2",
+    "width": 64,
+    "playerWidth": 1.6,
+    "moveSpeed": 8.6,
+    "jumpSpeed": 13,
+    "gravity": -24,
+    "spawns": {
+      "ember": 29.7,
+      "tide": 32.7
+    },
+    "spawnY": {
+      "ember": 0,
+      "tide": 0
+    },
+    "gates": {
+      "ember": {
+        "x": 56.5,
+        "y": 0,
+        "width": 2.7
+      },
+      "tide": {
+        "x": 60.3,
+        "y": 0,
+        "width": 2.7
+      }
+    },
+    "solids": [],
+    "platforms": [
+      {
+        "id": "vault-left-one",
+        "x": 4.2,
+        "y": 2,
+        "width": 3.5,
+        "element": "neutral"
+      },
+      {
+        "id": "vault-left-two",
+        "x": 10.3,
+        "y": 4.7,
+        "width": 3.7,
+        "element": "neutral"
+      },
+      {
+        "id": "vault-left-three",
+        "x": 13.5,
+        "y": 7.4,
+        "width": 6.5,
+        "element": "neutral"
+      },
+      {
+        "id": "vault-left-four",
+        "x": 18.5,
+        "y": 10.1,
+        "width": 6.5,
+        "element": "neutral"
+      },
+      {
+        "id": "vault-left-five",
+        "x": 23.5,
+        "y": 12.8,
+        "width": 6.5,
+        "element": "neutral"
+      },
+      {
+        "id": "vault-crown",
+        "x": 28.75,
+        "y": 15.5,
+        "width": 6.5,
+        "element": "neutral"
+      },
+      {
+        "id": "tide-left-perch",
+        "x": 7.5,
+        "y": 7.4,
+        "width": 4.2,
+        "element": "tide"
+      },
+      {
+        "id": "ember-left-perch",
+        "x": 20.5,
+        "y": 15.5,
+        "width": 4.2,
+        "element": "ember"
+      },
+      {
+        "id": "tide-right-perch",
+        "x": 39.25,
+        "y": 15.5,
+        "width": 4.2,
+        "element": "tide"
+      }
+    ],
+    "hazards": [
+      {
+        "id": "lever-chasm",
+        "x": 14.2,
+        "width": 10.2,
+        "safeRole": "none"
+      },
+      {
+        "id": "void-left",
+        "x": 8,
+        "width": 2.1,
+        "safeRole": "none"
+      }
+    ],
+    "crystals": [
+      {
+        "id": "ember-high-left",
+        "x": 22.6,
+        "y": 16.75,
+        "role": "ember"
+      },
+      {
+        "id": "ember-vault-crown",
+        "x": 31,
+        "y": 17,
+        "role": "ember"
+      },
+      {
+        "id": "tide-far-left",
+        "x": 9.6,
+        "y": 8.65,
+        "role": "tide"
+      },
+      {
+        "id": "tide-vault-crown",
+        "x": 33,
+        "y": 17,
+        "role": "tide"
+      },
+      {
+        "id": "tide-high-right",
+        "x": 41.35,
+        "y": 16.75,
+        "role": "tide"
+      }
+    ],
+    "environmentZones": [
+      {
+        "id": "vault-outside",
+        "x": 0,
+        "y": 0,
+        "width": 64,
+        "height": 17.2,
+        "environment": "outside"
+      }
+    ],
+    "entrances": [],
+    "mechanics": {
+      "pushable": {
+        "id": "vault-block",
+        "x": 26,
+        "y": 1,
+        "width": 2,
+        "height": 2,
+        "pushSpeed": 6
+      },
+      "pressurePlate": {
+        "id": "vault-floor-plate",
+        "x": 35,
+        "y": 0,
+        "width": 3.2,
+        "target": "gates"
+      },
+      "lever": {
+        "id": "vault-bridge-lever",
+        "x": 52,
+        "y": 0,
+        "width": 3.2,
+        "reach": 1.6,
+        "target": "activatedPlatform"
+      },
+      "activatedPlatform": {
+        "id": "vault-bridge",
+        "x": 14,
+        "y": 0,
+        "width": 10.2,
+        "element": "neutral",
+        "hazardId": "lever-chasm"
+      }
+    },
+    "ramps": [],
+    "order": 3
+  }
+}

@@ -8,11 +8,7 @@ import { accountId, invitationCode, pairingId } from './common.js';
 import type { AccountId, PairingId, Timestamp } from './common.js';
 import type { Account } from './account.js';
 import type { Invitation } from './pairing.js';
-import {
-  acceptInvitation,
-  computeInvitationExpiry,
-  createInvitation,
-} from './pairing-logic.js';
+import { acceptInvitation, computeInvitationExpiry, createInvitation } from './pairing-logic.js';
 
 /**
  * Property 10: Pairing exclusivity invariant (Req 3.3, 3.4, 3.6, 3.7).
@@ -43,14 +39,12 @@ const arbPairingId: fc.Arbitrary<PairingId> = fc
  * `seed` distinguishes accounts so we can assert identity is preserved.
  */
 function arbAccount(seed: string): fc.Arbitrary<Account> {
-  return fc
-    .option(arbPairingId, { nil: null })
-    .map((pid): Account => ({
-      id: accountId(seed),
-      email: `${seed}@example.com`,
-      pairingId: pid,
-      createdAt: NOW - 10_000,
-    }));
+  return fc.option(arbPairingId, { nil: null }).map((pid): Account => ({
+    id: accountId(seed),
+    email: `${seed}@example.com`,
+    pairingId: pid,
+    createdAt: NOW - 10_000,
+  }));
 }
 
 /** A pending invitation that is always within its validity window at `NOW`. */
@@ -119,8 +113,7 @@ describe('Property 10: Pairing exclusivity invariant', () => {
             now: NOW,
           });
 
-          const eitherPaired =
-            inviter.pairingId !== null || invitee.pairingId !== null;
+          const eitherPaired = inviter.pairingId !== null || invitee.pairingId !== null;
 
           if (eitherPaired) {
             // Originating (inviter, Req 3.4) or targeting (invitee, Req 3.3) an
@@ -195,8 +188,7 @@ describe('Property 10: Pairing exclusivity invariant', () => {
             now: NOW,
           });
 
-          const eitherPaired =
-            inviter.pairingId !== null || invitee.pairingId !== null;
+          const eitherPaired = inviter.pairingId !== null || invitee.pairingId !== null;
 
           if (eitherPaired) {
             // Exclusivity: any operation touching an already-paired account is

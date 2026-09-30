@@ -22,10 +22,7 @@ import { JOIN_WINDOW_MS, type RTPairingMembers, joinSession } from './rt-session
 
 /** Distinct partner account ids for a pairing. */
 const membersArb: fc.Arbitrary<RTPairingMembers> = fc
-  .tuple(
-    fc.string({ minLength: 1, maxLength: 12 }),
-    fc.string({ minLength: 1, maxLength: 12 }),
-  )
+  .tuple(fc.string({ minLength: 1, maxLength: 12 }), fc.string({ minLength: 1, maxLength: 12 }))
   .filter(([a, b]) => a !== b)
   .map(([a, b]) => ({ a: accountId(a), b: accountId(b) }));
 

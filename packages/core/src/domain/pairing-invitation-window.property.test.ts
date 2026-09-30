@@ -45,7 +45,11 @@ describe('invitation validity window (Requirements 3.1, 3.5)', () => {
   it('expiry always equals creation time plus exactly 72 hours (Req 3.1)', () => {
     fc.assert(
       fc.property(createdAtArb, (createdAt) => {
-        const result = createInvitation({ code: CODE, inviter: makeAccount('inviter'), now: createdAt });
+        const result = createInvitation({
+          code: CODE,
+          inviter: makeAccount('inviter'),
+          now: createdAt,
+        });
         expect(isOk(result)).toBe(true);
         if (isOk(result)) {
           expect(result.value.createdAt).toBe(createdAt);
@@ -112,7 +116,13 @@ describe('invitation validity window (Requirements 3.1, 3.5)', () => {
           const invitee = makeAccount('invitee');
           const now = invitation.expiresAt + pastOffset; // strictly after expiry
 
-          const result = acceptInvitation({ invitation, inviter, invitee, pairingId: PAIRING, now });
+          const result = acceptInvitation({
+            invitation,
+            inviter,
+            invitee,
+            pairingId: PAIRING,
+            now,
+          });
 
           expect(isErr(result)).toBe(true);
           if (isErr(result)) {

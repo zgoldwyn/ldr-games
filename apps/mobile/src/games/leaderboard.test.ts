@@ -69,4 +69,17 @@ describe('pair leaderboard', () => {
   it('uses a shared first-place rank when wins are tied', () => {
     expect(buildPairLeaderboard(a, b, []).standings.map((row) => row.rank)).toEqual([1, 1]);
   });
+
+  it('does not count cooperative Draw Together matches as competitive draws', () => {
+    const drawTogether = {
+      ...rt('draw-1', null),
+      gameId: gameId('draw-together'),
+      gameState: { score: 420 },
+      outcome: { kind: 'completed' as const, winner: null, recordedAt: 1_000 },
+    };
+    const result = buildPairLeaderboard(a, b, [drawTogether]);
+    expect(result.completedGames).toBe(1);
+    expect(result.draws).toBe(0);
+    expect(result.games).toEqual([]);
+  });
 });

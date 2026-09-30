@@ -65,10 +65,13 @@ const selfAnswerPhaseStateArb: fc.Arbitrary<QuizSessionState> = questionIdsArb.c
     // For each (partner, question), independently decide whether an answer was
     // recorded, and if so, what it is.
     const cellArb = fc.option(answerArb, { nil: undefined });
-    const gridArb = fc.array(fc.array(cellArb, { minLength: questionIds.length, maxLength: questionIds.length }), {
-      minLength: PARTNERS.length,
-      maxLength: PARTNERS.length,
-    });
+    const gridArb = fc.array(
+      fc.array(cellArb, { minLength: questionIds.length, maxLength: questionIds.length }),
+      {
+        minLength: PARTNERS.length,
+        maxLength: PARTNERS.length,
+      },
+    );
     return gridArb.map((grid) => {
       const selfAnswers: QuizSelfAnswer[] = [];
       PARTNERS.forEach((partner, pIdx) => {

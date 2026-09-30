@@ -252,10 +252,9 @@ async function loadState(
     { data: selfRows, error: selfError },
     { data: guessRows, error: guessError },
   ] = await Promise.all([
-    db.from("quiz_questions").select("id, quiz_id, type, prompt, choices").eq(
-      "quiz_id",
-      row.quiz_id,
-    ),
+    db.from("quiz_questions").select("id, quiz_id, type, prompt, choices")
+      .eq("quiz_id", row.quiz_id).order("position", { ascending: true })
+      .order("created_at", { ascending: true }),
     db.from("quiz_self_answers").select("account_id, question_id, answer").eq(
       "session_id",
       row.id,
@@ -509,6 +508,23 @@ Deno.serve(async (req: Request) => {
         resultCode === "INTERNAL_ERROR" ? 500 : statusForErrorCode(resultCode),
       );
     }
+    const recipient = pairing.value.members.find((member) => member !== actor);
+    if (recipient !== undefined) {
+      await db.from("notifications").upsert({
+        recipient_account_id: recipient,
+        category: "quiz",
+        payload: {
+          kind: "quiz_started",
+          sessionId: committed.session_id,
+          quizId: requestedQuiz,
+        },
+        dedupe_key: `quiz:quiz_started:${committed.session_id}`,
+        created_at: new Date().toISOString(),
+      }, {
+        onConflict: "recipient_account_id,dedupe_key",
+        ignoreDuplicates: true,
+      });
+    }
     return jsonResponse({
       session: {
         id: committed.session_id,
@@ -615,6 +631,36 @@ Deno.serve(async (req: Request) => {
       "The quiz submission could not be applied.",
       resultCode === "INTERNAL_ERROR" ? 500 : statusForErrorCode(resultCode),
     );
+  }
+
+  const committedPhase = committed.phase as QuizSession["phase"];
+  if (
+    (action === "self_answer" && committedPhase === "guessing") ||
+    (action === "guess" && committedPhase === "complete")
+  ) {
+    const recipient = pairing.value.members.find((member) => member !== actor);
+    if (recipient !== undefined) {
+      const kind = committedPhase === "guessing"
+        ? "quiz_guessing_ready"
+        : "quiz_results_ready";
+      // The quiz commit is authoritative; notification delivery is best effort
+      // so a transient push failure can never turn a successful answer into an
+      // apparent rejection on retry.
+      await db.from("notifications").upsert({
+        recipient_account_id: recipient,
+        category: "quiz",
+        payload: {
+          kind,
+          sessionId: requestedSession,
+          quizId: loaded.state.session.quizId,
+        },
+        dedupe_key: `quiz:${kind}:${requestedSession}`,
+        created_at: new Date().toISOString(),
+      }, {
+        onConflict: "recipient_account_id,dedupe_key",
+        ignoreDuplicates: true,
+      });
+    }
   }
 
   // A partner can submit between our read and the SQL lock. Reloading ensures
