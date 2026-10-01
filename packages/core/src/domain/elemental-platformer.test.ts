@@ -14,6 +14,7 @@ import {
   elementalCatalogFingerprint,
   elementalLevelFingerprint,
   elementalLevel,
+  elementalRoleHasRequiredCrystals,
   elementalRoleFor,
   oppositeElementalRole,
 } from './elemental-platformer.js';
@@ -25,6 +26,17 @@ describe('elemental platformer roles', () => {
   it('uses one contiguous level number as both identity and live sequence', () => {
     expect(ELEMENTAL_AUTHORED_LEVELS.map((level) => level.number)).toEqual([1, 2, 3]);
     for (const level of ELEMENTAL_AUTHORED_LEVELS) expect(elementalLevel(level.number)).toBe(level);
+  });
+
+  it('never asks for more crystals than a live level places', () => {
+    for (const level of ELEMENTAL_AUTHORED_LEVELS) {
+      expect(level.crystals.length).toBeLessThanOrEqual(16);
+      for (const role of ['ember', 'tide'] as const) {
+        const available = level.crystals.filter((crystal) => crystal.role === role).length;
+        expect(level.requiredCrystals[role]).toBeGreaterThanOrEqual(0);
+        expect(level.requiredCrystals[role]).toBeLessThanOrEqual(available);
+      }
+    }
   });
 
   it('tracks the shared crystal set with a compact mask', () => {
@@ -159,17 +171,32 @@ describe('elemental platformer roles', () => {
     ).not.toBe(elementalCatalogFingerprint());
   });
 
-  it('makes level two cross the elemental routes and adds cooperative mechanisms', () => {
+  it('opens each gate after its own authored crystal requirement', () => {
+    const level = {
+      ...ELEMENTAL_GROVE_LEVEL,
+      requiredCrystals: { ember: 2, tide: 1 },
+    };
+    const emberBits = level.crystals.flatMap((crystal, index) =>
+      crystal.role === 'ember' ? [1 << index] : [],
+    );
+    const tideBit = 1 << level.crystals.findIndex((crystal) => crystal.role === 'tide');
+    expect(elementalRoleHasRequiredCrystals('ember', emberBits[0]!, level)).toBe(false);
+    expect(elementalRoleHasRequiredCrystals('ember', emberBits[0]! | tideBit, level)).toBe(false);
+    expect(elementalRoleHasRequiredCrystals('ember', emberBits[0]! | emberBits[1]!, level)).toBe(
+      true,
+    );
+    expect(elementalRoleHasRequiredCrystals('tide', tideBit, level)).toBe(true);
     expect(
-      ELEMENTAL_FOUNDRY_LEVEL.crystals.some(
-        (crystal) => crystal.role === 'ember' && crystal.x > ELEMENTAL_FOUNDRY_LEVEL.width / 2,
-      ),
+      elementalRoleHasRequiredCrystals('ember', 0, {
+        ...level,
+        requiredCrystals: { ember: 0, tide: 1 },
+      }),
     ).toBe(true);
-    expect(
-      ELEMENTAL_FOUNDRY_LEVEL.crystals.some(
-        (crystal) => crystal.role === 'tide' && crystal.x < ELEMENTAL_FOUNDRY_LEVEL.width / 2,
-      ),
-    ).toBe(true);
+  });
+
+  it('keeps the current level-two crystal-free route governed by its mechanisms', () => {
+    expect(ELEMENTAL_FOUNDRY_LEVEL.requiredCrystals).toEqual({ ember: 0, tide: 0 });
+    expect(elementalRoleHasRequiredCrystals('ember', 0, ELEMENTAL_FOUNDRY_LEVEL)).toBe(true);
     expect(ELEMENTAL_FOUNDRY_LEVEL.hazards.some((hazard) => hazard.safeRole === 'none')).toBe(true);
     expect(ELEMENTAL_FOUNDRY_LEVEL.mechanics).toMatchObject({
       pushable: expect.any(Object),

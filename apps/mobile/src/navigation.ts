@@ -36,4 +36,8 @@ export type RootStackParamList = {
     readonly role: ElementalRole;
     readonly access?: PlatformerSessionAccess;
   };
+  readonly ElementalDuetWin: {
+    readonly clearTicks: number;
+    readonly levelCount: number;
+  };
 };

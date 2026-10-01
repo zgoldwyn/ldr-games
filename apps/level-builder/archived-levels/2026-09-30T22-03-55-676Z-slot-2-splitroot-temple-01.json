@@ -1,0 +1,222 @@
+{
+  "archivedAt": "2026-09-30T22:03:55.676Z",
+  "targetNumber": 2,
+  "reason": "reorder",
+  "level": {
+    "number": 2,
+    "id": "splitroot-temple-01",
+    "name": "Splitroot Temple",
+    "chapter": "Level 2",
+    "width": 86,
+    "playerWidth": 1.6,
+    "moveSpeed": 8.4,
+    "jumpSpeed": 13,
+    "gravity": -24,
+    "spawns": {
+      "ember": 40.5,
+      "tide": 44
+    },
+    "spawnY": {
+      "ember": 0,
+      "tide": 0
+    },
+    "gates": {
+      "ember": {
+        "x": 1,
+        "y": 0,
+        "width": 2.7
+      },
+      "tide": {
+        "x": 82.3,
+        "y": 0,
+        "width": 2.7
+      }
+    },
+    "solids": [],
+    "platforms": [
+      {
+        "id": "right-upper-root-copy-mum44v0c-1",
+        "x": 36,
+        "y": 8,
+        "width": 6,
+        "element": "ember"
+      },
+      {
+        "id": "right-upper-root-copy-mum44v0c-1-copy-mum45fue-1",
+        "x": 26,
+        "y": 6,
+        "width": 6,
+        "element": "ember"
+      },
+      {
+        "id": "right-upper-root-copy-mum44v0c-1-copy-mum45fue-1-copy-mum45nea-2",
+        "x": 16,
+        "y": 4,
+        "width": 6,
+        "element": "ember"
+      },
+      {
+        "id": "right-upper-root-copy-mum44v0c-1-copy-mum45fue-1-copy-mum45nea-2-copy-mum45qak-2",
+        "x": 6,
+        "y": 2,
+        "width": 6,
+        "element": "ember"
+      },
+      {
+        "id": "right-upper-root-copy-mum44v0c-1-copy-mum45fue-1-copy-mum45nea-2-copy-mum45qak-2-copy-mum4rsgw-1",
+        "x": 74,
+        "y": 2,
+        "width": 6,
+        "element": "tide"
+      },
+      {
+        "id": "right-upper-root-copy-mum44v0c-1-copy-mum45fue-1-copy-mum45nea-2-copy-mum4rsgw-4",
+        "x": 64,
+        "y": 4,
+        "width": 6,
+        "element": "tide"
+      },
+      {
+        "id": "right-upper-root-copy-mum44v0c-1-copy-mum45fue-1-copy-mum4rsgw-5",
+        "x": 54,
+        "y": 6,
+        "width": 6,
+        "element": "tide"
+      },
+      {
+        "id": "right-upper-root-copy-mum44v0c-1-copy-mum4rsgw-7",
+        "x": 44,
+        "y": 8,
+        "width": 6,
+        "element": "tide"
+      }
+    ],
+    "hazards": [
+      {
+        "id": "left-deep-pool",
+        "x": 27.45,
+        "width": 3.1,
+        "safeRole": "tide"
+      },
+      {
+        "id": "left-temple-fire",
+        "x": 34.6,
+        "width": 2.8,
+        "safeRole": "none"
+      },
+      {
+        "id": "left-deep-pool-copy-mum4v9nr-1",
+        "x": 13.5,
+        "width": 3.1,
+        "safeRole": "tide"
+      },
+      {
+        "id": "left-temple-fire-copy-mum4v9nr-2",
+        "x": 20.5,
+        "width": 2.8,
+        "safeRole": "ember"
+      },
+      {
+        "id": "left-temple-fire-copy-mum4v9nr-2-copy-mum4wgad-1",
+        "x": 6.5,
+        "width": 2.8,
+        "safeRole": "ember"
+      },
+      {
+        "id": "left-temple-fire-copy-mum4v9nr-2-copy-mum4wgad-1-copy-mum4xb1j-1",
+        "x": 76.7,
+        "width": 2.8,
+        "safeRole": "tide"
+      },
+      {
+        "id": "left-deep-pool-copy-mum4v9nr-1-copy-mum4xb1j-2",
+        "x": 69.4,
+        "width": 3.1,
+        "safeRole": "ember"
+      },
+      {
+        "id": "left-temple-fire-copy-mum4v9nr-2-copy-mum4xb1j-3",
+        "x": 62.7,
+        "width": 2.8,
+        "safeRole": "tide"
+      },
+      {
+        "id": "left-deep-pool-copy-mum4xb1j-4",
+        "x": 55.45,
+        "width": 3.1,
+        "safeRole": "ember"
+      },
+      {
+        "id": "left-temple-fire-copy-mum4xb1j-5",
+        "x": 48.6,
+        "width": 2.8,
+        "safeRole": "none"
+      }
+    ],
+    "crystals": [
+      {
+        "id": "ember-shard-low",
+        "x": 29,
+        "y": 7.5,
+        "role": "ember"
+      },
+      {
+        "id": "ember-shard-high",
+        "x": 39,
+        "y": 9.5,
+        "role": "ember"
+      },
+      {
+        "id": "ember-shard-low-copy-mum45nea-1",
+        "x": 19,
+        "y": 5.5,
+        "role": "ember"
+      },
+      {
+        "id": "ember-shard-low-copy-mum45nea-1-copy-mum45qak-1",
+        "x": 9,
+        "y": 3.5,
+        "role": "ember"
+      },
+      {
+        "id": "ember-shard-low-copy-mum45nea-1-copy-mum45qak-1-copy-mum4rsgw-2",
+        "x": 77,
+        "y": 3.5,
+        "role": "tide"
+      },
+      {
+        "id": "ember-shard-low-copy-mum45nea-1-copy-mum4rsgw-3",
+        "x": 67,
+        "y": 5.5,
+        "role": "tide"
+      },
+      {
+        "id": "ember-shard-low-copy-mum4rsgw-6",
+        "x": 57,
+        "y": 7.5,
+        "role": "tide"
+      },
+      {
+        "id": "ember-shard-high-copy-mum4rsgw-8",
+        "x": 47,
+        "y": 9.5,
+        "role": "tide"
+      }
+    ],
+    "requiredCrystals": {
+      "ember": 4,
+      "tide": 4
+    },
+    "environmentZones": [
+      {
+        "id": "splitroot-outside",
+        "x": 0,
+        "y": 0,
+        "width": 86,
+        "height": 17.2,
+        "environment": "outside"
+      }
+    ],
+    "entrances": []
+  }
+}

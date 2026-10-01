@@ -318,6 +318,48 @@ describe('authoritative platformer simulation', () => {
     ).toBeGreaterThan(crate.x);
   });
 
+  it('keeps a faster ramp-walking player behind the slower pushable', () => {
+    const level = {
+      ...ELEMENTAL_FOUNDRY_LEVEL,
+      solids: [],
+      platforms: [],
+      hazards: [],
+      ramps: [
+        {
+          id: 'push-ramp',
+          x: 20,
+          y: 0,
+          width: 8,
+          height: 4,
+          direction: 'up-right' as const,
+          element: 'neutral' as const,
+        },
+      ],
+    };
+    let crateX = 24;
+    const pusher = { ...player(), x: crateX - level.playerWidth, y: 1.6 };
+    const partner = { ...player(), x: pusher.x - level.playerWidth, y: 0.8 };
+    const movingRight = input({ moveX: 1 });
+
+    for (let tick = 0; tick < 25; tick += 1) {
+      stepPlatformerPlayer(pusher, movingRight, STEP, 'ember', level, undefined, crateX);
+      stepPlatformerPlayer(partner, movingRight, STEP, 'tide', level, undefined, crateX);
+      crateX = stepPlatformerCrate(
+        crateX,
+        [
+          { player: pusher, input: movingRight },
+          { player: partner, input: movingRight },
+        ],
+        STEP.dt,
+        level,
+      );
+      expect(pusher.x + level.playerWidth).toBeLessThanOrEqual(crateX + 0.001);
+    }
+
+    expect(crateX).toBeGreaterThan(24);
+    expect(crateX).toBeLessThanOrEqual(27);
+  });
+
   it('hands a ramp-supported pushable onto an aligned upper floor', () => {
     const crate = ELEMENTAL_FOUNDRY_LEVEL.mechanics.pushable;
     const level = {

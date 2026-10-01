@@ -1,0 +1,87 @@
+{
+  "archivedAt": "2026-10-01T04:59:41.943Z",
+  "targetNumber": 2,
+  "reason": "publish",
+  "level": {
+    "number": 2,
+    "id": "crosscurrent-vault-02",
+    "name": "Crosscurrent Vault",
+    "chapter": "Level 2",
+    "width": 64,
+    "playerWidth": 1.6,
+    "moveSpeed": 8.6,
+    "jumpSpeed": 13,
+    "gravity": -24,
+    "spawns": {
+      "ember": 1.5,
+      "tide": 4
+    },
+    "spawnY": {
+      "ember": 0,
+      "tide": 0
+    },
+    "gates": {
+      "ember": {
+        "x": 29,
+        "y": 0,
+        "width": 2.7
+      },
+      "tide": {
+        "x": 32.5,
+        "y": 0,
+        "width": 2.7
+      }
+    },
+    "solids": [],
+    "platforms": [],
+    "hazards": [
+      {
+        "id": "lever-chasm",
+        "x": 42.5,
+        "width": 10,
+        "safeRole": "none"
+      }
+    ],
+    "crystals": [],
+    "requiredCrystals": {
+      "ember": 0,
+      "tide": 0
+    },
+    "environmentZones": [],
+    "entrances": [],
+    "mechanics": {
+      "pressurePlate": {
+        "id": "vault-floor-plate",
+        "x": 12.5,
+        "y": 0,
+        "width": 3.2,
+        "target": "activatedPlatform"
+      },
+      "lever": {
+        "id": "vault-bridge-lever",
+        "x": 59,
+        "y": 0,
+        "width": 3.2,
+        "reach": 1.6,
+        "target": "gates"
+      },
+      "activatedPlatform": {
+        "id": "vault-bridge",
+        "x": 42.5,
+        "y": 0,
+        "width": 10,
+        "element": "neutral",
+        "hazardId": "lever-chasm"
+      },
+      "pushable": {
+        "id": "pushable-muno687f",
+        "x": 22.5,
+        "y": 0,
+        "width": 2,
+        "height": 2,
+        "pushSpeed": 5
+      }
+    },
+    "ramps": []
+  }
+}

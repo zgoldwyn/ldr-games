@@ -8,6 +8,7 @@ import {
   ELEMENTAL_AUTHORED_LEVELS,
   ELEMENTAL_PLATFORMER_TICKS_PER_SECOND,
   elementalCrystalMaskForRole,
+  elementalRoleHasRequiredCrystals,
   elementalLevel,
   elementalRampSurfaceY,
   ELEMENTAL_GROVE_LEVEL,
@@ -36,6 +37,7 @@ import {
   recordElementalBestTime,
   type ElementalBestTimes,
 } from '../games/elemental-best-times';
+import { elementalCompletionDestination } from '../games/elemental-completion';
 import {
   claimDevPlatformerSeat,
   connectToPlatformerRoom,
@@ -117,7 +119,7 @@ function onlineCrateSupportY(level: ElementalLevel, crateX: number): number {
   const crate = level.mechanics.pushable;
   const centerX = crateX + crate.width / 2;
   const ramp = (level.ramps ?? []).find(
-    (candidate) => centerX >= candidate.x && centerX <= candidate.x + candidate.width,
+    (candidate) => centerX >= candidate.x - 1e-6 && centerX <= candidate.x + candidate.width + 1e-6,
   );
   if (ramp) {
     const progress = Math.max(0, Math.min(1, (centerX - ramp.x) / ramp.width));
@@ -272,7 +274,7 @@ function applyOnlineInput(
       player.y = elementalRampSurfaceY(landedRamp, playerCenterX);
       player.velocityY = 0;
       player.grounded = true;
-      continue;
+      // Keep the crate side collision active while walking up a ramp.
     }
     if ('mechanics' in level && cratePosition !== undefined) {
       const crate = level.mechanics.pushable;
@@ -290,6 +292,27 @@ function applyOnlineInput(
         player.grounded = true;
         continue;
       }
+      if (player.y < crateY + crate.height - 0.05) {
+        const previousCenter = player.x - player.velocityX * context.subDt + level.playerWidth / 2;
+        const crateCenter = cratePosition + crate.width / 2;
+        if (
+          player.y + level.playerWidth > crateY &&
+          previousCenter <= crateCenter &&
+          player.x + level.playerWidth > cratePosition
+        ) {
+          player.x = cratePosition - level.playerWidth;
+        } else if (
+          player.y + level.playerWidth > crateY &&
+          previousCenter > crateCenter &&
+          player.x < cratePosition + crate.width
+        ) {
+          player.x = cratePosition + crate.width;
+        }
+      }
+    }
+    if (landedRamp) {
+      player.y = elementalRampSurfaceY(landedRamp, player.x + level.playerWidth / 2);
+      continue;
     }
     if (player.y <= 0) {
       landPredictedPlayerOnFloor(player);
@@ -306,29 +329,6 @@ function applyOnlineInput(
     if (wrongHazard) {
       respawnPredictedPlayer(player, role, level);
       return;
-    }
-    if (
-      'mechanics' in level &&
-      cratePosition !== undefined &&
-      player.y < onlineCrateSupportY(level, cratePosition) + level.mechanics.pushable.height - 0.05
-    ) {
-      const crate = level.mechanics.pushable;
-      const crateY = onlineCrateSupportY(level, cratePosition);
-      const previousCenter = player.x - player.velocityX * context.subDt + level.playerWidth / 2;
-      const crateCenter = cratePosition + crate.width / 2;
-      if (
-        player.y + level.playerWidth > crateY &&
-        previousCenter <= crateCenter &&
-        player.x + level.playerWidth > cratePosition
-      ) {
-        player.x = cratePosition - level.playerWidth;
-      } else if (
-        player.y + level.playerWidth > crateY &&
-        previousCenter > crateCenter &&
-        player.x < cratePosition + crate.width
-      ) {
-        player.x = cratePosition + crate.width;
-      }
     }
   }
 }
@@ -374,6 +374,7 @@ function OnlineElementalDuetScreen({
   const [completedRun, setCompletedRun] = useState<{ levelNumber: number; ticks: number } | null>(
     null,
   );
+  const winShownRef = useRef(false);
   const pairingId = identity.pairing?.id ?? access.gameSessionId;
   const [connectionAccess, setConnectionAccess] = useState(access);
   const automaticReservationRefreshes = useRef(0);
@@ -445,6 +446,23 @@ function OnlineElementalDuetScreen({
       })
       .catch(() => setBestTimesUnavailable(true));
   }, [completedRun, pairingId]);
+
+  useEffect(() => {
+    if (
+      !gates.completed ||
+      completedRun?.levelNumber !== gates.currentLevel ||
+      winShownRef.current ||
+      elementalCompletionDestination(gates.currentLevel, ELEMENTAL_AUTHORED_LEVELS.length).type !==
+        'won'
+    ) {
+      return;
+    }
+    winShownRef.current = true;
+    navigation.replace('ElementalDuetWin', {
+      clearTicks: completedRun.ticks,
+      levelCount: ELEMENTAL_AUTHORED_LEVELS.length,
+    });
+  }, [completedRun, gates.completed, gates.currentLevel, navigation]);
 
   useEffect(() => {
     gameplayPausedRef.current = status !== 'playing';
@@ -792,6 +810,13 @@ function OnlineElementalDuetScreen({
   const verticalScale = scale * 1.35;
   const stageScale = elementalStageScale(boardWidth);
   const level = elementalLevel(gates.currentLevel);
+  const hasUndergroundArea = level.environmentZones?.some(
+    (zone) => zone.environment === 'underground',
+  ) ?? false;
+  const completionDestination = elementalCompletionDestination(
+    gates.currentLevel,
+    ELEMENTAL_AUTHORED_LEVELS.length,
+  );
   const bestTicks = bestTicksForLevel(bestTimes, level);
   const playerSize = 2.05 * scale;
   const onlineWorldWidth = level.width * scale;
@@ -801,8 +826,6 @@ function OnlineElementalDuetScreen({
     Math.min(windowHeight - 215, Math.min(windowWidth - 28, 420) * 1.45),
   );
   const localAtGate = assignedRole === 'ember' ? gates.ember : gates.tide;
-  const emberCrystalMask = elementalCrystalMaskForRole('ember', level);
-  const tideCrystalMask = elementalCrystalMaskForRole('tide', level);
   const mechanicsReady =
     !('mechanics' in level) ||
     ((level.mechanics.lever.target !== 'gates' || gates.leverActivated) &&
@@ -813,12 +836,15 @@ function OnlineElementalDuetScreen({
     gates.buttonPressed,
   );
   const emberGateUnlocked =
-    mechanicsReady && (gates.collectedCrystalMask & emberCrystalMask) === emberCrystalMask;
+    mechanicsReady && elementalRoleHasRequiredCrystals('ember', gates.collectedCrystalMask, level);
   const tideGateUnlocked =
-    mechanicsReady && (gates.collectedCrystalMask & tideCrystalMask) === tideCrystalMask;
+    mechanicsReady && elementalRoleHasRequiredCrystals('tide', gates.collectedCrystalMask, level);
   const localGateUnlocked = assignedRole === 'ember' ? emberGateUnlocked : tideGateUnlocked;
-  const localCrystalMask = assignedRole === 'ember' ? emberCrystalMask : tideCrystalMask;
-  const localShardsComplete = (gates.collectedCrystalMask & localCrystalMask) === localCrystalMask;
+  const localShardsComplete = elementalRoleHasRequiredCrystals(
+    assignedRole,
+    gates.collectedCrystalMask,
+    level,
+  );
   const cameraTargetX = assignedRole === 'ember' ? emberX : tideX;
   const cameraTargetY = assignedRole === 'ember' ? emberY : tideY;
   useEffect(() => {
@@ -1107,18 +1133,18 @@ function OnlineElementalDuetScreen({
                         left: platform.x * scale,
                         top: ONLINE_FLOOR_Y * stageScale - platform.y * verticalScale,
                         width: platform.width * scale,
-                        height: (level.number === 3 ? 8 : 9) * stageScale,
-                        borderRadius: level.number === 3 ? 3 * stageScale : 999,
+                        height: (hasUndergroundArea ? 8 : 9) * stageScale,
+                        borderRadius: hasUndergroundArea ? 3 * stageScale : 999,
                         backgroundColor:
                           platform.element === 'ember'
-                            ? level.number === 3
+                            ? hasUndergroundArea
                               ? '#9A493E'
                               : '#E9A75B'
                             : platform.element === 'tide'
-                              ? level.number === 3
+                              ? hasUndergroundArea
                                 ? '#286882'
                                 : '#67BBDD'
-                              : level.number === 3
+                              : hasUndergroundArea
                                 ? '#676174'
                                 : '#B69BD4',
                       },
@@ -1142,12 +1168,12 @@ function OnlineElementalDuetScreen({
                   </View>
                 ))}
                 {(level.ramps ?? []).map((ramp) => {
-                  const rampColor =
+                  const rampAccent =
                     ramp.element === 'ember'
                       ? '#D96B4C'
                       : ramp.element === 'tide'
                         ? '#3A9BC4'
-                        : '#686A72';
+                        : 'rgba(255,255,255,0.58)';
                   return (
                     <View
                       key={ramp.id}
@@ -1169,7 +1195,7 @@ function OnlineElementalDuetScreen({
                           {
                             width: ramp.width * scale,
                             height: ramp.height * verticalScale,
-                            backgroundColor: rampColor,
+                            backgroundColor: '#4A4658',
                             transform: [
                               { translateY: (ramp.height * verticalScale) / 2 },
                               { skewY: ramp.direction === 'up-right' ? '-26deg' : '26deg' },
@@ -1181,6 +1207,7 @@ function OnlineElementalDuetScreen({
                         style={[
                           styles.rampHighlight,
                           ramp.direction === 'up-right' ? { right: 0 } : { left: 0 },
+                          { backgroundColor: rampAccent },
                         ]}
                       />
                     </View>
@@ -1261,7 +1288,7 @@ function OnlineElementalDuetScreen({
                     {
                       top: ONLINE_FLOOR_Y * stageScale,
                       height: (ONLINE_WORLD_PIXEL_HEIGHT - ONLINE_FLOOR_Y) * stageScale,
-                      backgroundColor: level.number === 3 ? '#292733' : '#8DC79B',
+                      backgroundColor: hasUndergroundArea ? '#292733' : '#8DC79B',
                     },
                   ]}
                 />
@@ -1317,18 +1344,14 @@ function OnlineElementalDuetScreen({
                 ]}
               >
                 <AppText kind="label" tokens={tokens}>
-                  {level.number === 1
-                    ? 'LEVEL 1 COMPLETE'
-                    : level.number === 2
-                      ? 'VAULT MASTERED'
-                      : 'KEEP CONQUERED'}
+                  {`LEVEL ${level.number} COMPLETE`}
                 </AppText>
                 <AppText kind="label" tokens={tokens}>
                   {`CLEAR TIME ${formatElementalTime(elapsedTicks)}`}
                 </AppText>
-                {level.number < 3 ? (
+                {completionDestination.type === 'advance' ? (
                   <AppButton
-                    label={`Enter Level ${level.number + 1}`}
+                    label={`Enter Level ${completionDestination.nextLevel}`}
                     tokens={tokens}
                     onPress={() => roomRef.current?.send('advance-level')}
                   />
@@ -2011,9 +2034,9 @@ function GateProgress({
   const tideMask = elementalCrystalMaskForRole('tide', level);
   const emberCrystals = countCollectedElementalCrystals(collectedCrystalMask & emberMask);
   const tideCrystals = countCollectedElementalCrystals(collectedCrystalMask & tideMask);
-  const emberCrystalTotal = level.crystals.filter((crystal) => crystal.role === 'ember').length;
-  const tideCrystalTotal = level.crystals.filter((crystal) => crystal.role === 'tide').length;
-  const shardsComplete = emberCrystals === emberCrystalTotal && tideCrystals === tideCrystalTotal;
+  const emberCrystalTotal = level.requiredCrystals.ember;
+  const tideCrystalTotal = level.requiredCrystals.tide;
+  const shardsComplete = emberCrystals >= emberCrystalTotal && tideCrystals >= tideCrystalTotal;
   const objective = completed
     ? 'Level complete'
     : !shardsComplete
@@ -2053,7 +2076,7 @@ function GateProgress({
           ]}
         >
           <AppText kind="label" tokens={tokens}>
-            {`✦ EMBER ${emberCrystals}/${emberCrystalTotal} · ${
+            {`✦ EMBER ${Math.min(emberCrystals, emberCrystalTotal)}/${emberCrystalTotal} · ${
               emberAtGate || completed ? 'HOME' : emberGateUnlocked ? 'OPEN' : 'LOCKED'
             }`}
           </AppText>
@@ -2068,7 +2091,7 @@ function GateProgress({
           ]}
         >
           <AppText kind="label" tokens={tokens}>
-            {`≈ TIDE ${tideCrystals}/${tideCrystalTotal} · ${
+            {`≈ TIDE ${Math.min(tideCrystals, tideCrystalTotal)}/${tideCrystalTotal} · ${
               tideAtGate || completed ? 'HOME' : tideGateUnlocked ? 'OPEN' : 'LOCKED'
             }`}
           </AppText>

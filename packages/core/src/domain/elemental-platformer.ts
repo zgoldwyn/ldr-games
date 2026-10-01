@@ -1,4 +1,5 @@
 import type { AccountId } from './common.js';
+import { ELEMENTAL_PUBLISHED_LEVELS } from './elemental-published-levels.js';
 
 export const ELEMENTAL_PLATFORMER_GAME_ID = 'elemental-platformer';
 
@@ -54,6 +55,7 @@ export interface ElementalLevelBase {
     readonly y: number;
     readonly role: ElementalRole;
   }[];
+  readonly requiredCrystals: Readonly<Record<ElementalRole, number>>;
   readonly environmentZones?: readonly {
     readonly id: string;
     readonly x: number;
@@ -319,6 +321,10 @@ export const ELEMENTAL_SPLITROOT_TEMPLE_LEVEL = {
       role: 'tide',
     },
   ],
+  requiredCrystals: {
+    ember: 4,
+    tide: 4,
+  },
   environmentZones: [
     {
       id: 'splitroot-outside',
@@ -376,6 +382,10 @@ export const ELEMENTAL_FOUNDRY_LEVEL = {
     },
   ],
   crystals: [],
+  requiredCrystals: {
+    ember: 0,
+    tide: 0,
+  },
   environmentZones: [],
   entrances: [],
   mechanics: {
@@ -424,44 +434,185 @@ export const ELEMENTAL_DUNGEON_LEVEL = {
   moveSpeed: 8.6,
   jumpSpeed: 13,
   gravity: -24,
-  spawns: { ember: 4, tide: 8 },
-  spawnY: { ember: 15, tide: 15 },
+  spawns: {
+    ember: 4,
+    tide: 8,
+  },
+  spawnY: {
+    ember: 15,
+    tide: 15,
+  },
   gates: {
-    ember: { x: 18.3, y: 0, width: 2.7 },
-    tide: { x: 78.3, y: 0, width: 2.7 },
+    ember: {
+      x: 18.3,
+      y: 0,
+      width: 2.7,
+    },
+    tide: {
+      x: 78.3,
+      y: 0,
+      width: 2.7,
+    },
   },
   solids: [
-    { id: 'outside-approach', x: 0, y: 0, width: 18, height: 15 },
-    // The exterior jump apex is below this roof's top, so it cannot become a shortcut.
-    { id: 'dungeon-roof', x: 18, y: 17.2, width: 64, height: 4.8 },
-    { id: 'upper-floor-left', x: 18, y: 11.8, width: 18, height: 0.8 },
-    { id: 'upper-floor-right', x: 42, y: 11.8, width: 40, height: 0.8 },
-    { id: 'middle-floor-left', x: 18, y: 7.5, width: 35, height: 0.8 },
-    { id: 'middle-floor-right', x: 59, y: 7.5, width: 23, height: 0.8 },
-    { id: 'lower-floor-left', x: 23, y: 3.2, width: 7, height: 0.8 },
-    { id: 'lower-floor-right', x: 36, y: 3.2, width: 38, height: 0.8 },
+    {
+      id: 'outside-approach',
+      x: 0,
+      y: 0,
+      width: 18,
+      height: 15,
+    },
+    {
+      id: 'dungeon-roof',
+      x: 18,
+      y: 17.2,
+      width: 64,
+      height: 4.8,
+    },
+    {
+      id: 'upper-floor-left',
+      x: 18,
+      y: 11.8,
+      width: 18,
+      height: 0.8,
+    },
+    {
+      id: 'upper-floor-right',
+      x: 42,
+      y: 11.8,
+      width: 40,
+      height: 0.8,
+    },
+    {
+      id: 'middle-floor-left',
+      x: 18,
+      y: 7.5,
+      width: 35,
+      height: 0.8,
+    },
+    {
+      id: 'middle-floor-right',
+      x: 59,
+      y: 7.5,
+      width: 23,
+      height: 0.8,
+    },
+    {
+      id: 'lower-floor-left',
+      x: 23,
+      y: 3.2,
+      width: 7,
+      height: 0.8,
+    },
+    {
+      id: 'lower-floor-right',
+      x: 36,
+      y: 3.2,
+      width: 38,
+      height: 0.8,
+    },
   ],
   platforms: [
-    { id: 'entrance-step', x: 16.8, y: 13.2, width: 5.2, element: 'neutral' },
-    { id: 'upper-shaft-step', x: 36.5, y: 10.2, width: 5, element: 'neutral' },
-    { id: 'middle-shaft-step', x: 53.5, y: 5.8, width: 5, element: 'neutral' },
-    { id: 'tunnel-chasm-step', x: 39.2, y: 1.45, width: 3.8, element: 'neutral' },
+    {
+      id: 'entrance-step',
+      x: 16.8,
+      y: 13.2,
+      width: 5.2,
+      element: 'neutral',
+    },
+    {
+      id: 'upper-shaft-step',
+      x: 36.5,
+      y: 10.2,
+      width: 5,
+      element: 'neutral',
+    },
+    {
+      id: 'middle-shaft-step',
+      x: 53.5,
+      y: 5.8,
+      width: 5,
+      element: 'neutral',
+    },
+    {
+      id: 'tunnel-chasm-step',
+      x: 39.2,
+      y: 1.45,
+      width: 3.8,
+      element: 'neutral',
+    },
   ],
   hazards: [
-    { id: 'ember-tunnel-fire', x: 25.3, width: 2.2, safeRole: 'ember' },
-    { id: 'tunnel-chasm', x: 39.8, width: 2.4, safeRole: 'none' },
-    { id: 'tide-tunnel-water', x: 66.5, width: 2.2, safeRole: 'tide' },
+    {
+      id: 'ember-tunnel-fire',
+      x: 25.3,
+      width: 2.2,
+      safeRole: 'ember',
+    },
+    {
+      id: 'tunnel-chasm',
+      x: 39.8,
+      width: 2.4,
+      safeRole: 'none',
+    },
+    {
+      id: 'tide-tunnel-water',
+      x: 66.5,
+      width: 2.2,
+      safeRole: 'tide',
+    },
   ],
   crystals: [
-    { id: 'ember-upper-shard', x: 27, y: 13.85, role: 'ember' },
-    { id: 'ember-middle-shard', x: 66, y: 9.55, role: 'ember' },
-    { id: 'ember-tunnel-shard', x: 61, y: 1.25, role: 'ember' },
-    { id: 'tide-upper-shard', x: 49, y: 13.85, role: 'tide' },
-    { id: 'tide-middle-shard', x: 25, y: 9.55, role: 'tide' },
-    { id: 'tide-tunnel-shard', x: 22.5, y: 1.25, role: 'tide' },
+    {
+      id: 'ember-upper-shard',
+      x: 27,
+      y: 13.85,
+      role: 'ember',
+    },
+    {
+      id: 'ember-middle-shard',
+      x: 66,
+      y: 9.55,
+      role: 'ember',
+    },
+    {
+      id: 'ember-tunnel-shard',
+      x: 61,
+      y: 1.25,
+      role: 'ember',
+    },
+    {
+      id: 'tide-upper-shard',
+      x: 49,
+      y: 13.85,
+      role: 'tide',
+    },
+    {
+      id: 'tide-middle-shard',
+      x: 25,
+      y: 9.55,
+      role: 'tide',
+    },
+    {
+      id: 'tide-tunnel-shard',
+      x: 22.5,
+      y: 1.25,
+      role: 'tide',
+    },
   ],
+  requiredCrystals: {
+    ember: 3,
+    tide: 3,
+  },
   environmentZones: [
-    { id: 'keep-exterior', x: 0, y: 0, width: 18, height: 17.2, environment: 'outside' },
+    {
+      id: 'keep-exterior',
+      x: 0,
+      y: 0,
+      width: 18,
+      height: 17.2,
+      environment: 'outside',
+    },
     {
       id: 'keep-underground',
       x: 18,
@@ -484,11 +635,10 @@ export const ELEMENTAL_DUNGEON_LEVEL = {
   ],
 } as const satisfies ElementalLevel;
 
-export const ELEMENTAL_AUTHORED_LEVELS = [
-  ELEMENTAL_GROVE_LEVEL,
-  ELEMENTAL_FOUNDRY_LEVEL,
-  ELEMENTAL_DUNGEON_LEVEL,
-] as const;
+export const ELEMENTAL_AUTHORED_LEVELS: readonly ElementalLevel[] =
+  ELEMENTAL_PUBLISHED_LEVELS.length > 0
+    ? ELEMENTAL_PUBLISHED_LEVELS
+    : [ELEMENTAL_GROVE_LEVEL, ELEMENTAL_FOUNDRY_LEVEL, ELEMENTAL_DUNGEON_LEVEL];
 
 export const ELEMENTAL_PLATFORMER_TICKS_PER_SECOND = 30;
 
@@ -525,7 +675,7 @@ export function elementalCatalogFingerprint(
 }
 
 export function elementalLevel(levelNumber: number): ElementalLevel {
-  return ELEMENTAL_AUTHORED_LEVELS[levelNumber - 1] ?? ELEMENTAL_AUTHORED_LEVELS[0];
+  return ELEMENTAL_AUTHORED_LEVELS[levelNumber - 1] ?? ELEMENTAL_AUTHORED_LEVELS[0]!;
 }
 
 /** Bitmask with one bit per authored crystal; shared by server state and clients. */
@@ -541,11 +691,21 @@ export function elementalCrystalMaskForRole(
   );
 }
 
+/** Gate eligibility uses each role's authored quota, not every placed crystal. */
+export function elementalRoleHasRequiredCrystals(
+  role: ElementalRole,
+  collectedMask: number,
+  level: ElementalLevel = ELEMENTAL_GROVE_LEVEL,
+): boolean {
+  const roleMask = elementalCrystalMaskForRole(role, level);
+  return countCollectedElementalCrystals(collectedMask & roleMask) >= level.requiredCrystals[role];
+}
+
 export const ELEMENTAL_EMBER_CRYSTALS_MASK = elementalCrystalMaskForRole('ember');
 export const ELEMENTAL_TIDE_CRYSTALS_MASK = elementalCrystalMaskForRole('tide');
 
 export function countCollectedElementalCrystals(mask: number): number {
-  let remaining = mask & ELEMENTAL_ALL_CRYSTALS_MASK;
+  let remaining = mask & 0xffff;
   let count = 0;
   while (remaining !== 0) {
     count += remaining & 1;

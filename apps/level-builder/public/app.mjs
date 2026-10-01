@@ -6,6 +6,7 @@ import {
   allObjects,
   blankLevel,
   cloneLevel,
+  createPlaytestMechanicState,
   createPlaytestPlayer,
   createObject,
   exportJson,
@@ -15,6 +16,7 @@ import {
   fitCameraToBounds,
   mirrorObjectAcrossStage,
   nextTrackpadCamera,
+  playtestActivatedPlatformIsActive,
   pushableSupportY,
   removeObject,
   resolvePushableX,
@@ -281,18 +283,15 @@ function renderSimulation() {
   }
   const color = role === 'ember' ? colors.ember : colors.tide;
   const mechanics = level.mechanics;
-  const activatedPlatformActive =
-    mechanics &&
-    playtestMechanics &&
-    (mechanics.lever.target === 'activatedPlatform' ||
-      mechanics.pressurePlate.target === 'activatedPlatform') &&
-    (mechanics.lever.target !== 'activatedPlatform' || playtestMechanics.leverActivated) &&
-    (mechanics.pressurePlate.target !== 'activatedPlatform' ||
-      playtestMechanics.pressurePlatePressed);
-  const mechanismMarkup =
-    mechanics && playtestMechanics
-      ? `<rect class="pushable" x="${playtestMechanics.pushableX}" y="${pushableSupportY(level, playtestMechanics.pushableX)}" width="${mechanics.pushable.width}" height="${mechanics.pushable.height}" rx=".12"/>${activatedPlatformActive ? `<rect class="platform ${mechanics.activatedPlatform.element} active-platform-preview" x="${mechanics.activatedPlatform.x}" y="${mechanics.activatedPlatform.y - 0.18}" width="${mechanics.activatedPlatform.width}" height=".36" rx=".18"/>` : ''}`
+  const activatedPlatformActive = playtestActivatedPlatformIsActive(level, playtestMechanics);
+  const pushableMarkup =
+    mechanics?.pushable && Number.isFinite(playtestMechanics?.pushableX)
+      ? `<rect class="pushable" x="${playtestMechanics.pushableX}" y="${pushableSupportY(level, playtestMechanics.pushableX)}" width="${mechanics.pushable.width}" height="${mechanics.pushable.height}" rx=".12"/>`
       : '';
+  const activatedPlatformMarkup = activatedPlatformActive
+    ? `<rect class="platform ${mechanics.activatedPlatform.element} active-platform-preview" x="${mechanics.activatedPlatform.x}" y="${mechanics.activatedPlatform.y - 0.18}" width="${mechanics.activatedPlatform.width}" height=".36" rx=".18"/>`
+    : '';
+  const mechanismMarkup = pushableMarkup + activatedPlatformMarkup;
   simulation.innerHTML = `${mechanismMarkup}<g class="demo-player"><rect x="${playtestPlayer.x}" y="${playtestPlayer.y}" width="${level.playerWidth}" height="${level.playerWidth}" rx=".48" fill="${color}"/><circle cx="${playtestPlayer.x + level.playerWidth * 0.34}" cy="${playtestPlayer.y + level.playerWidth * 0.62}" r=".1"/><circle cx="${playtestPlayer.x + level.playerWidth * 0.66}" cy="${playtestPlayer.y + level.playerWidth * 0.62}" r=".1"/></g>`;
 }
 
@@ -303,18 +302,12 @@ function setSimulationHint(message) {
 }
 
 function playtestHint() {
-  return `PLAYTEST · A/D or ←/→ move · W, ↑, or Space jumps${level.mechanics ? ' · E toggles lever · hold Shift to simulate partner ramp-push' : ''} · click to reposition`;
+  return `PLAYTEST · A/D or ←/→ move · W, ↑, or Space jumps${level.mechanics?.lever ? ' · E toggles lever' : ''}${level.mechanics?.pushable ? ' · hold Shift to simulate partner ramp-push' : ''} · click to reposition`;
 }
 
 function resetPlaytest() {
   playtestPlayer = createPlaytestPlayer(level, playRole());
-  playtestMechanics = level.mechanics
-    ? {
-        leverActivated: false,
-        pressurePlatePressed: false,
-        pushableX: level.mechanics.pushable.x,
-      }
-    : null;
+  playtestMechanics = createPlaytestMechanicState(level);
   jumpQueued = false;
   reachOrigin = null;
   reachTraces = [];
@@ -348,15 +341,14 @@ function playtestFrame(now) {
         : pressedKeys.has('arrowright') || pressedKeys.has('d')
           ? 1
           : 0;
-    if (level.mechanics && playtestMechanics && playtestPlayer.grounded && moveX !== 0) {
+    if (
+      level.mechanics?.pushable &&
+      Number.isFinite(playtestMechanics?.pushableX) &&
+      playtestPlayer.grounded &&
+      moveX !== 0
+    ) {
       const pushable = level.mechanics.pushable;
-      const activatedPlatformActive =
-        (level.mechanics.lever.target === 'activatedPlatform' ||
-          level.mechanics.pressurePlate.target === 'activatedPlatform') &&
-        (level.mechanics.lever.target !== 'activatedPlatform' ||
-          playtestMechanics.leverActivated) &&
-        (level.mechanics.pressurePlate.target !== 'activatedPlatform' ||
-          playtestMechanics.pressurePlatePressed);
+      const activatedPlatformActive = playtestActivatedPlatformIsActive(level, playtestMechanics);
       const pushableY = pushableSupportY(level, playtestMechanics.pushableX);
       const overlapsVertically =
         playtestPlayer.y < pushableY + pushable.height &&
@@ -386,7 +378,7 @@ function playtestFrame(now) {
       1 / 60,
       playtestMechanics,
     );
-    if (level.mechanics && playtestMechanics) {
+    if (level.mechanics?.pressurePlate && playtestMechanics) {
       const plate = level.mechanics.pressurePlate;
       const center = playtestPlayer.x + level.playerWidth / 2;
       const playerPressed =
@@ -396,6 +388,8 @@ function playtestFrame(now) {
       const pushable = level.mechanics.pushable;
       const pushableY = pushableSupportY(level, playtestMechanics.pushableX);
       const blockPressed =
+        pushable &&
+        Number.isFinite(playtestMechanics.pushableX) &&
         Math.abs(pushableY - plate.y) <= 0.25 &&
         playtestMechanics.pushableX + pushable.width > plate.x &&
         playtestMechanics.pushableX < plate.x + plate.width;
@@ -410,6 +404,7 @@ function playtestFrame(now) {
 }
 
 function startPlaytest() {
+  document.activeElement?.blur?.();
   simulationMode = 'playtest';
   reachArmed = false;
   clearSelection();
@@ -431,8 +426,8 @@ function updateReachOrigin(position, bypassSnap = false) {
   const origin = snapJumpOrigin(level, position, playRole(), bypassSnap ? -1 : 1.25);
   reachOrigin = {
     ...origin,
-    x: origin.snappedEdge ? origin.x : snap(origin.x),
-    y: origin.snappedEdge ? origin.y : snap(origin.y),
+    x: origin.snappedSurface ? origin.x : snap(origin.x),
+    y: origin.snappedSurface ? origin.y : snap(origin.y),
   };
   reachTraces = traceJumpReach(level, reachOrigin, playRole());
   renderSimulation();
@@ -485,8 +480,12 @@ function renderWorld() {
         object.direction === 'up-right'
           ? `${object.x},${object.y} ${object.x + object.width},${object.y} ${object.x + object.width},${object.y + object.height}`
           : `${object.x},${object.y} ${object.x + object.width},${object.y} ${object.x},${object.y + object.height}`;
+      const slope =
+        object.direction === 'up-right'
+          ? `${object.x},${object.y} ${object.x + object.width},${object.y + object.height}`
+          : `${object.x},${object.y + object.height} ${object.x + object.width},${object.y}`;
       body.push(
-        `<g class="object${active}" data-kind="ramp" data-id="${object.id}"><polygon class="ramp ${role}" points="${points}"/><polyline class="ramp-edge" points="${points}"/></g>`,
+        `<g class="object${active}" data-kind="ramp" data-id="${object.id}"><polygon class="ramp" points="${points}"/><polyline class="ramp-edge ${role}" points="${slope}"/></g>`,
       );
     }
     if (object.kind === 'hazard')
@@ -523,7 +522,7 @@ function renderWorld() {
       );
     if (object.kind === 'environmentZone')
       body.push(
-        `<g class="object environment-zone-object${active}" data-kind="environmentZone" data-id="${object.id}"><rect class="environment-zone ${object.environment}" x="${object.x}" y="${object.y}" width="${object.width}" height="${object.height}" rx=".18"/></g>`,
+        `<g class="object environment-zone-object${active}" data-kind="environmentZone" data-id="${object.id}"><rect class="environment-zone ${object.environment}" x="${object.x}" y="${object.y}" width="${object.width}" height="${object.height}" rx=".18"/><rect class="environment-zone-hitbox" x="${object.x}" y="${object.y}" width="${object.width}" height="${object.height}" rx=".18"/></g>`,
       );
     if (object.kind === 'entrance')
       body.push(
@@ -731,6 +730,8 @@ function renderMeta() {
   $('#level-id').value = level.id;
   $('#level-number').value = level.number;
   $('#level-width').value = level.width;
+  for (const role of ['ember', 'tide'])
+    $(`#${role}-crystals-required`).value = level.requiredCrystals[role];
 }
 function render() {
   renderMeta();
@@ -887,6 +888,12 @@ svg.addEventListener('pointerdown', (event) => {
     tool = 'select';
     render();
     return;
+  }
+  if (selection.length) {
+    clearSelection();
+    renderWorld();
+    renderLayers();
+    renderInspector();
   }
   drag = { type: 'pan', client: { x: event.clientX, y: event.clientY }, origin: { ...pan } };
   svg.setPointerCapture(event.pointerId);
@@ -1170,7 +1177,8 @@ $('#playtest').onclick = () => {
   else startPlaytest();
 };
 $('#reset-playtest').onclick = resetPlaytest;
-$('#play-role').onchange = () => {
+$('#play-role').onchange = (event) => {
+  event.target.blur();
   reachTraces = [];
   reachOrigin = null;
   if (simulationMode === 'playtest') resetPlaytest();
@@ -1200,6 +1208,18 @@ for (const [id, key] of [
     if (key === 'number') scheduleLiveCatalogSync();
     render();
   };
+for (const role of ['ember', 'tide'])
+  $(`#${role}-crystals-required`).onchange = (event) => {
+    const value = Number(event.target.value);
+    if (!Number.isInteger(value) || value < 0 || value > 16) {
+      toast('Enter a whole number from 0 to 16');
+      renderMeta();
+      return;
+    }
+    snapshot();
+    level.requiredCrystals[role] = value;
+    render();
+  };
 for (const button of document.querySelectorAll('.filter-row button'))
   button.onclick = () => {
     issueFilter = button.dataset.filter;
@@ -1224,7 +1244,7 @@ async function syncLiveCatalogNumbering() {
   if (liveWorkspaceLevels.length !== liveLevels.length) return;
   const numbers = liveWorkspaceLevels.map((item) => item.number);
   if (
-    numbers.some((number) => !Number.isInteger(number) || number < 1) ||
+    numbers.some((number) => !Number.isInteger(number) || number < 1 || number > liveLevels.length) ||
     new Set(numbers).size !== numbers.length
   )
     return;
@@ -1262,53 +1282,57 @@ function scheduleLiveCatalogSync() {
   }, 500);
 }
 $('#push-level').onclick = async () => {
+  if (
+    levels.some((item) => !Number.isInteger(item.number) || item.number < 1) ||
+    new Set(levels.map((item) => item.number)).size !== levels.length
+  ) {
+    toast('Give every workspace level a unique positive whole-number position');
+    return;
+  }
   try {
     await loadLiveLevels();
   } catch (error) {
     toast(error instanceof Error ? error.message : 'Live levels could not be loaded');
     return;
   }
-  const target = $('#push-target');
-  target.innerHTML = liveLevels
-    .map(
-      (liveLevel) =>
-        `<option value="${liveLevel.number}">Level ${liveLevel.number} — ${safe(liveLevel.name)}</option>`,
-    )
-    .join('');
-  if (liveLevels.some((item) => item.number === level.number)) target.value = String(level.number);
-  $('#push-summary').textContent = `“${level.name}” will replace the selected live level.`;
+  $('#push-summary').textContent =
+    `Publish all ${levels.length} workspace levels in number order. ` +
+    'Live levels missing from the workspace will be kept, and every published level gets a fresh ID.';
   $('#push-dialog').showModal();
 };
 $('#confirm-push').onclick = async () => {
-  const targetNumber = Number($('#push-target').value);
+  if (catalogSyncTimer !== null) {
+    clearTimeout(catalogSyncTimer);
+    catalogSyncTimer = null;
+  }
   saveProgress(false);
   const button = $('#confirm-push');
   button.disabled = true;
-  button.textContent = 'Archiving and pushing…';
+  button.textContent = 'Publishing tree…';
   try {
-    const response = await fetch('/api/push-level', {
+    const response = await fetch('/api/push-catalog', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ targetNumber, level }),
+      body: JSON.stringify({ levels, activeIndex: levels.indexOf(level) }),
     });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error);
-    const index = levels.indexOf(level);
-    level = cloneLevel(result.installedLevel);
-    levels[index] = level;
-    liveLevels = liveLevels.map((item) =>
-      item.number === targetNumber ? cloneLevel(level) : item,
-    );
+    const result = await response.json().catch(() => null);
+    if (!response.ok)
+      throw new Error(result?.error ?? 'Restart the Level Forge server to use whole-tree publishing');
+    levels = result.levels.map(cloneLevel);
+    level = levels[result.activeNumber - 1];
+    liveLevels = result.levels.map(cloneLevel);
+    clearSelection();
+    history = [];
     $('#push-dialog').close();
     refreshPicker();
     render();
     saveProgress(false);
-    toast(`Level ${targetNumber} replaced · previous version archived`);
+    toast(`${levels.length} levels published · fresh IDs assigned`);
   } catch (error) {
     toast(error instanceof Error ? error.message : 'Level update failed');
   } finally {
     button.disabled = false;
-    button.textContent = 'Archive and overwrite';
+    button.textContent = 'Publish whole tree';
   }
 };
 $('#archive-active-level').onclick = async () => {
@@ -1364,7 +1388,7 @@ $('#archived-levels').onclick = async () => {
     list.innerHTML = archives
       .map(
         (archive, index) =>
-          `<div class="archive-entry"><div><strong>Level ${archive.targetNumber} · ${safe(archive.level.name)}</strong><span>${archive.reason === 'manual' ? 'Manually archived' : 'Replaced during publish'} · ${safe(new Date(archive.archivedAt).toLocaleString())} · ${safe(archive.level.id)}</span></div><button type="button" data-archive-index="${index}">Open copy</button></div>`,
+          `<div class="archive-entry"><div><strong>Level ${archive.targetNumber} · ${safe(archive.level.name)}</strong><span>${archive.reason === 'manual' ? 'Manually archived' : archive.reason === 'reorder' ? 'Before order change' : 'Previous live version'} · ${safe(new Date(archive.archivedAt).toLocaleString())} · ${safe(archive.level.id)}</span></div><button type="button" data-archive-index="${index}">Open copy</button></div>`,
       )
       .join('');
     for (const openButton of list.querySelectorAll('[data-archive-index]'))
@@ -1495,7 +1519,7 @@ document.addEventListener('keydown', (event) => {
       if (['arrowup', 'w', ' '].includes(key) && !event.repeat) jumpQueued = true;
       return;
     }
-    if (key === 'e' && !event.repeat && level.mechanics && playtestMechanics) {
+    if (key === 'e' && !event.repeat && level.mechanics?.lever && playtestMechanics) {
       event.preventDefault();
       const lever = level.mechanics.lever;
       const playerCenter = playtestPlayer.x + level.playerWidth / 2;

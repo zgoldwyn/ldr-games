@@ -1,7 +1,7 @@
 import { Room, type Client } from 'colyseus';
 import {
   ELEMENTAL_AUTHORED_LEVELS,
-  elementalCrystalMaskForRole,
+  elementalRoleHasRequiredCrystals,
   elementalLevel,
   type ElementalLevel,
   type ElementalRole,
@@ -306,14 +306,16 @@ export class PlatformerRoom extends Room<{
       !('mechanics' in level) ||
       ((level.mechanics.lever.target !== 'gates' || this.state.leverActivated) &&
         (level.mechanics.pressurePlate.target !== 'gates' || this.state.buttonPressed));
-    const emberMask = elementalCrystalMaskForRole('ember', level);
-    const tideMask = elementalCrystalMaskForRole('tide', level);
     const gates = evaluatePlatformerGates(
       this.state.players.get('ember'),
       this.state.players.get('tide'),
       {
-        ember: mechanicsReady && (this.state.collectedCrystalMask & emberMask) === emberMask,
-        tide: mechanicsReady && (this.state.collectedCrystalMask & tideMask) === tideMask,
+        ember:
+          mechanicsReady &&
+          elementalRoleHasRequiredCrystals('ember', this.state.collectedCrystalMask, level),
+        tide:
+          mechanicsReady &&
+          elementalRoleHasRequiredCrystals('tide', this.state.collectedCrystalMask, level),
       },
       level,
     );

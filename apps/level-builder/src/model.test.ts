@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import {
   blankLevel,
   cloneLevel,
+  createPlaytestMechanicState,
   createPlaytestPlayer,
   createObject,
   fitCameraToBounds,
@@ -14,6 +15,7 @@ import {
   exportTypescript,
   importTypescriptLevel,
   nextTrackpadCamera,
+  playtestActivatedPlatformIsActive,
   pushableSupportY,
   resolvePushableX,
   resizeRectangle,
@@ -36,11 +38,30 @@ describe('Ember & Tide level builder model', () => {
     expect(cloneLevel(legacy)).not.toHaveProperty('order');
   });
 
-  it('reports incomplete role shard sets in a new level', () => {
+  it('validates each gate requirement against that role’s placed crystals', () => {
     const issues = validateLevel(blankLevel());
-    expect(issues.filter((entry: { code: string }) => entry.code === 'shard-count')).toHaveLength(
-      2,
+    expect(
+      issues.filter((entry: { code: string }) => entry.code === 'shard-requirement'),
+    ).toHaveLength(2);
+    const level = blankLevel();
+    level.crystals.push({ id: 'ember-one', x: 20, y: 3, role: 'ember' });
+    level.requiredCrystals = { ember: 1, tide: 0 };
+    expect(
+      validateLevel(level).some((entry: { code: string }) => entry.code === 'shard-requirement'),
+    ).toBe(false);
+    level.requiredCrystals.tide = 2;
+    expect(validateLevel(level)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'shard-requirement', severity: 'error' }),
+      ]),
     );
+  });
+
+  it('preserves old levels by defaulting each gate requirement to its placed count', () => {
+    const level = blankLevel();
+    level.crystals.push({ id: 'ember-one', x: 20, y: 3, role: 'ember' });
+    delete level.requiredCrystals;
+    expect(cloneLevel(level).requiredCrystals).toEqual({ ember: 1, tide: 0 });
   });
 
   it('reflects copied geometry across the stage center', () => {
@@ -114,6 +135,36 @@ describe('Ember & Tide level builder model', () => {
     expect(
       validateLevel(level).some((entry: { code: string }) => entry.code === 'mechanic-set'),
     ).toBe(false);
+  });
+
+  it('playtests while mechanics are only partly authored', () => {
+    for (const kind of ['lever', 'pressurePlate', 'pushable', 'activatedPlatform']) {
+      const level = blankLevel();
+      createObject(level, kind, 20, 0);
+      const state = createPlaytestMechanicState(level);
+      expect(state).not.toBeNull();
+      expect(state.pushableX).toBe(kind === 'pushable' ? 20 : null);
+      expect(() =>
+        stepPlaytestPlayer(
+          level,
+          createPlaytestPlayer(level, 'ember'),
+          { moveX: 1, jump: true },
+          'ember',
+          1 / 60,
+          state,
+        ),
+      ).not.toThrow();
+    }
+  });
+
+  it('activates a partially authored bridge only when its existing control is engaged', () => {
+    const level = blankLevel();
+    createObject(level, 'activatedPlatform', 25, 4);
+    createObject(level, 'lever', 20, 0);
+    const state = createPlaytestMechanicState(level);
+    expect(playtestActivatedPlatformIsActive(level, state)).toBe(false);
+    state.leverActivated = true;
+    expect(playtestActivatedPlatformIsActive(level, state)).toBe(true);
   });
 
   it('authors mirrored, resizable ramps with real slope direction', () => {
@@ -306,6 +357,61 @@ describe('Ember & Tide level builder model', () => {
       snappedEdge: false,
       snappedSurface: true,
     });
+  });
+
+  it('attaches jump reach to the top of a movable below the probe', () => {
+    const level = blankLevel();
+    createObject(level, 'pushable', 20, 0);
+    const movable = level.mechanics.pushable;
+
+    expect(snapJumpOrigin(level, { x: movable.x + movable.width / 2, y: 10 }, 'ember')).toMatchObject({
+      y: movable.y + movable.height,
+      snappedSurface: true,
+    });
+
+    level.ramps.push({
+      id: 'crate-ramp',
+      x: 18,
+      y: 0,
+      width: 8,
+      height: 4,
+      direction: 'up-right',
+      element: 'neutral',
+    });
+    expect(snapJumpOrigin(level, { x: movable.x + movable.width / 2, y: 10 }, 'tide')).toMatchObject({
+      y: pushableSupportY(level, movable.x) + movable.height,
+      snappedSurface: true,
+    });
+  });
+
+  it('keeps a playtest player from walking through a pushable on a ramp', () => {
+    const level = blankLevel();
+    level.ramps.push({
+      id: 'push-ramp',
+      x: 20,
+      y: 0,
+      width: 8,
+      height: 4,
+      direction: 'up-right',
+      element: 'neutral',
+    });
+    createObject(level, 'pushable', 24, 2.5);
+    const player = createPlaytestPlayer(level, 'ember');
+    player.x = 24 - level.playerWidth;
+    player.y = 1.6;
+    player.grounded = true;
+
+    stepPlaytestPlayer(
+      level,
+      player,
+      { moveX: 1, jump: false },
+      'ember',
+      1 / 30,
+      createPlaytestMechanicState(level),
+    );
+
+    expect(player.x + level.playerWidth).toBeLessThanOrEqual(24);
+    expect(player.grounded).toBe(true);
   });
 
   it('bypasses jump edge snapping when snapping is disabled', () => {

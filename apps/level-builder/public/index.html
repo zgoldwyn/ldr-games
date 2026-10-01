@@ -42,6 +42,15 @@
             >Grid<input id="grid-size" type="number" min="0.25" max="4" step="0.25" value="0.5"
           /></label>
         </div>
+        <div class="section-title"><span>CRYSTALS TO OPEN GATES</span></div>
+        <div class="meta-grid">
+          <label
+            >Ember<input id="ember-crystals-required" type="number" min="0" max="16" step="1"
+          /></label>
+          <label
+            >Tide<input id="tide-crystals-required" type="number" min="0" max="16" step="1"
+          /></label>
+        </div>
         <div class="section-title"><span>BUILD TOOLS</span><small>1–9 + click</small></div>
         <div id="tools" class="tools"></div>
         <div class="help">
@@ -180,17 +189,16 @@
         <div class="dialog-heading">
           <div>
             <span class="eyebrow">PUBLISH LEVEL</span>
-            <strong id="push-dialog-title">Choose a live level to overwrite</strong>
+            <strong id="push-dialog-title">Publish the whole level tree</strong>
           </div>
           <button value="cancel" aria-label="Close">×</button>
         </div>
         <p id="push-summary"></p>
-        <label class="dialog-field">Live slot<select id="push-target"></select></label>
-        <p class="archive-note">The current live level will be archived before replacement.</p>
+        <p class="archive-note">All workspace levels are published in number order. Missing live levels are preserved; every level receives a fresh ID, which resets ID-linked progress and scores. Previous live versions are archived.</p>
         <div class="dialog-actions">
           <button value="cancel">Cancel</button>
           <button value="default" type="button" class="primary" id="confirm-push">
-            Archive and overwrite
+            Publish whole tree
           </button>
         </div>
       </form>

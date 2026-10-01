@@ -73,9 +73,9 @@ Before writing level data, create a traversal graph for **each** role.
 
 For each role, the graph must prove:
 
-1. Spawn reaches every shard belonging to that role.
-2. Every shard location has a non-suicidal route onward or back.
-3. The final shard reaches the matching gate.
+1. Spawn reaches at least the authored `requiredCrystals` count for that role; identify which placed shards form a viable route.
+2. Every required shard location has a non-suicidal route onward or back.
+3. The final required shard reaches the matching gate.
 4. Any required lever or cooperative mechanism has a reachable operator position.
 5. No required route depends on the other player standing still as a physical object.
 6. No state transition removes the only route needed to finish.
@@ -198,7 +198,7 @@ Every chamber-level review must include this comparison table:
 
 ## 6. Shards and gate unlocking
 
-Shard counts may vary by level. Every level must author the same number for Ember and Tide, with at least one shard per role and no more than sixteen total shards. The synchronized `uint16` collection mask gives each authored shard a unique bit. Current authored levels use three or five shards per role.
+Shard counts and gate requirements may vary independently for Ember and Tide. Each level sets `requiredCrystals: { ember, tide }` to whole numbers from zero through the number of placed shards for that role. No more than sixteen shards may be placed in total. The synchronized `uint16` collection mask gives each authored shard a unique bit. A gate opens when its role has collected at least its required count; if more shards are placed, any qualifying set counts. A zero requirement opens that role's gate without shards, subject to shared mechanics.
 
 Shard placement rules:
 
@@ -206,8 +206,8 @@ Shard placement rules:
 2. A shard on a platform should be placed about `platform.y + 1.25` vertically.
 3. Collection checks the player center within `1.2` horizontal units and a vertical overlap around the player body. Keep shards centered over a stable landing area, not at an extreme platform edge.
 4. At least one shard per role may encourage crossing into the other side of the map, but that cross-map route must remain role-valid.
-5. Never hide a mandatory shard behind scenery, the status card, the control overlay, or outside the camera’s vertical range.
-6. Collecting the last shard must not strand the player.
+5. Never hide a shard needed to meet the requirement behind scenery, the status card, the control overlay, or outside the camera’s vertical range.
+6. Collecting the shard that meets the requirement must not strand the player.
 7. Ember shards unlock only Ember’s gate. Tide shards unlock only Tide’s gate.
 8. Shared mechanism requirements may additionally lock both gates.
 9. Completion requires both unlocked players to occupy their own gates simultaneously. Leaving a gate before both arrive cancels completion; do not design around a latched victory state.
@@ -292,7 +292,7 @@ Difficulty should grow through combinations and decisions, not smaller margins.
 | Tier     | Intended content                                                                                |
 | -------- | ----------------------------------------------------------------------------------------------- |
 | Tutorial | Move, jump, role identity, gates; no lethal precision challenge                                 |
-| Level 1  | Elemental hazards, role-specific platforms, five shards each, two-player exit                   |
+| Level 1  | Elemental hazards, role-specific platforms, four shards each, two-player exit                   |
 | Level 2  | Reuse Level 1 skills; add one reversible lever/platform and one block/held-plate puzzle         |
 | Level 3  | Exterior approach into three solid dungeon storeys, alternating shafts, and crossed exit routes |
 | Level 4+ | Increase dependency depth, route crossover, and coordination; retain generous movement margins  |
@@ -332,18 +332,18 @@ Every new level change must add or extend tests in:
 At minimum, tests must prove:
 
 1. All authored objects are in bounds.
-2. Each role has at least one shard, both roles have equal shard counts, and the count matches the authored design.
+2. Each role's `requiredCrystals` value is a whole number between zero and its placed shard count; the two roles may differ.
 3. Each crystal bit is unique and fits the current `uint16` mask. The schema supports at most sixteen total crystals.
 4. Consecutive required platform rises do not exceed `3.2`.
 5. Required horizontal gaps and landing widths meet Section 2.
-6. Each role has a traversal path from spawn to all personal shards and then its gate.
+6. Each role has a traversal path from spawn to enough personal shards to meet its requirement and then its gate.
 7. Elemental platforms are landable only by the intended role.
 8. Each lethal hazard kills the intended roles and spares any declared safe role.
 9. Death clears only the dead role’s shard bits.
 10. A lever-linked hazard kills before activation and is safe after activation.
 11. The block route overlaps no hazard, can reach the pressure plate, and supports a standing player.
 12. The block never moves more than once per tick, respects side contact, carries a rider, and clamps to its track.
-13. Both gates remain locked until their individual shard masks and all shared requirements are satisfied.
+13. Each gate remains locked until its role's shard count meets its authored requirement and all shared requirements are satisfied.
 14. Completion is true only while both players are grounded in matching gates.
 15. Leaving either gate makes completion false again.
 16. Elevated spawns stand on authored solid geometry at the declared `spawnY`.

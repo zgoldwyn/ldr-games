@@ -1,0 +1,215 @@
+{
+  "archivedAt": "2026-09-30T22:03:44.469Z",
+  "targetNumber": 3,
+  "reason": "reorder",
+  "level": {
+    "number": 3,
+    "id": "sundered-keep-03",
+    "name": "Sundered Keep",
+    "chapter": "Level 3",
+    "width": 82,
+    "playerWidth": 1.6,
+    "moveSpeed": 8.6,
+    "jumpSpeed": 13,
+    "gravity": -24,
+    "spawns": {
+      "ember": 4,
+      "tide": 8
+    },
+    "spawnY": {
+      "ember": 15,
+      "tide": 15
+    },
+    "gates": {
+      "ember": {
+        "x": 18.3,
+        "y": 0,
+        "width": 2.7
+      },
+      "tide": {
+        "x": 78.3,
+        "y": 0,
+        "width": 2.7
+      }
+    },
+    "solids": [
+      {
+        "id": "outside-approach",
+        "x": 0,
+        "y": 0,
+        "width": 18,
+        "height": 15
+      },
+      {
+        "id": "dungeon-roof",
+        "x": 18,
+        "y": 17.2,
+        "width": 64,
+        "height": 4.8
+      },
+      {
+        "id": "upper-floor-left",
+        "x": 18,
+        "y": 11.8,
+        "width": 18,
+        "height": 0.8
+      },
+      {
+        "id": "upper-floor-right",
+        "x": 42,
+        "y": 11.8,
+        "width": 40,
+        "height": 0.8
+      },
+      {
+        "id": "middle-floor-left",
+        "x": 18,
+        "y": 7.5,
+        "width": 35,
+        "height": 0.8
+      },
+      {
+        "id": "middle-floor-right",
+        "x": 59,
+        "y": 7.5,
+        "width": 23,
+        "height": 0.8
+      },
+      {
+        "id": "lower-floor-left",
+        "x": 23,
+        "y": 3.2,
+        "width": 7,
+        "height": 0.8
+      },
+      {
+        "id": "lower-floor-right",
+        "x": 36,
+        "y": 3.2,
+        "width": 38,
+        "height": 0.8
+      }
+    ],
+    "platforms": [
+      {
+        "id": "entrance-step",
+        "x": 16.8,
+        "y": 13.2,
+        "width": 5.2,
+        "element": "neutral"
+      },
+      {
+        "id": "upper-shaft-step",
+        "x": 36.5,
+        "y": 10.2,
+        "width": 5,
+        "element": "neutral"
+      },
+      {
+        "id": "middle-shaft-step",
+        "x": 53.5,
+        "y": 5.8,
+        "width": 5,
+        "element": "neutral"
+      },
+      {
+        "id": "tunnel-chasm-step",
+        "x": 39.2,
+        "y": 1.45,
+        "width": 3.8,
+        "element": "neutral"
+      }
+    ],
+    "hazards": [
+      {
+        "id": "ember-tunnel-fire",
+        "x": 25.3,
+        "width": 2.2,
+        "safeRole": "ember"
+      },
+      {
+        "id": "tunnel-chasm",
+        "x": 39.8,
+        "width": 2.4,
+        "safeRole": "none"
+      },
+      {
+        "id": "tide-tunnel-water",
+        "x": 66.5,
+        "width": 2.2,
+        "safeRole": "tide"
+      }
+    ],
+    "crystals": [
+      {
+        "id": "ember-upper-shard",
+        "x": 27,
+        "y": 13.85,
+        "role": "ember"
+      },
+      {
+        "id": "ember-middle-shard",
+        "x": 66,
+        "y": 9.55,
+        "role": "ember"
+      },
+      {
+        "id": "ember-tunnel-shard",
+        "x": 61,
+        "y": 1.25,
+        "role": "ember"
+      },
+      {
+        "id": "tide-upper-shard",
+        "x": 49,
+        "y": 13.85,
+        "role": "tide"
+      },
+      {
+        "id": "tide-middle-shard",
+        "x": 25,
+        "y": 9.55,
+        "role": "tide"
+      },
+      {
+        "id": "tide-tunnel-shard",
+        "x": 22.5,
+        "y": 1.25,
+        "role": "tide"
+      }
+    ],
+    "requiredCrystals": {
+      "ember": 3,
+      "tide": 3
+    },
+    "environmentZones": [
+      {
+        "id": "keep-exterior",
+        "x": 0,
+        "y": 0,
+        "width": 18,
+        "height": 17.2,
+        "environment": "outside"
+      },
+      {
+        "id": "keep-underground",
+        "x": 18,
+        "y": 0,
+        "width": 64,
+        "height": 17.2,
+        "environment": "underground"
+      }
+    ],
+    "entrances": [
+      {
+        "id": "keep-descent",
+        "x": 16.8,
+        "y": 11.8,
+        "width": 5.2,
+        "height": 5.4,
+        "from": "outside",
+        "to": "underground"
+      }
+    ]
+  }
+}

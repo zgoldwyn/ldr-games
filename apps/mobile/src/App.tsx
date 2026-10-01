@@ -50,6 +50,7 @@ import { SpeedScreen } from './screens/SpeedScreen';
 import { QuizLibraryScreen } from './screens/QuizLibraryScreen';
 import { ElementalDuetScreen } from './screens/ElementalDuetScreen';
 import { ElementalDuetSetupScreen } from './screens/ElementalDuetSetupScreen';
+import { ElementalDuetWinScreen } from './screens/ElementalDuetWinScreen';
 import { registerApnsToken, subscribeApnsTokenRotation } from './notifications/apns-registration';
 import { navigationTheme, themeTokens } from './theme';
 import { loadThemePreference, saveThemePreference } from './theme-preference';
@@ -500,6 +501,11 @@ export function App() {
                 name="ElementalDuet"
                 component={ElementalDuetScreen}
                 options={{ title: 'Ember & Tide', headerBackTitle: 'Play' }}
+              />
+              <Stack.Screen
+                name="ElementalDuetWin"
+                component={ElementalDuetWinScreen}
+                options={{ title: 'You won!', headerBackTitle: 'Play' }}
               />
               <Stack.Screen
                 name="QuizLibrary"

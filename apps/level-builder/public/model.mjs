@@ -24,6 +24,16 @@ export function cloneLevel(level) {
   delete cloned.order;
   cloned.chapter ||= `Level ${cloned.number}`;
   cloned.ramps ??= [];
+  if (Array.isArray(cloned.crystals)) {
+    cloned.requiredCrystals = {
+      ember:
+        cloned.requiredCrystals?.ember ??
+        cloned.crystals.filter((crystal) => crystal.role === 'ember').length,
+      tide:
+        cloned.requiredCrystals?.tide ??
+        cloned.crystals.filter((crystal) => crystal.role === 'tide').length,
+    };
+  }
   if (cloned.mechanics?.pushable) {
     delete cloned.mechanics.pushable.minX;
     delete cloned.mechanics.pushable.maxX;
@@ -63,6 +73,7 @@ export function blankLevel(number = 4) {
     ramps: [],
     hazards: [],
     crystals: [],
+    requiredCrystals: { ember: 1, tide: 1 },
     environmentZones: [
       { id: 'outside-zone', x: 0, y: 0, width: 64, height: 17.2, environment: 'outside' },
     ],
@@ -246,8 +257,15 @@ export function validateLevel(level) {
   );
   for (const role of ROLES) {
     const count = shardCounts[role];
-    if (count < 1)
-      issues.push(issue('error', 'shard-count', `${role} needs at least 1 shard; found ${count}.`));
+    const required = level.requiredCrystals?.[role];
+    if (!Number.isInteger(required) || required < 0 || required > count)
+      issues.push(
+        issue(
+          'error',
+          'shard-requirement',
+          `${role} requires a whole number from 0 to ${count}; found ${required ?? 'unset'}.`,
+        ),
+      );
     const spawn = { x: level.spawns[role] - level.playerWidth / 2, width: level.playerWidth };
     for (const hazard of level.hazards)
       if (hazard.safeRole !== role && overlaps(spawn, hazard))
@@ -258,14 +276,6 @@ export function validateLevel(level) {
           ]),
         );
   }
-  if (shardCounts.ember !== shardCounts.tide)
-    issues.push(
-      issue(
-        'error',
-        'shard-balance',
-        `Shard counts must be balanced; Ember has ${shardCounts.ember} and Tide has ${shardCounts.tide}.`,
-      ),
-    );
   if (level.crystals.length > 16)
     issues.push(
       issue('error', 'shard-mask', 'The uint16 protocol supports no more than 16 total shards.'),
@@ -452,17 +462,38 @@ export function createPlaytestPlayer(level, role) {
   };
 }
 
+export function createPlaytestMechanicState(level) {
+  if (!level.mechanics) return null;
+  return {
+    leverActivated: false,
+    pressurePlatePressed: false,
+    pushableX: level.mechanics.pushable?.x ?? null,
+  };
+}
+
+export function playtestActivatedPlatformIsActive(level, mechanicState) {
+  const mechanics = level.mechanics;
+  if (!mechanics?.activatedPlatform || !mechanicState) return false;
+  const leverControls = mechanics.lever?.target === 'activatedPlatform';
+  const plateControls = mechanics.pressurePlate?.target === 'activatedPlatform';
+  return (
+    (leverControls || plateControls) &&
+    (!leverControls || mechanicState.leverActivated) &&
+    (!plateControls || mechanicState.pressurePlatePressed)
+  );
+}
+
 export function rampSurfaceY(ramp, worldX) {
   const progress = Math.max(0, Math.min(1, (worldX - ramp.x) / ramp.width));
   return ramp.y + (ramp.direction === 'up-right' ? progress : 1 - progress) * ramp.height;
 }
 
 export function pushableSupportY(level, pushableX) {
-  if (!level.mechanics) return 0;
-  const pushable = level.mechanics.pushable;
+  const pushable = level.mechanics?.pushable;
+  if (!pushable || !Number.isFinite(pushableX)) return 0;
   const centerX = pushableX + pushable.width / 2;
   const ramp = (level.ramps ?? []).find(
-    (candidate) => centerX >= candidate.x && centerX <= candidate.x + candidate.width,
+    (candidate) => centerX >= candidate.x - 1e-6 && centerX <= candidate.x + candidate.width + 1e-6,
   );
   if (ramp) return rampSurfaceY(ramp, centerX);
   for (const candidate of level.ramps ?? []) {
@@ -504,8 +535,8 @@ export function resolvePushableX(
   allowRampTraversal = false,
   activatedPlatformActive = false,
 ) {
-  if (!level.mechanics) return pushableX;
-  const pushable = level.mechanics.pushable;
+  const pushable = level.mechanics?.pushable;
+  if (!pushable) return pushableX;
   let resolved = Math.max(0, Math.min(level.width - pushable.width, proposedX));
   const currentCenter = pushableX + pushable.width / 2;
   const proposedCenter = resolved + pushable.width / 2;
@@ -515,6 +546,18 @@ export function resolvePushableX(
       (proposedCenter >= ramp.x && proposedCenter <= ramp.x + ramp.width),
   );
   if (touchesRamp && !allowRampTraversal) return pushableX;
+  for (const ramp of level.ramps ?? []) {
+    const highEdge = ramp.direction === 'up-right' ? ramp.x + ramp.width : ramp.x;
+    const crossedHighEdge =
+      ramp.direction === 'up-right'
+        ? currentCenter <= highEdge + 1e-6 && proposedCenter > highEdge
+        : currentCenter >= highEdge - 1e-6 && proposedCenter < highEdge;
+    if (!crossedHighEdge) continue;
+    const beyondCenter = highEdge + (ramp.direction === 'up-right' ? 0.01 : -0.01);
+    const upperSupport = pushableSupportY(level, beyondCenter - pushable.width / 2);
+    if (upperSupport < ramp.y + ramp.height - 0.15)
+      resolved = highEdge - pushable.width / 2;
+  }
   const pushableY = pushableSupportY(level, resolved);
   const platforms =
     activatedPlatformActive && level.mechanics.activatedPlatform
@@ -559,6 +602,17 @@ export function snapJumpOrigin(level, position, role, edgeThreshold = 1.25) {
         y: rampSurfaceY(ramp, Math.max(ramp.x, Math.min(ramp.x + ramp.width, position.x))),
         width: ramp.width,
       })),
+    ...(level.mechanics?.pushable
+      ? [
+          {
+            x: level.mechanics.pushable.x,
+            y:
+              pushableSupportY(level, level.mechanics.pushable.x) +
+              level.mechanics.pushable.height,
+            width: level.mechanics.pushable.width,
+          },
+        ]
+      : []),
   ];
   const freeOrigin = {
     x: Math.max(0, Math.min(level.width - level.playerWidth, position.x - level.playerWidth / 2)),
@@ -705,14 +759,7 @@ export function stepPlaytestPlayer(
       player.y = solidCeiling.y - level.playerWidth;
       player.velocityY = 0;
     }
-    const activatedPlatformActive =
-      level.mechanics &&
-      mechanicState &&
-      (level.mechanics.lever.target === 'activatedPlatform' ||
-        level.mechanics.pressurePlate.target === 'activatedPlatform') &&
-      (level.mechanics.lever.target !== 'activatedPlatform' || mechanicState.leverActivated) &&
-      (level.mechanics.pressurePlate.target !== 'activatedPlatform' ||
-        mechanicState.pressurePlatePressed);
+    const activatedPlatformActive = playtestActivatedPlatformIsActive(level, mechanicState);
     const platforms = activatedPlatformActive
       ? [...level.platforms, level.mechanics.activatedPlatform]
       : level.platforms;
@@ -745,9 +792,9 @@ export function stepPlaytestPlayer(
       player.y = rampSurfaceY(landedRamp, playerCenterX);
       player.velocityY = 0;
       player.grounded = true;
-      continue;
+      // Ramp support must not skip the pushable's side collision.
     }
-    if (level.mechanics && mechanicState) {
+    if (level.mechanics?.pushable && Number.isFinite(mechanicState?.pushableX)) {
       const pushable = level.mechanics.pushable;
       const pushableX = mechanicState.pushableX;
       const pushableY = pushableSupportY(level, pushableX);
@@ -776,6 +823,10 @@ export function stepPlaytestPlayer(
           player.x = pushableX + pushable.width;
       }
     }
+    if (landedRamp) {
+      player.y = rampSurfaceY(landedRamp, player.x + level.playerWidth / 2);
+      continue;
+    }
     if (player.y <= 0) {
       player.y = 0;
       player.velocityY = 0;
@@ -784,7 +835,7 @@ export function stepPlaytestPlayer(
     const centerX = player.x + level.playerWidth / 2;
     const lethalHazard = level.hazards.find(
       (hazard) =>
-        !(activatedPlatformActive && level.mechanics.activatedPlatform.hazardId === hazard.id) &&
+        !(activatedPlatformActive && level.mechanics?.activatedPlatform?.hazardId === hazard.id) &&
         role !== hazard.safeRole &&
         player.y <= 0.05 &&
         centerX >= hazard.x &&

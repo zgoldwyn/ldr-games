@@ -450,7 +450,8 @@ main {
 .handle-se {
   cursor: nwse-resize;
 }
-.solid {
+.solid,
+.ramp {
   fill: #535860;
   stroke: #32363d;
   stroke-width: 0.12;
@@ -468,24 +469,17 @@ main {
   fill: #1f9fc4;
   stroke: #12627a;
 }
-.ramp {
-  fill: #7f8987;
-  stroke: #414b4a;
-  stroke-width: 0.1;
-}
-.ramp.ember {
-  fill: #f0643c;
-  stroke: #a73b22;
-}
-.ramp.tide {
-  fill: #1f9fc4;
-  stroke: #12627a;
-}
 .ramp-edge {
   fill: none;
   stroke: rgba(255, 255, 255, 0.62);
   stroke-width: 0.11;
   pointer-events: none;
+}
+.ramp-edge.ember {
+  stroke: #ff9071;
+}
+.ramp-edge.tide {
+  stroke: #72d8ef;
 }
 .activated-platform {
   stroke: #6948a6;
@@ -535,6 +529,14 @@ main {
 .environment-zone {
   stroke-width: 0.1;
   stroke-dasharray: 0.4 0.25;
+  pointer-events: none;
+}
+.environment-zone-hitbox {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 10px;
+  vector-effect: non-scaling-stroke;
+  pointer-events: stroke;
 }
 .environment-zone.outside {
   fill: #dce8ef;

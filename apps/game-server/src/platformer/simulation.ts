@@ -1,5 +1,4 @@
 import {
-  ELEMENTAL_ALL_CRYSTALS_MASK,
   ELEMENTAL_GROVE_LEVEL,
   elementalRampSurfaceY,
   elementalCrystalMaskForRole,
@@ -92,7 +91,7 @@ export function collectPlatformerCrystals(
   currentMask: number,
   level: ElementalLevel = ELEMENTAL_GROVE_LEVEL,
 ): number {
-  let mask = currentMask & ELEMENTAL_ALL_CRYSTALS_MASK;
+  let mask = currentMask & ((1 << level.crystals.length) - 1);
   level.crystals.forEach((crystal, index) => {
     const bit = 1 << index;
     if ((mask & bit) !== 0) return;
@@ -226,7 +225,7 @@ export function stepPlatformerPlayer(
       player.y = elementalRampSurfaceY(landedRamp, playerCenterX);
       player.velocityY = 0;
       player.grounded = true;
-      continue;
+      // A player supported by a ramp can still run into the crate on this step.
     }
     if ('mechanics' in level && crateX !== undefined) {
       const crate = level.mechanics.pushable;
@@ -253,6 +252,10 @@ export function stepPlatformerPlayer(
           player.x = crateX + crate.width;
         }
       }
+    }
+    if (landedRamp) {
+      player.y = elementalRampSurfaceY(landedRamp, player.x + level.playerWidth / 2);
+      continue;
     }
     if (player.y <= PLATFORMER_WORLD.floorY) {
       player.y = PLATFORMER_WORLD.floorY;
@@ -290,7 +293,7 @@ export function platformerCrateSupportY(crateX: number, level: ElementalLevel): 
   const crate = level.mechanics.pushable;
   const centerX = crateX + crate.width / 2;
   const ramp = (level.ramps ?? []).find(
-    (candidate) => centerX >= candidate.x && centerX <= candidate.x + candidate.width,
+    (candidate) => centerX >= candidate.x - 1e-6 && centerX <= candidate.x + candidate.width + 1e-6,
   );
   if (ramp) return elementalRampSurfaceY(ramp, centerX);
   for (const candidate of level.ramps ?? []) {
@@ -344,6 +347,18 @@ export function resolvePlatformerCrateX(
       (proposedCenter >= ramp.x && proposedCenter <= ramp.x + ramp.width),
   );
   if (touchesRamp && !allowRampTraversal) return crateX;
+  for (const ramp of level.ramps ?? []) {
+    const highEdge = ramp.direction === 'up-right' ? ramp.x + ramp.width : ramp.x;
+    const crossedHighEdge =
+      ramp.direction === 'up-right'
+        ? currentCenter <= highEdge + 1e-6 && proposedCenter > highEdge
+        : currentCenter >= highEdge - 1e-6 && proposedCenter < highEdge;
+    if (!crossedHighEdge) continue;
+    const beyondCenter = highEdge + (ramp.direction === 'up-right' ? 0.01 : -0.01);
+    const upperSupport = platformerCrateSupportY(beyondCenter - crate.width / 2, level);
+    if (upperSupport < ramp.y + ramp.height - 0.15)
+      resolved = highEdge - crate.width / 2;
+  }
   const crateY = platformerCrateSupportY(resolved, level);
   const platforms = activatedPlatformActive
     ? [...level.platforms, level.mechanics.activatedPlatform]
